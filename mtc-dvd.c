@@ -1,44 +1,75 @@
 typedef u32 uint32_t;
 
-struct {
-	u8 _pad[104];
+struct mtc_dvd_dev
+{
+	char _gap0[4];
+	char dvd_flag_1;
+	char _gap1[23];
+	struct workqueue_struct *mtc_wq;		// +28
+	char _gap2[24];
+	void (*callback)();				// +56
+	char _gap3[52];
+	struct workqueue_struct *dvd_wq;		// +112
+	struct work_struct *dvd_work;			// +116
+	char _gap4[8];
+	int (*rev_work_cb)();				// +128
+	char _gap43[116];
+	struct workqueue_struct *media_wq;		// +248
+	char _gap42[16];
+	struct list_head *folder_list;			// +268
+	struct list_head *folder_list2;			// +272
+	struct list_head *media_list;			// +276
+	struct list_head *media_list2;			// +280
+	char _gap5[168];
+	struct delayed_work *dwork1;			// +452
+	char _gap6[8];
+	int (*stop_work_cb)();				// +464
+	struct timer_list *stop_timer;			// +468
+	char _gap62[40];
+	int (*media_work_cb)();				// +512
+	struct timer_list *media_timer;			// +516
+	char _gap63[24];
+	struct delayed_work *media_dwork;		// +544
+	char _gap61[8];
+	struct delayed_work *dwork2;			// +556
+	char _gap7[48];
+	struct mutex cmd_lock;				// +608
+};
 
-	unsigned int irq_104;		// +104
-	u32 __pad[1];			// +108
-	struct workqueue_struct *wq;	// +112
-	struct work_struct *work;	// +116
-} vC168AC48;
 
 struct {
 	u32* id_446; // +446?
 } vC082A73C;
 
 
-
+/* decompiled */
 void
 dvd_s_resume(void)
 {
 	// empty function
 }
 
+/* decompiled */
 int
 dvd_suspend(void)
 {
 	return 0;
 }
 
+/* decompiled */
 int
 dvd_resume(void)
 {
 	return 0;
 }
 
+/* decompiled */
 signed int
 dvd_isr(int irq)
 {
 	disable_irq_nosync(irq);
 	/* (struct workqueue_struct *wq, struct work_struct *work) */
-	queue_work(vC168AC48.wq, vC168AC48.work);
+	queue_work(vC168AC48.dvd_wq, vC168AC48.dvd_work);
 
 	return 1; // IRQ_HANDLED ?
 }
@@ -80,7 +111,6 @@ free_folder(struct list_head *folder_list)
 	list_head *v2; // r3@1
 	list_head *v3; // r4@2
 	list_head *i; // r5@2
-	list_head **v5; // r2@4
 
 	v1 = folder_list;
 	v2 = folder_list->next;
@@ -89,11 +119,7 @@ free_folder(struct list_head *folder_list)
 		v3 = v2->next;
 		for ( i = v2->next; ; i = v3 )
 		{
-			v5 = &v2->prev->next;
-			v3->prev = v5;
-			*v5 = v3;
-			v2->next = LIST_POISON1;
-			v2->prev = LIST_POISON2;
+			list_del(v2);
 			folder_list = kfree(v2);
 			v2 = i;
 			v3 = v3->next;
@@ -112,7 +138,6 @@ free_media(struct list_head *media_list)
 	list_head *v2; // r3@1
 	list_head *v3; // r4@2
 	list_head *i; // r5@2
-	list_head **v5; // r2@4
 
 	v1 = media_list;
 	v2 = media_list->next;
@@ -121,11 +146,7 @@ free_media(struct list_head *media_list)
 		v3 = v2->next;
 		for ( i = v2->next; ; i = v3 )
 		{
-			v5 = &v2->prev->next;
-			v3->prev = v5;
-			*v5 = v3;
-			v2->next = LIST_POISON1;
-			v2->prev = LIST_POISON2;
+			list_del(v2);
 			media_list = kfree(v2);
 			v2 = i;
 			v3 = v3->next;
