@@ -1,5 +1,18 @@
+// tmp defines
+#define CONFIG_HAS_EARLYSUSPEND
+
+#include <linux/device.h>
+#include <linux/earlysuspend.h>
+#include <linux/input.h>
+#include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/list.h>
 #include <linux/module.h>
+#include <linux/platform_device.h>
+#include <linux/pm.h>
+#include <linux/types.h>
+#include <linux/workqueue.h>
+
 #include <stdint.h>
 
 typedef uint32_t u32;
@@ -67,25 +80,51 @@ struct mtc_dvd_drv {
 	char _gap19[32];
 };
 
-static struct mtc_dvd_drv *p_mtc_dvd_drv;
+static struct mtc_dvd_drv *dvd_dev;
+
+static struct early_suspend dvd_early_suspend;
+static struct dev_pm_ops dvd_pm_ops;
+static struct platform_driver mtc_dvd_driver;
+
+signed int dvd_poweroff_constprop_10(void);
 
 /* fully decompiled */
-void dvd_s_resume(void)
+void dvd_s_resume(struct early_suspend *h)
 {
+	(void)h;
 	// empty function
 }
 
 /* fully decompiled */
-int dvd_suspend(void) { return 0; }
+void dvd_s_suspend(struct early_suspend *h)
+{
+	(void)h;
+
+	dvd_poweroff_constprop_10();
+}
 
 /* fully decompiled */
-int dvd_resume(void) { return 0; }
+int dvd_suspend(struct device *dev)
+{
+	(void)dev;
+
+	return 0;
+}
 
 /* fully decompiled */
-irqreturn_t dvd_isr(int irq)
+int dvd_resume(struct device *dev)
+{
+	(void)dev;
+
+	return 0;
+}
+
+/* fully decompiled */
+irqreturn_t dvd_isr(unsigned int irq)
 {
 	disable_irq_nosync(irq);
-	queue_work(p_mtc_dvd_drv->dvd_wq, &p_mtc_dvd_drv->dvd_work);
+	queue_work(dvd_dev->dvd_rev_wq, dvd_dev->dvd_work);
+
 	return IRQ_HANDLED;
 }
 
@@ -202,7 +241,7 @@ bool CheckTimeOut_constprop_9(unsigned int timeout)
 		usec += 1000000;
 	}
 
-	return usec - timeout > 49999;
+	return ((usec - timeout) > 49999);
 }
 
 int dvd_rev_part_2()
@@ -903,6 +942,10 @@ static int __devexit dvd_remove(struct platform_device *pdev)
 }
 
 /* recovered structures */
+
+static struct early_suspend dvd_early_suspend = {
+    .suspend = dvd_s_suspend, .resume = dvd_s_resume,
+};
 
 static struct dev_pm_ops dvd_pm_ops = {
     .suspend = dvd_suspend, .resume = dvd_resume,
