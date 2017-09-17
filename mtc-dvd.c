@@ -397,18 +397,16 @@ void rev_work(void)
 /* fully decompiled */
 signed int dvd_poweroff_constprop_10(void)
 {
-	signed int result;
+	signed int result; // r0@2
 
-	if (p_mtc_dvd_drv->dvd_power_on) {
-		p_mtc_dvd_drv->dvd_power_on = 0;
+	if (dvd_dev->dvd_power_on) {
+		dvd_dev->dvd_power_on = 0;
+		cancel_delayed_work_sync(&dvd_dev->stop_work);
+		cancel_delayed_work_sync(&dvd_dev->media_work);
+		cancel_delayed_work_sync(&dvd_dev->media_index_work);
+		flush_workqueue(dvd_dev->dvd_wq);
 
-		cancel_delayed_work_sync(p_mtc_dvd_drv->dwork1);
-		cancel_delayed_work_sync(p_mtc_dvd_drv->media_dwork);
-		cancel_delayed_work_sync(p_mtc_dvd_drv->media_dwork1);
-		flush_workqueue(p_mtc_dvd_drv->media_wq);
-
-		disable_irq_nosync(p_mtc_dvd_drv->dvd_irq);
-
+		disable_irq_nosync(dvd_dev->dvd_irq);
 		gpio_direction_input(gpio_DVD_DATA);
 		gpio_direction_input(gpio_DVD_STB);
 		gpio_direction_input(gpio_DVD_ACK);
