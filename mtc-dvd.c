@@ -36,7 +36,7 @@ enum mtc_gpio {
 
 struct mtc_dvd_drv {
 	char _gap0[4];
-	u8 dvd_u8_val1;
+	u8 play_status;
 	char _gap1[23];
 	struct input_device *input_dev;
 	char _gap2[24];
@@ -423,6 +423,7 @@ signed int dvd_poweroff_constprop_10(void)
 	return result;
 }
 
+
 signed int dvd_power(int pwr)
 {
 	signed int result; // r0@2
@@ -497,11 +498,12 @@ signed int dvd_power(int pwr)
 	return result;
 }
 
+/* fully decompiled */
 signed int dvd_play_cmd(void)
 {
 	signed int result; // r0@2
 
-	if (p_mtc_dvd_drv->dvd_flag_1) {
+	if (dvd_dev->play_status) {
 		result = 0x30D00;
 	} else {
 		result = 0x20D0F;
@@ -510,11 +512,12 @@ signed int dvd_play_cmd(void)
 	return result;
 }
 
-signed int dvd_stop_cmd()
+/* fully decompiled */
+signed int dvd_stop_cmd(void)
 {
 	signed int result; // r0@2
 
-	if (p_mtc_dvd_drv->dvd_flag_1) {
+	if (dvd_dev->play_status) {
 		result = 0x30F00;
 	} else {
 		result = 0x20F0D;
