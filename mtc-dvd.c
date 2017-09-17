@@ -99,6 +99,13 @@ struct mtc_dvd_drv {
 	char _gap17[2];
 };
 
+struct mtc_dvd_work {
+	u32 cmd1;
+	u32 cmd2;
+	char gap0[12];
+	struct work_struct work;
+};
+
 static struct mtc_dvd_drv *dvd_dev;
 
 static struct early_suspend dvd_early_suspend;
@@ -147,32 +154,19 @@ irqreturn_t dvd_isr(unsigned int irq)
 	return IRQ_HANDLED;
 }
 
-int dvd_add_work(int a1, int a2)
+/* fully decompiled */
+int dvd_add_work(int cmd1, int cmd2)
 {
-	int v2;      // r5@1
-	int v3;      // r4@1
-	int v4;      // r0@2
-	int *v5;     // r2@4
-	int v6;      // r2@4
-	int (*v7)(); // r3@4
+	struct mtc_dvd_work *dvd_work; // r0@2
 
-	v2 = a1;
-	v3 = a2;
-	if (*(_DWORD *)(dword_C082A600 + 24)) {
-		v4 = kmem_cache_alloc_trace();
-	} else {
-		v4 = 16;
-	}
-	v5 = (int *)dword_C082A604;
-	*(_DWORD *)v4 = v2;
-	*(_DWORD *)(v4 + 24) = v4 + 24;
-	v6 = *v5;
-	*(_DWORD *)(v4 + 28) = v4 + 24;
-	v7 = off_C082A608;
-	*(_DWORD *)(v4 + 20) = 1280;
-	*(_DWORD *)(v4 + 4) = v3;
-	*(_DWORD *)(v4 + 32) = v7;
-	queue_work(*(_DWORD *)(v6 + 248), v4 + 20);
+	dvd_work = kmalloc(sizeof(struct mtc_dvd_work), __GFP_IO);
+
+	dvd_work->cmd1 = cmd1;
+	dvd_work->cmd2 = cmd2;
+
+	INIT_WORK(dvd_work->work, cmd_work);
+	queue_work(mtc_dvd->dvd_wq, &dvd_work->work);
+
 	return 0;
 }
 
@@ -422,7 +416,6 @@ signed int dvd_poweroff_constprop_10(void)
 
 	return result;
 }
-
 
 signed int dvd_power(int pwr)
 {
