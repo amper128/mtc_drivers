@@ -388,6 +388,26 @@ void rev_work(void)
 	}
 }
 
+void stop_work()
+{
+	int cmd; // r0@4
+
+	if (dvd_dev->dvd_byteval_5) {
+		cmd_surface(0);
+		if (*(&dvd_dev + 4)) {
+			cmd = 0x30F00;
+		} else {
+			cmd = 0x20F0D;
+		}
+		cmd_send(cmd);
+
+		queue_delayed_work(dvd_dev->dvd_wq, &dvd_dev->stop_work,
+				   msecs_to_jiffies(2000u));
+	} else {
+		dvd_dev->dvd_byteval_12 = 0;
+	}
+}
+
 /* fully decompiled */
 signed int dvd_poweroff_constprop_10(void)
 {
