@@ -1,5 +1,5 @@
-#include <linux/module.h>
 #include <linux/irq.h>
+#include <linux/module.h>
 #include <stdint.h>
 
 typedef uint32_t u32;
@@ -9,8 +9,7 @@ typedef int32_t s32;
 typedef int16_t s16;
 typedef int8_t s8;
 
-enum mtc_gpio
-{
+enum mtc_gpio {
 	gpio_MCU_CLK = 167,
 	gpio_DVD_STB = 168,
 	gpio_MCU_DIN = 169,
@@ -21,9 +20,7 @@ enum mtc_gpio
 	gpio_PARROT_BOOT = 199,
 };
 
-
-struct mtc_dvd_drv
-{
+struct mtc_dvd_drv {
 	char _gap0[4];
 	u8 dvd_flag_1;
 	char _gap1[23];
@@ -73,48 +70,37 @@ struct mtc_dvd_drv
 static struct mtc_dvd_drv *p_mtc_dvd_drv;
 
 /* fully decompiled */
-void
-dvd_s_resume(void)
+void dvd_s_resume(void)
 {
 	// empty function
 }
 
 /* fully decompiled */
-int
-dvd_suspend(void)
-{
-	return 0;
-}
+int dvd_suspend(void) { return 0; }
 
 /* fully decompiled */
-int
-dvd_resume(void)
-{
-	return 0;
-}
+int dvd_resume(void) { return 0; }
 
 /* fully decompiled */
-irqreturn_t
-dvd_isr(int irq)
+irqreturn_t dvd_isr(int irq)
 {
 	disable_irq_nosync(irq);
 	queue_work(p_mtc_dvd_drv->dvd_wq, &p_mtc_dvd_drv->dvd_work);
 	return IRQ_HANDLED;
 }
 
-int
-dvd_add_work(int a1, int a2)
+int dvd_add_work(int a1, int a2)
 {
-	int v2; // r5@1
-	int v3; // r4@1
-	int v4; // r0@2
-	int *v5; // r2@4
-	int v6; // r2@4
+	int v2;      // r5@1
+	int v3;      // r4@1
+	int v4;      // r0@2
+	int *v5;     // r2@4
+	int v6;      // r2@4
 	int (*v7)(); // r3@4
 
 	v2 = a1;
 	v3 = a2;
-	if ( *(_DWORD *)(dword_C082A600 + 24) ) {
+	if (*(_DWORD *)(dword_C082A600 + 24)) {
 		v4 = kmem_cache_alloc_trace();
 	} else {
 		v4 = 16;
@@ -133,21 +119,18 @@ dvd_add_work(int a1, int a2)
 }
 
 /* fully decompiled */
-struct list_head *
-free_folder(struct list_head *folder_list)
+struct list_head *free_folder(struct list_head *folder_list)
 {
 	struct list_head *v1; // r6@1
 	struct list_head *v2; // r3@1
 	struct list_head *v3; // r4@2
-	struct list_head *i; // r5@2
+	struct list_head *i;  // r5@2
 
 	v1 = folder_list;
 	v2 = folder_list->next;
-	if ( folder_list != folder_list->next )
-	{
+	if (folder_list != folder_list->next) {
 		v3 = v2->next;
-		for ( i = v2->next; ; i = v3 )
-		{
+		for (i = v2->next;; i = v3) {
 			list_del(v2);
 			folder_list = kfree(v2);
 			v2 = i;
@@ -161,27 +144,23 @@ free_folder(struct list_head *folder_list)
 }
 
 /* fully decompiled */
-struct list_head *
-free_media(struct list_head *media_list)
+struct list_head *free_media(struct list_head *media_list)
 {
 	struct list_head *v1; // r6@1
 	struct list_head *v2; // r3@1
 	struct list_head *v3; // r4@2
-	struct list_head *i; // r5@2
+	struct list_head *i;  // r5@2
 
 	v1 = media_list;
 	v2 = media_list->next;
-	if ( media_list != media_list->next )
-	{
+	if (media_list != media_list->next) {
 		v3 = v2->next;
-		for ( i = v2->next; ; i = v3 )
-		{
+		for (i = v2->next;; i = v3) {
 			list_del(v2);
 			media_list = kfree(v2);
 			v2 = i;
 			v3 = v3->next;
-			if ( v1 == i )
-			{
+			if (v1 == i) {
 				break;
 			}
 		}
@@ -189,8 +168,7 @@ free_media(struct list_head *media_list)
 	return media_list;
 }
 
-void
-input_event_func(s16 arg)
+void input_event_func(s16 arg)
 {
 	char v1;
 
@@ -199,8 +177,7 @@ input_event_func(s16 arg)
 }
 
 /* fully decompiled */
-void
-cmd_surface(int arg)
+void cmd_surface(int arg)
 {
 	if (p_mtc_dvd_drv->surface_flag != arg) {
 		p_mtc_dvd_drv->surface_flag = arg;
@@ -213,8 +190,7 @@ cmd_surface(int arg)
 }
 
 /* fully decompiled */
-bool
-CheckTimeOut_constprop_9(unsigned int timeout)
+bool CheckTimeOut_constprop_9(unsigned int timeout)
 {
 	int usec;
 	struct timeval tv;
@@ -229,46 +205,38 @@ CheckTimeOut_constprop_9(unsigned int timeout)
 	return usec - timeout > 49999;
 }
 
-int
-dvd_rev_part_2()
+int dvd_rev_part_2()
 {
-	unsigned int v0; // r4@3
-	int v1; // r1@4
-	int v2; // r5@5
-	int v3; // r5@6
-	int v4; // r6@6
-	unsigned int v5; // r4@7
-	unsigned int v6; // r7@12
-	int v7; // r4@14
-	unsigned int v8; // r4@16
-	int v9; // r1@17
+	unsigned int v0;  // r4@3
+	int v1;		  // r1@4
+	int v2;		  // r5@5
+	int v3;		  // r5@6
+	int v4;		  // r6@6
+	unsigned int v5;  // r4@7
+	unsigned int v6;  // r7@12
+	int v7;		  // r4@14
+	unsigned int v8;  // r4@16
+	int v9;		  // r1@17
 	unsigned int v10; // r4@19
-	int v11; // r1@20
-	int v12; // r6@21
-	int v14; // [sp+0h] [bp-20h]@3
+	int v11;	  // r1@20
+	int v12;	  // r6@21
+	int v14;	  // [sp+0h] [bp-20h]@3
 	unsigned int v15; // [sp+4h] [bp-1Ch]@3
 
 	mutex_lock(off_C082A9A4);
-	while ( 2 )
-	{
-		if ( _gpio_get_value(175) )
-		{
+	while (2) {
+		if (_gpio_get_value(175)) {
 			v7 = 0;
-		}
-		else
-		{
+		} else {
 			gpio_direction_output(174, 0);
 			do_gettimeofday(&v14);
 			v0 = v15;
-			while ( 1 )
-			{
+			while (1) {
 				v2 = _gpio_get_value(175);
-				if ( v2 )
-				{
+				if (v2) {
 					break;
 				}
-				if ( CheckTimeOut_constprop_9(v0) )
-				{
+				if (CheckTimeOut_constprop_9(v0)) {
 					v7 = v2;
 					printk(off_C082A9B8, v1);
 					gpio_direction_input(174);
@@ -277,15 +245,12 @@ dvd_rev_part_2()
 			}
 			v3 = 0;
 			v4 = 0;
-			while ( 2 )
-			{
+			while (2) {
 				gpio_direction_output(174, 1);
 				do_gettimeofday(&v14);
 				v5 = v15;
-				while ( _gpio_get_value(168) )
-				{
-					if ( CheckTimeOut_constprop_9(v5) )
-					{
+				while (_gpio_get_value(168)) {
+					if (CheckTimeOut_constprop_9(v5)) {
 						printk(off_C082A9AC[0], v4);
 						gpio_direction_input(174);
 						v7 = 0;
@@ -293,30 +258,25 @@ dvd_rev_part_2()
 					}
 				}
 				v3 *= 2;
-				if ( _gpio_get_value(175) )
-				{
+				if (_gpio_get_value(175)) {
 					v3 |= 1u;
 				}
 				gpio_direction_output(174, 0);
 				do_gettimeofday(&v14);
 				v6 = v15;
-				while ( 1 )
-				{
+				while (1) {
 					v7 = _gpio_get_value(168);
-					if ( v7 )
-					{
+					if (v7) {
 						break;
 					}
-					if ( CheckTimeOut_constprop_9(v6) )
-					{
+					if (CheckTimeOut_constprop_9(v6)) {
 						printk(off_C082A9A8[0], v4);
 						gpio_direction_input(174);
 						goto LABEL_24;
 					}
 				}
 				v4 = (unsigned __int8)(v4 + 1);
-				if ( v4 != 16 )
-				{
+				if (v4 != 16) {
 					continue;
 				}
 				break;
@@ -324,10 +284,8 @@ dvd_rev_part_2()
 			gpio_direction_input(174);
 			do_gettimeofday(&v14);
 			v8 = v15;
-			while ( _gpio_get_value(174) )
-			{
-				if ( CheckTimeOut_constprop_9(v8) )
-				{
+			while (_gpio_get_value(174)) {
+				if (CheckTimeOut_constprop_9(v8)) {
 					v7 = 0;
 					printk(off_C082A9B0[0], v9);
 					goto LABEL_24;
@@ -336,15 +294,12 @@ dvd_rev_part_2()
 			gpio_direction_output(168, 0);
 			do_gettimeofday(&v14);
 			v10 = v15;
-			while ( 1 )
-			{
+			while (1) {
 				v12 = _gpio_get_value(174);
-				if ( v12 )
-				{
+				if (v12) {
 					break;
 				}
-				if ( CheckTimeOut_constprop_9(v10) )
-				{
+				if (CheckTimeOut_constprop_9(v10)) {
 					v7 = v12;
 					printk(off_C082A9B4[0], v11);
 					gpio_direction_input(168);
@@ -353,8 +308,7 @@ dvd_rev_part_2()
 			}
 			gpio_direction_input(168);
 			dvd_add_work(5, v3);
-			if ( !_gpio_get_value(175) )
-			{
+			if (!_gpio_get_value(175)) {
 				continue;
 			}
 			v7 = 1;
@@ -367,8 +321,7 @@ LABEL_24:
 }
 
 /* fully decompiled */
-void
-rev_work(void)
+void rev_work(void)
 {
 	if (p_mtc_dvd_drv->dvd_power_on) {
 		dvd_rev_part_2();
@@ -384,8 +337,7 @@ rev_work(void)
 }
 
 /* fully decompiled */
-signed int
-dvd_poweroff_constprop_10(void)
+signed int dvd_poweroff_constprop_10(void)
 {
 	signed int result;
 
@@ -415,9 +367,7 @@ dvd_poweroff_constprop_10(void)
 	return result;
 }
 
-
-signed int
-dvd_power(int pwr)
+signed int dvd_power(int pwr)
 {
 	signed int result; // r0@2
 
@@ -493,8 +443,7 @@ dvd_power(int pwr)
 	return result;
 }
 
-signed int
-dvd_play_cmd(void)
+signed int dvd_play_cmd(void)
 {
 	signed int result; // r0@2
 
@@ -507,8 +456,7 @@ dvd_play_cmd(void)
 	return result;
 }
 
-signed int
-dvd_stop_cmd()
+signed int dvd_stop_cmd()
 {
 	signed int result; // r0@2
 
@@ -521,88 +469,80 @@ dvd_stop_cmd()
 }
 
 /* dirty code */
-int
-dvd_send_command_direct(int result)
+int dvd_send_command_direct(int result)
 {
-	int v1; // r1@1
-	struct mtc_dvd_drv **p_dvd_dev; // r5@1 MAPDST
-	struct mtc_dvd_drv *dvd_dev; // r3@1 MAPDST
-	int dvd_flag; // r2@4
-	bool v5; // r6@4
-	char v6; // zf@4
-	char v7; // zf@7
-	int v8; // r2@10
-	int v9; // r12@17
-	int v10; // r4@19
-	signed int v11; // r2@20
-	int v12; // r6@24
-	int v15; // r5@25
-	struct delayed_work *dwork_1; // r1@26
-	unsigned int timeout_ms; // r0@26
+	int v1;				   // r1@1
+	struct mtc_dvd_drv **p_dvd_dev;    // r5@1 MAPDST
+	struct mtc_dvd_drv *dvd_dev;       // r3@1 MAPDST
+	int dvd_flag;			   // r2@4
+	bool v5;			   // r6@4
+	char v6;			   // zf@4
+	char v7;			   // zf@7
+	int v8;				   // r2@10
+	int v9;				   // r12@17
+	int v10;			   // r4@19
+	signed int v11;			   // r2@20
+	int v12;			   // r6@24
+	int v15;			   // r5@25
+	struct delayed_work *dwork_1;      // r1@26
+	unsigned int timeout_ms;	   // r0@26
 	struct workqueue_struct *media_wq; // r5@27
-	unsigned __int32 delay_1; // r0@27
-	struct delayed_work *dwork; // r1@28
-	int v24; // ST04_4@29
-	struct mtc_dvd_drv *v25; // r3@29
-	struct delayed_work *v26; // r0@30
-	struct mtc_dvd_drv *v27; // r4@31
-	struct workqueue_struct *wq; // r5@31
-	unsigned __int32 delay; // r0@31
+	unsigned __int32 delay_1;	  // r0@27
+	struct delayed_work *dwork;	// r1@28
+	int v24;			   // ST04_4@29
+	struct mtc_dvd_drv *v25;	   // r3@29
+	struct delayed_work *v26;	  // r0@30
+	struct mtc_dvd_drv *v27;	   // r4@31
+	struct workqueue_struct *wq;       // r5@31
+	unsigned __int32 delay;		   // r0@31
 
 	v1 = result;
 	p_dvd_dev = pp_mtc_dvd_dev_10;
 	dvd_dev = *pp_mtc_dvd_dev_10;
-	if ( !(*pp_mtc_dvd_dev_10)->dvd_power_on )
-	{
+	if (!(*pp_mtc_dvd_dev_10)->dvd_power_on) {
 		return result;
 	}
-	if ( (*&dvd_dev->_gap7[6] - 1) > 1u )
-	{
+	if ((*&dvd_dev->_gap7[6] - 1) > 1u) {
 		return dvd_add_work(1, v1);
 	}
 	dvd_flag = *(pp_mtc_dvd_dev_10 + 4);
 	v5 = dvd_flag == 0;
 	v6 = result == 0x22220;
-	if ( result == 0x22220 )
-	{
+	if (result == 0x22220) {
 		v6 = dvd_flag == 0;
 	}
-	if ( v6 )
-	{
+	if (v6) {
 		goto LABEL_36;
 	}
 	result = 0x32200;
 	v7 = v1 == 0x32200;
-	if ( v1 == 0x32200 )
-	{
+	if (v1 == 0x32200) {
 		v7 = dvd_flag == 1;
 	}
 	v8 = v7 ? 1 : 0;
-	if ( v7 )
-	{
-LABEL_36:
+	if (v7) {
+	LABEL_36:
 		dvd_dev->dvd_flag_3 = 0;
 		dvd_dev->dvd_flag_4 = 0;
 		dvd_dev->dvd_flag_5 = 0;
 		cancel_delayed_work_sync(&dvd_dev->media_dwork1);
 		result = *p_dvd_dev;
-		if ( ((*p_dvd_dev)->_gap8[0] - 2) <= 1u && *(result + 286) )
-		{
+		if (((*p_dvd_dev)->_gap8[0] - 2) <= 1u && *(result + 286)) {
 			cancel_delayed_work_sync((result + 452));
 			dvd_dev = *pp_mtc_dvd_dev_10;
 			dwork = &(*pp_mtc_dvd_dev_10)->dwork1;
 			dvd_dev->_gap14[24] = 1;
-			result = queue_delayed_work(dvd_dev->media_wq, dwork, 0);
+			result =
+			    queue_delayed_work(dvd_dev->media_wq, dwork, 0);
 		}
 		return result;
 	}
 	v9 = v1 & 0xFF0000;
-	if ( (v1 & 0xFF0000) == 0x90000 )
-	{
+	if ((v1 & 0xFF0000) == 0x90000) {
 		v26 = &dvd_dev->media_dwork;
 		dvd_dev->dvd_flag_3 = v8;
 		dvd_dev->dvd_flag_4 = (v1 + 1) | 0x90000;
-LABEL_31:
+	LABEL_31:
 		cancel_delayed_work_sync(v26);
 		v27 = *p_dvd_dev;
 		v27->_gap18[4] = 1;
@@ -610,8 +550,7 @@ LABEL_31:
 		delay = msecs_to_jiffies(2000u);
 		return queue_delayed_work(wq, &v27->media_dwork, delay);
 	}
-	if ( v9 == 0xD0000 )
-	{
+	if (v9 == 0xD0000) {
 		dvd_dev->dvd_flag_3 = v8;
 		dvd_dev->dvd_flag_4 = v8;
 		dvd_dev->dvd_flag_5 = (v1 >> 8) | 0xD0000;
@@ -619,16 +558,13 @@ LABEL_31:
 		goto LABEL_31;
 	}
 	v10 = dvd_dev->_gap121[2] & 1;
-	if ( !(dvd_dev->_gap121[2] & 1) )
-	{
+	if (!(dvd_dev->_gap121[2] & 1)) {
 		result = 0x30F00;
 		v11 = 0x20F0D;
-		if ( !v5 )
-		{
+		if (!v5) {
 			v11 = 0x30F00;
 		}
-		if ( v1 == v11 )
-		{
+		if (v1 == v11) {
 			v24 = v1;
 			cancel_delayed_work_sync(&dvd_dev->media_dwork1);
 			v25 = *p_dvd_dev;
@@ -637,50 +573,48 @@ LABEL_31:
 			v25->dvd_flag_5 = v10;
 			v25->_gap18[5] = v10;
 			result = dvd_add_work(1, v24);
-		}
-		else
-		{
-			if ( v9 != 0xB0000 )
-			{
+		} else {
+			if (v9 != 0xB0000) {
 				return dvd_add_work(1, v1);
 			}
 			v12 = v1 + 1;
-			if ( v12 <= dvd_dev->media_count )
-			{
+			if (v12 <= dvd_dev->media_count) {
 				dvd_dev->media_idx = v1;
 				dvd_add_work(6, 0xE800);
 				dvd_dev = *p_dvd_dev;
 				p_dvd_dev = pp_mtc_dvd_dev_10;
 				v15 = (*p_dvd_dev)->_gap8[0];
 				dvd_dev->dvd_flag_3 = v12 | 0xB0000;
-				if ( v15 == 1 )
-				{
+				if (v15 == 1) {
 					dvd_dev->dvd_length = 0;
 					dvd_dev->dvd_position = 0;
 					_memzero(dvd_dev->array1, 32);
 					_memzero((*p_dvd_dev)->array2, 32);
 					_memzero((*p_dvd_dev)->array3, 32);
 					_memzero((*p_dvd_dev)->array4, 32);
-					cancel_delayed_work_sync(&(*p_dvd_dev)->media_dwork1);
+					cancel_delayed_work_sync(
+					    &(*p_dvd_dev)->media_dwork1);
 					dvd_dev = *p_dvd_dev;
 					timeout_ms = 500;
 					dvd_dev->_gap18[4] = 1;
-				}
-				else
-				{
-					cancel_delayed_work_sync(&dvd_dev->dwork1);
+				} else {
+					cancel_delayed_work_sync(
+					    &dvd_dev->dwork1);
 					dvd_dev = *p_dvd_dev;
 					dwork_1 = &(*p_dvd_dev)->dwork1;
 					dvd_dev->_gap14[24] = 1;
-					queue_delayed_work(dvd_dev->media_wq, dwork_1, 0);
-					cancel_delayed_work_sync(&(*p_dvd_dev)->media_dwork1);
+					queue_delayed_work(dvd_dev->media_wq,
+							   dwork_1, 0);
+					cancel_delayed_work_sync(
+					    &(*p_dvd_dev)->media_dwork1);
 					dvd_dev = *p_dvd_dev;
 					timeout_ms = 1500;
 					dvd_dev->_gap18[5] = 1;
 				}
 				media_wq = dvd_dev->media_wq;
 				delay_1 = msecs_to_jiffies(timeout_ms);
-				result = queue_delayed_work(media_wq, &dvd_dev->media_dwork1, delay_1);
+				result = queue_delayed_work(
+				    media_wq, &dvd_dev->media_dwork1, delay_1);
 			}
 		}
 	}
@@ -693,61 +627,55 @@ void cmd_work(int a1)
 }
 
 /* dirty code */
-int
-dvd_get_folder(int result, const char *buf_1, int a3, int a4)
+int dvd_get_folder(int result, const char *buf_1, int a3, int a4)
 {
 	struct list_head *folder_list; // r7@1
-	size_t pos; // r0@8
-	int v7; // r4@8
-	size_t pos_1; // r0@8
-	int v9; // r6@8
-	int v10; // r7@8
-	size_t v11; // r0@9
-	int v12; // t1@9
-	size_t v13; // r0@10
-	int v14; // [sp+0h] [bp-18h]@1
+	size_t pos;		       // r0@8
+	int v7;			       // r4@8
+	size_t pos_1;		       // r0@8
+	int v9;			       // r6@8
+	int v10;		       // r7@8
+	size_t v11;		       // r0@9
+	int v12;		       // t1@9
+	size_t v13;		       // r0@10
+	int v14;		       // [sp+0h] [bp-18h]@1
 
 	v14 = a4;
 	folder_list = (*pp_mtc_dvd_dev_12)->folder_list[0];
-	if ( (*pp_mtc_dvd_dev_12)->folder_list != folder_list )
-	{
+	if ((*pp_mtc_dvd_dev_12)->folder_list != folder_list) {
 		result = result;
-		if ( LOWORD(folder_list[1].next) == result )
-		{
-LABEL_7:
-			if ( folder_list )
-			{
+		if (LOWORD(folder_list[1].next) == result) {
+		LABEL_7:
+			if (folder_list) {
 				pos = strlen(buf_1);
 				LOBYTE(v7) = 0;
-				sprintf(&buf_1[pos], str_fmt_d_comma, LOWORD(folder_list[1].next));
+				sprintf(&buf_1[pos], str_fmt_d_comma,
+					LOWORD(folder_list[1].next));
 				pos_1 = strlen(buf_1);
-				sprintf(&buf_1[pos_1], str_fmt_d_comma, HIWORD(folder_list[1].next));
+				sprintf(&buf_1[pos_1], str_fmt_d_comma,
+					HIWORD(folder_list[1].next));
 				v9 = &folder_list[1].prev;
 				v10 = LOBYTE(folder_list[1].prev);
-				do
-				{
+				do {
 					v11 = strlen(buf_1);
 					v7 = (v7 + 1);
-					sprintf(&buf_1[v11], str_fmt_d_comma, v10);
+					sprintf(&buf_1[v11], str_fmt_d_comma,
+						v10);
 					v12 = *(v9++ + 1);
 					v10 = v12;
-				}
-				while ( v7 != 31 );
+				} while (v7 != 31);
 				v13 = strlen(buf_1);
-				result = sprintf(&buf_1[v13], str_fmt_d, v10, v14);
+				result =
+				    sprintf(&buf_1[v13], str_fmt_d, v10, v14);
 			}
-		}
-		else
-		{
-			while ( 1 )
-			{
+		} else {
+			while (1) {
 				folder_list = folder_list->next;
-				if ( (*pp_mtc_dvd_dev_12)->folder_list == folder_list )
-				{
+				if ((*pp_mtc_dvd_dev_12)->folder_list ==
+				    folder_list) {
 					break;
 				}
-				if ( LOWORD(folder_list[1].next) == result )
-				{
+				if (LOWORD(folder_list[1].next) == result) {
 					goto LABEL_7;
 				}
 			}
@@ -757,34 +685,30 @@ LABEL_7:
 }
 
 /* dirty code */
-int
-dvd_get_media(int result, const char *a2, int a3, int a4)
+int dvd_get_media(int result, const char *a2, int a3, int a4)
 {
-	const char *v4; // r5@1
+	const char *v4;		      // r5@1
 	struct list_head *media_list; // r2@1
-	list_head *next; // r4@1 MAPDST
-	size_t v8; // r0@8
-	int v9; // r2@8
-	int v10; // r6@8
-	int v11; // r7@8
-	int v12; // t1@8
-	size_t v13; // r0@9
-	int v14; // t1@9
-	size_t v15; // r0@10
-	int v16; // [sp+0h] [bp-18h]@1
+	list_head *next;	      // r4@1 MAPDST
+	size_t v8;		      // r0@8
+	int v9;			      // r2@8
+	int v10;		      // r6@8
+	int v11;		      // r7@8
+	int v12;		      // t1@8
+	size_t v13;		      // r0@9
+	int v14;		      // t1@9
+	size_t v15;		      // r0@10
+	int v16;		      // [sp+0h] [bp-18h]@1
 
 	v16 = a4;
 	v4 = a2;
 	media_list = (*pp_mtc_dvd_dev_13)->media_list;
 	next = media_list->next;
-	if ( media_list->next != media_list )
-	{
+	if (media_list->next != media_list) {
 		result = result;
-		if ( LOWORD(next[1].next) == result )
-		{
-LABEL_7:
-			if ( next )
-			{
+		if (LOWORD(next[1].next) == result) {
+		LABEL_7:
+			if (next) {
 				v8 = strlen(a2);
 				v9 = LOWORD(next[1].next);
 				LOBYTE(next) = 0;
@@ -792,30 +716,25 @@ LABEL_7:
 				v12 = BYTE2(next[1].next);
 				v10 = &next[1].next + 2;
 				v11 = v12;
-				do
-				{
+				do {
 					v13 = strlen(v4);
 					next = (next + 1);
-					sprintf(&v4[v13], str_fmt_d_comma_0, v11);
+					sprintf(&v4[v13], str_fmt_d_comma_0,
+						v11);
 					v14 = *(v10++ + 1);
 					v11 = v14;
-				}
-				while ( next != 31 );
+				} while (next != 31);
 				v15 = strlen(v4);
-				result = sprintf(&v4[v15], str_fmt_d_0, v11, v16);
+				result =
+				    sprintf(&v4[v15], str_fmt_d_0, v11, v16);
 			}
-		}
-		else
-		{
-			while ( 1 )
-			{
+		} else {
+			while (1) {
 				next = next->next;
-				if ( next == media_list )
-				{
+				if (next == media_list) {
 					break;
 				}
-				if ( LOWORD(next[1].next) == result )
-				{
+				if (LOWORD(next[1].next) == result) {
 					goto LABEL_7;
 				}
 			}
@@ -825,44 +744,39 @@ LABEL_7:
 }
 
 /* fully decompiled */
-int
-dvd_get_media_cnt(char *buf)
+int dvd_get_media_cnt(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->media_count);
 }
 
 /* fully decompiled */
-int
-dvd_get_folder_cnt(char *buf)
+int dvd_get_folder_cnt(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->folders_count);
 }
 
 /* fully decompiled */
-int
-dvd_get_media_idx(char *buf)
+int dvd_get_media_idx(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->media_idx);
 }
 
 /* fully decompiled */
-int
-dvd_get_folder_idx(char *buf)
+int dvd_get_folder_idx(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->folder_idx);
 }
 
 /* dirty code */
-int
-dvd_get_media_title(const char *buf)
+int dvd_get_media_title(const char *buf)
 {
-	int v1; // r3@0
+	int v1;				// r3@0
 	struct mtc_dvd_drv **p_dvd_dev; // r6@1
-	signed int v4; // r4@1
-	int v5; // r7@1
-	size_t s_len; // r0@2
-	int v7; // r3@2
-	size_t pos; // r0@3
+	signed int v4;			// r4@1
+	int v5;				// r7@1
+	size_t s_len;			// r0@2
+	int v7;				// r3@2
+	size_t pos;			// r0@3
 
 	p_dvd_dev = pp_mtc_dvd_dev_14;
 	v4 = 1;
@@ -872,30 +786,26 @@ dvd_get_media_title(const char *buf)
 		sprintf(&buf[s_len], str_fmt_d_comma_1, v5);
 		v7 = *p_dvd_dev + v4++;
 		v5 = *(v7 + 289);
-	}
-	while ( v4 != 128 );
+	} while (v4 != 128);
 	pos = strlen(buf);
 
 	return sprintf(&buf[pos], "%d", v5);
 }
 
 /* fully decompiled */
-int
-dvd_get_length(char *buf)
+int dvd_get_length(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->dvd_length);
 }
 
 /* fully decompiled */
-int
-dvd_get_position(char *buf)
+int dvd_get_position(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->dvd_position);
 }
 
 /* dirty code */
-void
-dvd_send_command(int command)
+void dvd_send_command(int command)
 {
 	int v1; // r3@7
 
@@ -911,7 +821,8 @@ dvd_send_command(int command)
 				}
 
 				if (v1 == 0xF0000) {
-					dvd_send_command_direct((command & 0xFF00) | 0x570000);
+					dvd_send_command_direct(
+					    (command & 0xFF00) | 0x570000);
 					return;
 				}
 			}
@@ -926,44 +837,38 @@ dvd_send_command(int command)
 	}
 }
 
-
-
 /* dirty code */
-static int
-dvd_probe(struct platform_device *pdev)
+static int dvd_probe(struct platform_device *pdev)
 {
-	size_t size; // r0@1
-	struct mtc_dvd_drv *dvd_dev; // r3@2 MAPDST
-	const char *mutex_name; // r1@4
-	struct mtc_dvd_drv **p_dvd_dev; // r2@4 MAPDST
-	struct workqueue_struct *workqueue; // r0@4
-	int v10; // lr@4
-	int v11; // r12@4
-	int (__cdecl *rev_work_cb)(); // lr@4
-	int (__cdecl *stop_work_cb)(); // r12@4
-	int v15; // r12@4
-	struct timer_list *media_timer; // r0@4
-	int (__cdecl *media_work_cb)(); // r12@4
-	struct timer_list *timer1; // r12@4
-	struct timer_list *timer3; // r0@4
-	struct delayed_work *media_index_work; // r12@4
-	const char *gpio_label; // r1@4
-	struct list_head *folder_list; // r12@4
-	struct list_head *media_list; // r2@4
-	const char *irq_name; // lr@4
-	irqreturn_t (__cdecl *isr_handler)(int, void *); // r1@4
-	struct input_dev *input_dev; // r0@4 MAPDST
-	char *_str_gpio_keys_input1; // r12@4
-	const char *dev_name; // t1@4
+	size_t size;					 // r0@1
+	struct mtc_dvd_drv *dvd_dev;			 // r3@2 MAPDST
+	const char *mutex_name;				 // r1@4
+	struct mtc_dvd_drv **p_dvd_dev;			 // r2@4 MAPDST
+	struct workqueue_struct *workqueue;		 // r0@4
+	int v10;					 // lr@4
+	int v11;					 // r12@4
+	int(__cdecl * rev_work_cb)();			 // lr@4
+	int(__cdecl * stop_work_cb)();			 // r12@4
+	int v15;					 // r12@4
+	struct timer_list *media_timer;			 // r0@4
+	int(__cdecl * media_work_cb)();			 // r12@4
+	struct timer_list *timer1;			 // r12@4
+	struct timer_list *timer3;			 // r0@4
+	struct delayed_work *media_index_work;		 // r12@4
+	const char *gpio_label;				 // r1@4
+	struct list_head *folder_list;			 // r12@4
+	struct list_head *media_list;			 // r2@4
+	const char *irq_name;				 // lr@4
+	irqreturn_t(__cdecl * isr_handler)(int, void *); // r1@4
+	struct input_dev *input_dev;			 // r0@4 MAPDST
+	char *_str_gpio_keys_input1;			 // r12@4
+	const char *dev_name;				 // t1@4
 
 	printk(log_dvd_probe);
 	size = dword_C09BBE50->size1;
-	if ( size )
-	{
+	if (size) {
 		dvd_dev = kmem_cache_alloc_trace(size, 0x80D0, 0x280u);
-	}
-	else
-	{
+	} else {
 		dvd_dev = 16;
 	}
 	p_dvd_dev = p_mtc_dvd_dev;
@@ -1027,7 +932,8 @@ dvd_probe(struct platform_device *pdev)
 	irq_name = str_mtc_dvd;
 	isr_handler = dvd_isr_handler;
 	dvd_dev->dvd_irq = gpio_DVD_DATA;
-	request_threaded_irq(gpio_DVD_DATA, isr_handler, 0, 2u, irq_name, dvd_dev);
+	request_threaded_irq(gpio_DVD_DATA, isr_handler, 0, 2u, irq_name,
+			     dvd_dev);
 	disable_irq_nosync((*p_dvd_dev)->dvd_irq);
 	dvd_dev = *p_dvd_dev;
 	dvd_dev->media_wq = _alloc_workqueue_key(str_dvd_wq, 8u, 1, 0, 0);
@@ -1049,10 +955,8 @@ dvd_probe(struct platform_device *pdev)
 	return 0;
 }
 
-
 /* fully decompiled */
-static int __devexit
-dvd_remove(struct platform_device *pdev)
+static int __devexit dvd_remove(struct platform_device *pdev)
 {
 	(void)pdev;
 
@@ -1062,16 +966,15 @@ dvd_remove(struct platform_device *pdev)
 /* recovered structures */
 
 static struct dev_pm_ops dvd_pm_ops = {
-	.suspend = dvd_suspend,
-	.resume = dvd_resume,
+    .suspend = dvd_suspend, .resume = dvd_resume,
 };
 
 static struct platform_driver mtc_dvd_driver = {
-	.probe = dvd_probe,
-	.remove = __devexit_p(dvd_remove),
-	.driver = {
-		.name = "mtc-dvd",
-		.pm = &dvd_pm_ops,
+    .probe = dvd_probe,
+    .remove = __devexit_p(dvd_remove),
+    .driver =
+	{
+	    .name = "mtc-dvd", .pm = &dvd_pm_ops,
 	},
 };
 
