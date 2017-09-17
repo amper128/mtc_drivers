@@ -1,6 +1,7 @@
 // tmp defines
 #define CONFIG_HAS_EARLYSUSPEND
 
+#include <asm/string.h>
 #include <linux/device.h>
 #include <linux/earlysuspend.h>
 #include <linux/input.h>
@@ -12,7 +13,6 @@
 #include <linux/pm.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
-#include <asm/string.h>
 
 #include <stdint.h>
 
@@ -425,7 +425,7 @@ signed int dvd_poweroff_constprop_10(void)
 
 signed int dvd_power(int pwr)
 {
-	signed int result;	     // r0@2
+	signed int result; // r0@2
 
 	printk("--mtc dvd %d\n", pwr);
 
@@ -473,11 +473,11 @@ signed int dvd_power(int pwr)
 		memset(dvd_dev->array3, 0, 32);
 		memset(dvd_dev->array4, 0, 32);
 
-		*(&dvd_dev + 4) = 0;	// unknown offset
+		*(&dvd_dev + 4) = 0; // unknown offset
 		dvd_dev->dvd_power_on = 1;
 		dvd_dev->dvd_byteval_18 = 0;
-		*(pp_mtc_keys_drv + 0x32) = 0;	// unknown offset
-		*(pp_dvd_probe + 124) = 24;	// unknown offset
+		*(pp_mtc_keys_drv + 0x32) = 0; // unknown offset
+		*(pp_dvd_probe + 124) = 24;    // unknown offset
 
 		gpio_direction_input(gpio_DVD_DATA);
 		gpio_direction_input(gpio_DVD_STB);
