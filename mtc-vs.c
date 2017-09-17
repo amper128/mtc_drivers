@@ -1,4 +1,6 @@
-
+#include <linux/device.h>
+#include <linux/platform_device.h>
+#include <linux/serial_core.h>
 
 static int
 vs_probe(struct platform_device *pdev)
