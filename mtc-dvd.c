@@ -12,6 +12,7 @@
 #include <linux/pm.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <asm/string.h>
 
 #include <stdint.h>
 
@@ -68,9 +69,9 @@ struct mtc_dvd_drv {
 	u16 folders_count;
 	u16 media_count;
 	u16 dvd_u16val_7;
-	u16 folder_idx;
+	s16 folder_idx;
 	u16 dvd_u16val_8;
-	u16 media_idx;
+	s16 media_idx;
 	u16 dvd_length;
 	u16 dvd_position;
 	char _gap11[10];
@@ -426,61 +427,59 @@ signed int dvd_poweroff_constprop_10(void)
 
 signed int dvd_power(int pwr)
 {
-	signed int result; // r0@2
+	signed int result;	     // r0@2
 
-	printk("--mtc dvd %d", pwr);
+	printk("--mtc dvd %d\n", pwr);
 
-	if (pwr) {
-		if (p_mtc_dvd_drv->dvd_power_on) {
-			p_mtc_dvd_drv->dvd_power_on = 0;
-			cancel_delayed_work_sync(p_mtc_dvd_drv->dwork1);
-			cancel_delayed_work_sync(p_mtc_dvd_drv->media_dwork);
-			cancel_delayed_work_sync(p_mtc_dvd_drv->media_dwork1);
-			flush_workqueue(p_mtc_dvd_drv->media_wq);
-			disable_irq_nosync(p_mtc_dvd_drv->dvd_irq);
+	if (pwr) {			     // power_on?
+		if (dvd_dev->dvd_power_on) { // already powered on?
+			dvd_dev->dvd_power_on = 0;
+			cancel_delayed_work_sync(&dvd_dev->stop_work);
+			cancel_delayed_work_sync(&dvd_dev->media_work);
+			cancel_delayed_work_sync(&dvd_dev->media_index_work);
+			flush_workqueue(dvd_dev->dvd_wq);
+			disable_irq_nosync(dvd_dev->dvd_irq);
 		}
 
 		arm_send(0x103);
 
-		/* unknown flags */
-		p_mtc_dvd_drv->_gap19[25] = 0;
-		p_mtc_dvd_drv->dvd_flag_3 = 0;
-		p_mtc_dvd_drv->dvd_flag_4 = 0;
-		p_mtc_dvd_drv->dvd_flag_5 = 0;
-		p_mtc_dvd_drv->_gap18[4] = 0;
-		p_mtc_dvd_drv->_gap18[5] = 0;
-		p_mtc_dvd_drv->_gap6[108] = 0;
-		p_mtc_dvd_drv->_gap8[0] = 0;
-		p_mtc_dvd_drv->_gap7[6] = 0;
-		p_mtc_dvd_drv->_gap8[2] = 0;
-		p_mtc_dvd_drv->_gap8[3] = 0;
-		p_mtc_dvd_drv->_gap12[10] = 0;
-		p_mtc_dvd_drv->surface_flag = 0;
-		p_mtc_dvd_drv->_gap121[0] = 0;
-		p_mtc_dvd_drv->_gap121[2] = 0;
-		p_mtc_dvd_drv->media_count = 0;
-		p_mtc_dvd_drv->dvd_length = 0;
-		p_mtc_dvd_drv->dvd_position = 0;
-		p_mtc_dvd_drv->_gap10[0] = 0;
-		p_mtc_dvd_drv->folder_idx = -1;
-		p_mtc_dvd_drv->_gap11[0] = 0;
-		p_mtc_dvd_drv->media_idx = 0;
-		p_mtc_dvd_drv->_gap14[24] = 0;
+		dvd_dev->dvd_byteval_19 = 0;
+		dvd_dev->dvd_intval_13 = 0;
+		dvd_dev->dvd_intval_14 = 0;
+		dvd_dev->dvd_intval_15 = 0;
+		dvd_dev->dvd_byteval_16 = 0;
+		dvd_dev->dvd_byteval_17 = 0;
+		dvd_dev->dvd_intval_2 = 0;
+		dvd_dev->dvd_byteval_4 = 0;
+		dvd_dev->dvd_u16val_3 = 0;
+		dvd_dev->dvd_byteval_5 = 0;
+		dvd_dev->dvd_byteval_6 = 0;
+		dvd_dev->dvd_u16val_9 = 0;
+		dvd_dev->surface_flag = 0;
+		dvd_dev->dvd_u16val_10 = 0;
+		dvd_dev->dvd_byteval_11 = 0;
+		dvd_dev->media_count = 0;
+		dvd_dev->dvd_length = 0;
+		dvd_dev->dvd_position = 0;
+		dvd_dev->dvd_u16val_7 = 0;
+		dvd_dev->folder_idx = -1;
+		dvd_dev->dvd_u16val_8 = 0;
+		dvd_dev->media_idx = 0;
+		dvd_dev->dvd_byteval_12 = 0;
 
-		free_folder(p_mtc_dvd_drv->folder_list[0]);
-		free_media(p_mtc_dvd_drv->media_list[0]);
+		free_folder(&dvd_dev->folder_list);
+		free_media(&dvd_dev->media_list);
 
-		__memzero(p_mtc_dvd_drv->array1, 32);
-		__memzero(p_mtc_dvd_drv->array2, 32);
-		__memzero(p_mtc_dvd_drv->array3, 32);
-		__memzero(p_mtc_dvd_drv->array4, 32);
+		memset(dvd_dev->array1, 0, 32);
+		memset(dvd_dev->array2, 0, 32);
+		memset(dvd_dev->array3, 0, 32);
+		memset(dvd_dev->array4, 0, 32);
 
-		*(p_mtc_dvd_drv + 4) = 0;
-		p_mtc_dvd_drv->dvd_power_on = 1;
-		p_mtc_dvd_drv->_gap19[24] = 0;
-
-		*(pp_mtc_keys_drv + 0x32) = 0;
-		*(pp_dvd_probe + 124) = 24;
+		*(&dvd_dev + 4) = 0;	// unknown offset
+		dvd_dev->dvd_power_on = 1;
+		dvd_dev->dvd_byteval_18 = 0;
+		*(pp_mtc_keys_drv + 0x32) = 0;	// unknown offset
+		*(pp_dvd_probe + 124) = 24;	// unknown offset
 
 		gpio_direction_input(gpio_DVD_DATA);
 		gpio_direction_input(gpio_DVD_STB);
@@ -491,7 +490,7 @@ signed int dvd_power(int pwr)
 		msleep(150u);
 		arm_send_multi(0x9103, 0, 0);
 		msleep(150u);
-		enable_irq(p_mtc_dvd_drv->dvd_irq);
+		enable_irq(dvd_dev->dvd_irq);
 		result = 0;
 	} else {
 		result = dvd_poweroff_constprop_10();
