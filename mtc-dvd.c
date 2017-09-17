@@ -837,121 +837,60 @@ void dvd_send_command(int command)
 	}
 }
 
-/* dirty code */
+/* fully decompiled */
 static int dvd_probe(struct platform_device *pdev)
 {
-	size_t size;					 // r0@1
-	struct mtc_dvd_drv *dvd_dev;			 // r3@2 MAPDST
-	const char *mutex_name;				 // r1@4
-	struct mtc_dvd_drv **p_dvd_dev;			 // r2@4 MAPDST
-	struct workqueue_struct *workqueue;		 // r0@4
-	int v10;					 // lr@4
-	int v11;					 // r12@4
-	int(__cdecl * rev_work_cb)();			 // lr@4
-	int(__cdecl * stop_work_cb)();			 // r12@4
-	int v15;					 // r12@4
-	struct timer_list *media_timer;			 // r0@4
-	int(__cdecl * media_work_cb)();			 // r12@4
-	struct timer_list *timer1;			 // r12@4
-	struct timer_list *timer3;			 // r0@4
-	struct delayed_work *media_index_work;		 // r12@4
-	const char *gpio_label;				 // r1@4
-	struct list_head *folder_list;			 // r12@4
-	struct list_head *media_list;			 // r2@4
-	const char *irq_name;				 // lr@4
-	irqreturn_t(__cdecl * isr_handler)(int, void *); // r1@4
-	struct input_dev *input_dev;			 // r0@4 MAPDST
-	char *_str_gpio_keys_input1;			 // r12@4
-	const char *dev_name;				 // t1@4
+	pr_info("dvd_probe\n");
 
-	printk(log_dvd_probe);
-	size = dword_C09BBE50->size1;
-	if (size) {
-		dvd_dev = kmem_cache_alloc_trace(size, 0x80D0, 0x280u);
-	} else {
-		dvd_dev = 16;
-	}
-	p_dvd_dev = p_mtc_dvd_dev;
-	mutex_name = str_dvd_dev_cmd_lock;
-	p_dvd_dev = p_mtc_dvd_dev;
-	*p_mtc_dvd_dev = dvd_dev;
-	_mutex_init(&dvd_dev->cmd_lock, mutex_name, (p_dvd_dev + 1));
-	dvd_dev = *p_dvd_dev;
-	workqueue = _alloc_workqueue_key(str_dvd_rev_wq, 0xAu, 1, 0, 0);
-	dvd_dev = *p_dvd_dev;
-	v10 = (*p_dvd_dev)->_gap5;
-	v11 = (*p_dvd_dev)->_gap13;
-	dvd_dev->dvd_wq = workqueue;
-	*&dvd_dev->_gap5[0] = v10;
-	*&dvd_dev->_gap5[4] = v10;
-	*&dvd_dev->_gap13[0] = v11;
-	rev_work_cb = p_rev_work[0];
-	*&dvd_dev->_gap13[4] = v11;
-	stop_work_cb = p_stop_work[0];
-	dvd_dev->rev_work_cb = rev_work_cb;
-	dvd_dev->dvd_work = 0x500;
-	dvd_dev->dwork1 = 0x500;
-	dvd_dev->stop_work_cb = stop_work_cb;
-	init_timer_key(&dvd_dev->stop_timer, 0, 0);
-	dvd_dev = *p_dvd_dev;
-	v15 = (*p_dvd_dev)->_gap15;
-	media_timer = &(*p_dvd_dev)->media_timer;
-	*&dvd_dev->_gap15[0] = v15;
-	*&dvd_dev->_gap15[4] = v15;
-	media_work_cb = p_media_work[0];
-	dvd_dev->media_dwork = 0x500;
-	dvd_dev->media_work_cb = media_work_cb;
-	init_timer_key(media_timer, 0, 0);
-	dvd_dev = *p_dvd_dev;
-	timer1 = &(*p_dvd_dev)->timer1;
-	timer3 = &(*p_dvd_dev)->timer3;
-	dvd_dev->timer1 = timer1;
-	dvd_dev->timer2 = timer1;
-	media_index_work = p_media_index_work;
-	dvd_dev->media_dwork1 = 0x500;
-	dvd_dev->media_index_work = media_index_work;
-	init_timer_key(timer3, 0, 0);
-	dvd_dev = *p_dvd_dev;
-	gpio_label = gpio_dvd_data_name;
-	folder_list = (*p_dvd_dev)->folder_list;
-	media_list = (*p_dvd_dev)->media_list;
-	dvd_dev->folder_list[0] = folder_list;
-	dvd_dev->folder_list[1] = folder_list;
-	dvd_dev->media_list[0] = media_list;
-	dvd_dev->media_list[1] = media_list;
-	gpio_request(gpio_DVD_DATA, gpio_label);
+	dvd_dev = kmalloc(sizeof(struct mtc_dvd_drv), 0x280);
+	// TODO: alloc check
+
+	mutex_init(&dvd_dev->cmd_lock);
+
+	dvd_dev->dvd_wq = create_singlethread_workqueue("dvd_rev_wq");
+
+	INIT_DELAYED_WORK(dvd_dev->rev_dwork, rev_work);
+	INIT_DELAYED_WORK(dvd_dev->stop_dwork, stop_work);
+
+	INIT_DELAYED_WORK(dvd_dev->media_work, media_work);
+	INIT_DELAYED_WORK(dvd_dev->media_index_work, media_index_work);
+
+	list_init(dvd_dev->folder_list);
+	list_init(dvd_dev->media_list);
+
+	gpio_request(gpio_DVD_DATA, "dvd_data");
 	gpio_pull_updown(gpio_DVD_DATA, 0);
 	gpio_direction_input(gpio_DVD_DATA);
-	gpio_request(gpio_DVD_STB, gpio_dvd_stb_name);
+	gpio_request(gpio_DVD_STB, "dvd_stb");
 	gpio_pull_updown(gpio_DVD_STB, 0);
 	gpio_direction_input(gpio_DVD_STB);
-	gpio_request(gpio_DVD_ACK, gpio_dvd_ack_name);
+
+	gpio_request(gpio_DVD_ACK, "dvd_ack");
 	gpio_pull_updown(gpio_DVD_ACK, 0);
 	gpio_direction_input(gpio_DVD_ACK);
-	dvd_dev = *p_dvd_dev;
-	irq_name = str_mtc_dvd;
-	isr_handler = dvd_isr_handler;
+
 	dvd_dev->dvd_irq = gpio_DVD_DATA;
-	request_threaded_irq(gpio_DVD_DATA, isr_handler, 0, 2u, irq_name,
-			     dvd_dev);
-	disable_irq_nosync((*p_dvd_dev)->dvd_irq);
-	dvd_dev = *p_dvd_dev;
-	dvd_dev->media_wq = _alloc_workqueue_key(str_dvd_wq, 8u, 1, 0, 0);
-	input_dev = input_allocate_device();
-	_str_gpio_keys_input1 = str_gpio_keys_input1;
-	(*p_dvd_dev)->mtc_wq = input_dev;
-	dev_name = pdev->name;
-	input_dev->phys = _str_gpio_keys_input1;
-	input_dev->id.vendor = 1;
-	input_dev->id.bustype = 25;
-	input_dev->name = dev_name;
-	input_dev->dev.power.suspend_timer.base = &pdev->dev;
-	input_dev->id.version = 256;
-	input_dev->id.product = 1;
-	input_set_capability(input_dev, 1u, 0x10Eu);
-	input_set_capability(input_dev, 1u, 0x8Fu);
-	input_register_device(input_dev);
-	register_early_suspend(unknown_handler_1);
+	request_threaded_irq(gpio_DVD_DATA, dvd_isr, NULL, IRQF_TRIGGER_FALLING,
+			     "dvd", dvd_dev);
+	disable_irq_nosync(dvd_dev->dvd_irq);
+
+	dvd_dev->media_wq = create_singlethread_workqueue("dvd_wq");
+
+	/* creating input device */
+	dvd_dev->input_dev = input_allocate_device();
+	dvd_dev->input_dev->phys = "gpio-keys/input1";
+	dvd_dev->input_dev->id.vendor = 1;
+	dvd_dev->input_dev->id.bustype = BUS_HOST;
+	dvd_dev->input_dev->name = pdev->name;
+	dvd_dev->input_dev->dev.power.suspend_timer.base = &pdev->dev; // ?
+	dvd_dev->input_dev->id.version = 256;
+	dvd_dev->input_dev->id.product = 1;
+	input_set_capability(dvd_dev->input_dev, EV_KEY, 0x10e); //?
+	input_set_capability(dvd_dev->input_dev, EV_KEY, KEY_WAKEUP);
+	input_register_device(dvd_dev->input_dev);
+
+	register_early_suspend(&dvd_early_suspend);
+
 	return 0;
 }
 
