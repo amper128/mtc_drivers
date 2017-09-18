@@ -115,14 +115,16 @@ static struct platform_driver mtc_dvd_driver;
 signed int dvd_poweroff_constprop_10(void);
 
 /* fully decompiled */
-void dvd_s_resume(struct early_suspend *h)
+void
+dvd_s_resume(struct early_suspend *h)
 {
 	(void)h;
 	// empty function
 }
 
 /* fully decompiled */
-void dvd_s_suspend(struct early_suspend *h)
+void
+dvd_s_suspend(struct early_suspend *h)
 {
 	(void)h;
 
@@ -130,7 +132,8 @@ void dvd_s_suspend(struct early_suspend *h)
 }
 
 /* fully decompiled */
-int dvd_suspend(struct device *dev)
+int
+dvd_suspend(struct device *dev)
 {
 	(void)dev;
 
@@ -138,7 +141,8 @@ int dvd_suspend(struct device *dev)
 }
 
 /* fully decompiled */
-int dvd_resume(struct device *dev)
+int
+dvd_resume(struct device *dev)
 {
 	(void)dev;
 
@@ -146,7 +150,8 @@ int dvd_resume(struct device *dev)
 }
 
 /* fully decompiled */
-irqreturn_t dvd_isr(unsigned int irq)
+irqreturn_t
+dvd_isr(unsigned int irq)
 {
 	disable_irq_nosync(irq);
 	queue_work(dvd_dev->dvd_rev_wq, dvd_dev->dvd_work);
@@ -155,7 +160,8 @@ irqreturn_t dvd_isr(unsigned int irq)
 }
 
 /* fully decompiled */
-int dvd_add_work(int cmd1, int cmd2)
+int
+dvd_add_work(int cmd1, int cmd2)
 {
 	struct mtc_dvd_work *dvd_work; // r0@2
 
@@ -171,7 +177,8 @@ int dvd_add_work(int cmd1, int cmd2)
 }
 
 /* fully decompiled */
-struct list_head *free_folder(struct list_head *folder_list)
+struct list_head *
+free_folder(struct list_head *folder_list)
 {
 	struct list_head *v1; // r6@1
 	struct list_head *v2; // r3@1
@@ -196,7 +203,8 @@ struct list_head *free_folder(struct list_head *folder_list)
 }
 
 /* fully decompiled */
-struct list_head *free_media(struct list_head *media_list)
+struct list_head *
+free_media(struct list_head *media_list)
 {
 	struct list_head *v1; // r6@1
 	struct list_head *v2; // r3@1
@@ -220,7 +228,8 @@ struct list_head *free_media(struct list_head *media_list)
 	return media_list;
 }
 
-void input_event_func(s16 arg)
+void
+input_event_func(s16 arg)
 {
 	char v1;
 
@@ -229,7 +238,8 @@ void input_event_func(s16 arg)
 }
 
 /* fully decompiled */
-void cmd_surface(int arg)
+void
+cmd_surface(int arg)
 {
 	if (p_mtc_dvd_drv->surface_flag != arg) {
 		p_mtc_dvd_drv->surface_flag = arg;
@@ -242,7 +252,8 @@ void cmd_surface(int arg)
 }
 
 /* fully decompiled */
-bool CheckTimeOut_constprop_9(unsigned int timeout)
+bool
+CheckTimeOut_constprop_9(unsigned int timeout)
 {
 	int usec;
 	struct timeval tv;
@@ -257,7 +268,8 @@ bool CheckTimeOut_constprop_9(unsigned int timeout)
 	return ((usec - timeout) > 49999);
 }
 
-int dvd_rev_part_2()
+int
+dvd_rev_part_2()
 {
 	unsigned int v0;  // r4@3
 	int v1;		  // r1@4
@@ -373,7 +385,8 @@ LABEL_24:
 }
 
 /* fully decompiled */
-void rev_work(void)
+void
+rev_work(void)
 {
 	if (p_mtc_dvd_drv->dvd_power_on) {
 		dvd_rev_part_2();
@@ -388,7 +401,8 @@ void rev_work(void)
 	}
 }
 
-void stop_work()
+void
+stop_work()
 {
 	int cmd; // r0@4
 
@@ -409,7 +423,8 @@ void stop_work()
 }
 
 /* fully decompiled */
-signed int dvd_poweroff_constprop_10(void)
+signed int
+dvd_poweroff_constprop_10(void)
 {
 	signed int result; // r0@2
 
@@ -437,7 +452,8 @@ signed int dvd_poweroff_constprop_10(void)
 	return result;
 }
 
-signed int dvd_power(int pwr)
+signed int
+dvd_power(int pwr)
 {
 	signed int result; // r0@2
 
@@ -512,7 +528,8 @@ signed int dvd_power(int pwr)
 }
 
 /* fully decompiled */
-signed int dvd_play_cmd(void)
+signed int
+dvd_play_cmd(void)
 {
 	signed int result; // r0@2
 
@@ -526,7 +543,8 @@ signed int dvd_play_cmd(void)
 }
 
 /* fully decompiled */
-signed int dvd_stop_cmd(void)
+signed int
+dvd_stop_cmd(void)
 {
 	signed int result; // r0@2
 
@@ -539,7 +557,8 @@ signed int dvd_stop_cmd(void)
 }
 
 /* dirty code */
-int dvd_send_command_direct(int result)
+int
+dvd_send_command_direct(int result)
 {
 	int v1;				   // r1@1
 	struct mtc_dvd_drv **p_dvd_dev;    // r5@1 MAPDST
@@ -691,13 +710,15 @@ int dvd_send_command_direct(int result)
 	return result;
 }
 
-void cmd_work(int a1)
+void
+cmd_work(int a1)
 {
 	// too many code...
 }
 
 /* dirty code */
-int dvd_get_folder(int result, const char *buf_1, int a3, int a4)
+int
+dvd_get_folder(int result, const char *buf_1, int a3, int a4)
 {
 	struct list_head *folder_list; // r7@1
 	size_t pos;		       // r0@8
@@ -755,7 +776,8 @@ int dvd_get_folder(int result, const char *buf_1, int a3, int a4)
 }
 
 /* dirty code */
-int dvd_get_media(int result, const char *a2, int a3, int a4)
+int
+dvd_get_media(int result, const char *a2, int a3, int a4)
 {
 	const char *v4;		      // r5@1
 	struct list_head *media_list; // r2@1
@@ -814,31 +836,36 @@ int dvd_get_media(int result, const char *a2, int a3, int a4)
 }
 
 /* fully decompiled */
-int dvd_get_media_cnt(char *buf)
+int
+dvd_get_media_cnt(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->media_count);
 }
 
 /* fully decompiled */
-int dvd_get_folder_cnt(char *buf)
+int
+dvd_get_folder_cnt(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->folders_count);
 }
 
 /* fully decompiled */
-int dvd_get_media_idx(char *buf)
+int
+dvd_get_media_idx(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->media_idx);
 }
 
 /* fully decompiled */
-int dvd_get_folder_idx(char *buf)
+int
+dvd_get_folder_idx(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->folder_idx);
 }
 
 /* dirty code */
-int dvd_get_media_title(const char *buf)
+int
+dvd_get_media_title(const char *buf)
 {
 	int v1;				// r3@0
 	struct mtc_dvd_drv **p_dvd_dev; // r6@1
@@ -863,19 +890,22 @@ int dvd_get_media_title(const char *buf)
 }
 
 /* fully decompiled */
-int dvd_get_length(char *buf)
+int
+dvd_get_length(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->dvd_length);
 }
 
 /* fully decompiled */
-int dvd_get_position(char *buf)
+int
+dvd_get_position(char *buf)
 {
 	return sprintf(buf, "%d", p_mtc_dvd_drv->dvd_position);
 }
 
 /* dirty code */
-void dvd_send_command(int command)
+void
+dvd_send_command(int command)
 {
 	int v1; // r3@7
 
@@ -908,7 +938,8 @@ void dvd_send_command(int command)
 }
 
 /* fully decompiled */
-static int dvd_probe(struct platform_device *pdev)
+static int
+dvd_probe(struct platform_device *pdev)
 {
 	pr_info("dvd_probe\n");
 
@@ -965,7 +996,8 @@ static int dvd_probe(struct platform_device *pdev)
 }
 
 /* fully decompiled */
-static int __devexit dvd_remove(struct platform_device *pdev)
+static int __devexit
+dvd_remove(struct platform_device *pdev)
 {
 	(void)pdev;
 
