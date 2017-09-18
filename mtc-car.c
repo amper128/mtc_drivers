@@ -31,16 +31,15 @@ car_remove(struct platform_device *pdev)
 /* recovered structures */
 
 static struct dev_pm_ops car_pm_ops = {
-	.suspend = car_suspend,
-	.resume = car_resume,
+    .suspend = car_suspend, .resume = car_resume,
 };
 
 static struct platform_driver mtc_car_driver = {
-	.probe = car_probe,
-	.remove = __devexit_p(car_remove),
-	.driver = {
-		.name = "mtc-car",
-		.pm = &car_pm_ops,
+    .probe = car_probe,
+    .remove = __devexit_p(car_remove),
+    .driver =
+	{
+	    .name = "mtc-car", .pm = &car_pm_ops,
 	},
 };
 
