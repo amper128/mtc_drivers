@@ -4,6 +4,7 @@
 #define _MTC_SHARED_H
 
 enum mtc_gpio {
+	gpio_FCAM_PWR = 161,
 	gpio_MCU_CLK = 167,
 	gpio_DVD_STB = 168,
 	gpio_MCU_DIN = 169,
