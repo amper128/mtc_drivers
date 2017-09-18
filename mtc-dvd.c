@@ -16,23 +16,14 @@
 
 #include <stdint.h>
 
+#include "mtc_shared.h"
+
 typedef uint32_t u32;
 typedef uint16_t u16;
 typedef uint8_t u8;
 typedef int32_t s32;
 typedef int16_t s16;
 typedef int8_t s8;
-
-enum mtc_gpio {
-	gpio_MCU_CLK = 167,
-	gpio_DVD_STB = 168,
-	gpio_MCU_DIN = 169,
-	gpio_MCU_DOUT = 170,
-	gpio_DVD_ACK = 174,
-	gpio_DVD_DATA = 175,
-	gpio_PARROT_RESET = 198,
-	gpio_PARROT_BOOT = 199,
-};
 
 struct mtc_dvd_drv {
 	char _gap0[4];

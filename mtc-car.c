@@ -6,6 +6,8 @@
 #include <linux/workqueue.h>
 #include <linux/irq.h>
 
+#include "mtc_shared.h"
+
 struct mtc_car_comm {
 	unsigned int mcu_din_gpio;
 	struct workqueue_struct *mcc_rev_wq;
