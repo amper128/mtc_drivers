@@ -11,6 +11,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <stdbool.h>
 
 #include "mtc_shared.h"
 
@@ -33,6 +34,7 @@ struct mtc_car_struct {
 
 static struct mtc_car_struct *mtc_car_struct;
 
+/* fully decompiled */
 static inline int
 GetCurTimer()
 {
@@ -42,6 +44,7 @@ GetCurTimer()
 	return tv.tv_usec;
 }
 
+/* fully decompiled */
 static bool
 CheckTimeOut(unsigned int timeout)
 {
@@ -231,6 +234,7 @@ send_err1:
 	return 0;
 }
 
+/* fully decompiled */
 int
 car_comm_init()
 {
@@ -269,6 +273,7 @@ car_comm_init()
 	return 0;
 }
 
+/* fully decompiled */
 static int
 car_suspend(struct device *dev)
 {
@@ -279,6 +284,7 @@ car_suspend(struct device *dev)
 	return 0;
 }
 
+/* fully decompiled */
 static int
 car_resume(struct device *dev)
 {
@@ -293,16 +299,29 @@ static int
 car_probe(struct platform_device *pdev)
 {
 	(void)pdev;
+	// too many code
 
 	return 0;
 }
 
+/* fully decompiled */
 static int __devexit
 car_remove(struct platform_device *pdev)
 {
 	(void)pdev;
 
 	return 0;
+}
+
+/* fully decompiled */
+static irqreturn_t
+mcu_isr(unsigned int irq)
+{
+	disable_irq_nosync(irq);
+	queue_work(mtc_car_struct->car_comm->mcc_rev_wq,
+		   &mtc_car_struct->car_comm->work);
+
+	return IRQ_HANDLED;
 }
 
 /* recovered structures */
