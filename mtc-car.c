@@ -235,6 +235,47 @@ send_err1:
 }
 
 /* fully decompiled */
+static int
+arm_send_ack()
+{
+	int timeout;
+
+	gpio_direction_input(gpio_MCU_CLK);
+	timeout = GetCurTimer();
+	while (!getPin(gpio_MCU_DIN)) {
+		if (CheckTimeOut(timeout)) {
+			printk("~ arm_send_ack err0\n"); // а тут китайцы забыли
+							 // перенос строки
+			goto send_error;
+		}
+	}
+
+	gpio_set_value(gpio_MCU_DOUT, 0);
+	timeout = GetCurTimer();
+	while (getPin(gpio_MCU_CLK)) {
+		if (CheckTimeOut(timeout)) {
+			printk("~ arm_send_ack err1\n");
+			goto send_error;
+		}
+	}
+
+	gpio_set_value(gpio_MCU_DOUT, 1);
+	timeout = GetCurTimer();
+	do {
+		if (getPin(gpio_MCU_CLK)) {
+			return 1;
+		}
+	} while (!CheckTimeOut(timeout));
+
+	printk("~ arm_send_ack err2\n");
+
+send_error:
+	gpio_set_value(gpio_MCU_DOUT, 1);
+
+	return 0;
+}
+
+/* fully decompiled */
 int
 car_comm_init()
 {
