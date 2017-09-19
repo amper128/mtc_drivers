@@ -3,8 +3,10 @@
 
 #include <asm-generic/gpio.h>
 #include <linux/delay.h>
+#include <linux/fs.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -82,6 +84,57 @@ getPin2(int gpio)
 	} while (value != gpio_get_value(gpio));
 
 	return value;
+}
+
+/*
+ * ==================================
+ *	miscdev file operations
+ * ==================================
+ */
+
+/* fully decompiled */
+static int
+car_open(struct inode *inode, struct file *filp)
+{
+	(void)inode;
+	(void)filp;
+
+	return 0;
+}
+
+/* fully decompiled */
+static ssize_t
+car_read(struct file *filp, char __user *buf, size_t count, loff_t *offp)
+{
+	(void)filp;
+	(void)buf;
+	(void)count;
+	(void)offp;
+
+	return 0;
+}
+
+/* fully decompiled */
+static ssize_t
+car_write(struct file *filp, const char __user *buf, size_t count, loff_t *offp)
+{
+	(void)filp;
+	(void)buf;
+	(void)count;
+	(void)offp;
+
+	return 0;
+}
+
+static long
+car_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	// too many code
+	(void)filp;
+	(void)cmd;
+	(void)arg;
+
+	return 0;
 }
 
 /* все это очень сильно смахивает на SPI, почему не использовали хардверную
@@ -253,6 +306,17 @@ car_remove(struct platform_device *pdev)
 }
 
 /* recovered structures */
+
+static struct file_operations mtc_car_fops = {
+    .read = car_read,
+    .write = car_write,
+    .unlocked_ioctl = car_ioctl,
+    .open = car_open,
+};
+
+static struct miscdevice mtc_car_miscdev = {
+    .minor = 255, .name = "mtc-car", .fops = &mtc_car_fops,
+};
 
 static struct dev_pm_ops car_pm_ops = {
     .suspend = car_suspend, .resume = car_resume,
