@@ -1,4 +1,8 @@
+// CONFIG_HZ = 100
+// xloops = 107374
+
 #include <asm-generic/gpio.h>
+#include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
 #include <linux/module.h>
@@ -27,15 +31,70 @@ struct mtc_car_struct {
 
 static struct mtc_car_struct *mtc_car_struct;
 
-/* все это очень сильно смахивает на SPI, почему не использовали хардверную шину?? */
+static inline int
+GetCurTimer()
+{
+	struct timeval tv;
+
+	do_gettimeofday(&tv);
+	return tv.tv_usec;
+}
+
+static bool
+CheckTimeOut(unsigned int timeout)
+{
+	long usec;
+	struct timeval tv;
+
+	do_gettimeofday(&tv);
+	usec = tv.tv_usec;
+	if (usec < timeout) {
+		usec = tv.tv_usec + 1000000;
+	}
+	return (usec - timeout) > 249999;
+}
+
+/* антидребезг? */
+/* fully decompiled */
+static int
+getPin(int gpio)
+{
+	int value;
+
+	do {
+		value = gpio_get_value(gpio);
+		udelay(1);
+	} while (value != gpio_get_value(gpio));
+
+	return value;
+}
+
+/* антидребезг? */
+/* fully decompiled */
+static int
+getPin2(int gpio)
+{
+	int value;
+
+	do {
+		value = gpio_get_value(gpio);
+		udelay(5);
+	} while (value != gpio_get_value(gpio));
+
+	return value;
+}
+
+/* все это очень сильно смахивает на SPI, почему не использовали хардверную
+ * шину?? */
+/* fully decompiled */
 static int
 arm_send_cmd(unsigned int cmd)
 {
-	int clk_timeout;		       // r5@3 MAPDST
-	int bit_pos;			       // r5@9
-	int timeout_word;		       // r6@10
-	unsigned int bit;		       // r1@13
-	int timeout;			       // r6@15
+	int clk_timeout;
+	int bit_pos;
+	int timeout_word;
+	unsigned int bit;
+	int timeout;
 
 	while (1) {
 		if (!getPin2(gpio_MCU_CLK)) {
@@ -52,7 +111,7 @@ arm_send_cmd(unsigned int cmd)
 	gpio_direction_output(gpio_MCU_DOUT, 0);
 	clk_timeout = GetCurTimer();
 	while (getPin2(gpio_MCU_CLK)) {
-		if (CheckTimeOut_constprop_4(clk_timeout)) {
+		if (CheckTimeOut(clk_timeout)) {
 			printk("~ arm_send err0 %04x\n", cmd);
 			goto send_err1;
 		}
@@ -61,7 +120,7 @@ arm_send_cmd(unsigned int cmd)
 	gpio_set_value(gpio_MCU_DOUT, 1);
 	clk_timeout = GetCurTimer();
 	while (!getPin2(gpio_MCU_CLK)) {
-		if (CheckTimeOut_constprop_4(clk_timeout)) {
+		if (CheckTimeOut(clk_timeout)) {
 			printk("~ arm_send err1\n");
 			goto send_err1;
 		}
@@ -71,7 +130,7 @@ arm_send_cmd(unsigned int cmd)
 	mtc_car_struct->arm_rev_status = 0x10000;
 	mtc_car_struct->arm_rev_cmd = cmd;
 
-	_const_udelay(0x10624Cu);
+	udelay(10);
 
 LABEL_10:
 	timeout_word = GetCurTimer();
@@ -88,8 +147,9 @@ LABEL_10:
 
 			timeout = GetCurTimer();
 			while (getPin(gpio_MCU_DIN)) {
-				if (CheckTimeOut_constprop_4(timeout)) {
-					printk("~ arm_send_16bits err1 %d\n", bit_pos);
+				if (CheckTimeOut(timeout)) {
+					printk("~ arm_send_16bits err1 %d\n",
+					       bit_pos);
 					goto send_err0;
 				}
 			}
@@ -100,21 +160,21 @@ LABEL_10:
 				goto LABEL_10;
 			}
 
-			_gpio_set_value(gpio_MCU_DOUT, 1);
+			gpio_set_value(gpio_MCU_DOUT, 1);
 			gpio_direction_output(gpio_MCU_CLK, 1);
 			return 1;
 		}
-	} while (!CheckTimeOut_constprop_4(timeout_word));
+	} while (!CheckTimeOut(timeout_word));
 
 	printk("~ arm_send_16bits err0 %d\n", bit_pos);
 
 send_err0:
-	_gpio_set_value(gpio_MCU_DOUT, 1);
+	gpio_set_value(gpio_MCU_DOUT, 1);
 	gpio_direction_input(gpio_MCU_CLK);
-	_const_udelay(0x10624Cu);
+	udelay(10);
 
 send_err1:
-	_gpio_set_value(gpio_MCU_DOUT, 1);
+	gpio_set_value(gpio_MCU_DOUT, 1);
 	return 0;
 }
 
@@ -159,6 +219,8 @@ car_comm_init()
 static int
 car_suspend(struct device *dev)
 {
+	(void)dev;
+
 	printk("car_suspend\n");
 
 	return 0;
@@ -167,6 +229,8 @@ car_suspend(struct device *dev)
 static int
 car_resume(struct device *dev)
 {
+	(void)dev;
+
 	printk("car_resume\n");
 
 	return 0;
@@ -175,12 +239,16 @@ car_resume(struct device *dev)
 static int
 car_probe(struct platform_device *pdev)
 {
+	(void)pdev;
+
 	return 0;
 }
 
 static int __devexit
 car_remove(struct platform_device *pdev)
 {
+	(void)pdev;
+
 	return 0;
 }
 
