@@ -1,10 +1,10 @@
+#include <asm-generic/gpio.h>
+#include <linux/gpio.h>
+#include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/gpio.h>
-#include <asm-generic/gpio.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
-#include <linux/irq.h>
 
 #include "mtc_shared.h"
 
@@ -55,9 +55,7 @@ car_comm_init()
 
 	car_comm->mcu_din_gpio = gpio_MCU_DIN;
 	irq_set_irq_wake(gpio_MCU_DIN, 1);
-	request_threaded_irq(gpio_MCU_DIN,
-			     mcu_isr_cb, 0, 2u, "keys",
-			     car_comm);
+	request_threaded_irq(gpio_MCU_DIN, mcu_isr_cb, 0, 2u, "keys", car_comm);
 
 	car_comm->mcc_rev_wq = create_singlethread_workqueue("mcu_rev_wq");
 
