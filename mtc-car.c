@@ -140,6 +140,12 @@ car_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
+/*
+ * ==================================
+ *	MCU communications
+ * ==================================
+ */
+
 /* все это очень сильно смахивает на SPI, почему не использовали хардверную
  * шину?? */
 /* fully decompiled */
@@ -245,7 +251,7 @@ arm_send_ack()
 	while (!getPin(gpio_MCU_DIN)) {
 		if (CheckTimeOut(timeout)) {
 			printk("~ arm_send_ack err0\n"); // а тут китайцы забыли
-							 // перенос строки
+			// перенос строки
 			goto send_error;
 		}
 	}
@@ -271,6 +277,119 @@ arm_send_ack()
 
 send_error:
 	gpio_set_value(gpio_MCU_DOUT, 1);
+
+	return 0;
+}
+
+/* fully decompiled */
+int
+arm_rev_8bits(char *byteval)
+{
+	char byte;
+	int bit_n;
+	int timeout;
+	int timeout_bit;
+
+	byte = 0;
+	gpio_direction_input(gpio_MCU_CLK);
+	bit_n = 0;
+
+LABEL_2:
+	timeout = GetCurTimer();
+	do {
+		if (!getPin(gpio_MCU_CLK)) {
+			byte = (char)(byte << 1u);
+			if (getPin(gpio_MCU_DIN)) {
+				byte |= 1u;
+			}
+			gpio_set_value(gpio_MCU_DOUT, 0);
+
+			timeout_bit = GetCurTimer();
+			while (!getPin(gpio_MCU_CLK)) {
+				if (CheckTimeOut(timeout_bit)) {
+					printk("~ arm_rev_8bits err1 %d\n",
+					       bit_n);
+					goto err_rev;
+				}
+			}
+			bit_n = (bit_n + 1);
+			gpio_set_value(gpio_MCU_DOUT, 1);
+			if (bit_n != 8) {
+				goto LABEL_2;
+			}
+			*byteval = byte;
+			return 1;
+		}
+	} while (!CheckTimeOut(timeout));
+
+	printk("~ arm_rev_8bits err0 %x %x %d\n",
+	       mtc_car_struct->arm_rev_status, mtc_car_struct->arm_rev_cmd,
+	       bit_n);
+
+err_rev:
+	gpio_set_value(gpio_MCU_DOUT, 1);
+
+	return 0;
+}
+
+/* fully decompiled */
+int
+arm_rev_bytes(char *buf, int count)
+{
+	int pos;
+	int result;
+
+	if (count) {
+		pos = 0;
+		while (1) {
+			mtc_car_struct->arm_rev_status++;
+			result = arm_rev_8bits(&buf[pos++]);
+
+			if (!result) {
+				break;
+			}
+			if (pos == count) {
+				return 1;
+			}
+		}
+	} else {
+		result = 1;
+	}
+
+	return result;
+}
+
+/* fully decompiled */
+static int
+arm_rev_ack()
+{
+	int timeout;
+
+	timeout = GetCurTimer();
+	while (getPin(gpio_MCU_DIN)) {
+		if (CheckTimeOut(timeout)) {
+			printk("~ arm_rev_ack err0\n"); // а тут была копипаста,
+							// снова без переноса
+			goto send_ack_err;
+		}
+	}
+
+	gpio_direction_output(gpio_MCU_CLK, 0);
+	timeout = GetCurTimer();
+	do {
+		if (getPin(gpio_MCU_DIN)) {
+			gpio_direction_input(gpio_MCU_CLK);
+			udelay(10);
+			getPin(gpio_MCU_DIN);
+			return 1;
+		}
+	} while (!CheckTimeOut(timeout));
+
+	printk("~ arm_rev_ack err1\n"); // и тут копипаста
+
+send_ack_err:
+	gpio_direction_input(gpio_MCU_CLK);
+	udelay(10);
 
 	return 0;
 }
