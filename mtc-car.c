@@ -369,7 +369,7 @@ arm_rev_ack()
 	while (getPin(gpio_MCU_DIN)) {
 		if (CheckTimeOut(timeout)) {
 			printk("~ arm_rev_ack err0\n"); // а тут была копипаста,
-							// снова без переноса
+			// снова без переноса
 			goto send_ack_err;
 		}
 	}
@@ -392,6 +392,186 @@ send_ack_err:
 	udelay(10);
 
 	return 0;
+}
+
+/* fully decompiled */
+static int
+arm_send(unsigned int cmd)
+{
+	int res;
+	int hi_byte;
+	char byteval = 0;
+
+	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
+
+	if (arm_send_cmd(cmd)) {
+		hi_byte = cmd & 0xFF00;
+
+		if ((hi_byte == 0xF00) || (cmd == 0x201)) {
+			res = arm_rev_8bits(&byteval);
+			if (res) {
+				arm_rev_ack();
+				res = hi_byte | byteval;
+			}
+		} else {
+			arm_send_ack();
+			res = 1;
+		}
+	} else {
+		res = 0;
+	}
+
+	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct->car_comm->snd_lock);
+
+	return res;
+}
+
+/* fully decompiled */
+static int
+arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
+{
+	int recv;	   // r0@1
+	int pos;	    // r10@5 MAPDST
+	unsigned char byte; // r6@6 MAPDST
+	char bitval;	// zf@10
+	int bit;	    // r1@11 MAPDST
+	int timeout;	// r9@13 MAPDST
+	int res;	    // r5@18
+	int bit_pos;	// r6@27
+
+	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
+	recv = arm_send_cmd(cmd);
+
+	if (!recv) {
+	LABEL_18:
+		res = recv;
+		goto LABEL_19;
+	}
+
+	if (cmd != 0xA000) {
+		if (cmd & 0x8000) {
+			if (count) {
+				for (pos = 0; pos < count; pos++) {
+					mtc_car_struct->arm_rev_status += 0x100;
+					byte = buf[pos];
+
+					for (bit_pos = 0; bit_pos < 7;
+					     bit_pos++) {
+						timeout = GetCurTimer();
+						while (!getPin(gpio_MCU_DIN)) {
+							if (CheckTimeOut(
+								timeout)) {
+								printk(
+								    "~ "
+								    "arm_send_"
+								    "8bits "
+								    "err0 %d\n",
+								    bit_pos);
+							LABEL_23:
+								gpio_set_value(
+								    gpio_MCU_DOUT,
+								    1);
+								gpio_direction_input(
+								    gpio_MCU_CLK);
+								res = 0;
+								udelay(10);
+
+								goto LABEL_19;
+							}
+						}
+
+						if ((byte & 0x80) == 0) {
+							bit = 0;
+						} else {
+							bit = 1;
+						}
+
+						byte =
+						    (unsigned char)(byte << 1);
+
+						gpio_set_value(gpio_MCU_DOUT,
+							       bit);
+						gpio_direction_output(
+						    gpio_MCU_CLK, 0);
+						timeout = GetCurTimer();
+						while (getPin(gpio_MCU_DIN)) {
+							if (CheckTimeOut(
+								timeout)) {
+								printk(
+								    "~ "
+								    "arm_send_"
+								    "8bits "
+								    "err1 %d\n",
+								    bit_pos);
+								goto LABEL_23;
+							}
+						}
+
+						if (bit_pos != 7) {
+							gpio_direction_output(
+							    gpio_MCU_CLK, 1);
+						}
+					}
+					gpio_set_value(gpio_MCU_DOUT, 1);
+					gpio_direction_output(gpio_MCU_CLK, 1);
+				}
+			}
+
+			goto LABEL_21;
+		}
+		recv = arm_rev_bytes(buf, count);
+		if (recv) {
+			res = arm_rev_ack();
+			goto LABEL_19;
+		}
+		goto LABEL_18;
+	}
+	if (!count) {
+	LABEL_21:
+		res = arm_send_ack();
+		goto LABEL_19;
+	}
+	pos = 0;
+	do {
+		byte = buf[pos];
+		bit_pos = 8;
+		while (1) {
+			while (!getPin(gpio_MCU_DIN)) {
+				;
+			}
+			bitval = (byte & 0x80) == 0;
+			byte *= 2;
+			bit = bitval ? 0 : 1;
+			_gpio_set_value(gpio_MCU_DOUT, bit);
+			gpio_direction_output(gpio_MCU_CLK, 0);
+			while (getPin(gpio_MCU_DIN)) {
+				;
+			}
+			if (bit_pos == 1) {
+				break;
+			}
+			bit_pos = (bit_pos - 1);
+			gpio_direction_output(gpio_MCU_CLK, 1);
+			if (!bit_pos) {
+				goto LABEL_36;
+			}
+		}
+		_gpio_set_value(170, 1);
+		gpio_direction_output(gpio_MCU_CLK, 1);
+	LABEL_36:
+		++pos;
+	} while (pos != count);
+
+	res = arm_send_ack();
+
+LABEL_19:
+	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct->car_comm->snd_lock);
+
+	return res;
 }
 
 /* fully decompiled */
