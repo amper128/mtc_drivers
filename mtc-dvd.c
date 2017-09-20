@@ -83,7 +83,8 @@ struct mtc_dvd_drv {
 	char dvd_byteval_17;
 	char _gap15[2];
 	struct mutex cmd_lock;
-	char _gap16[8];
+	char _gap16[4];
+	int dvd_command_byte2;
 	char dvd_byteval_18;
 	char dvd_byteval_19;
 	char _gap17[2];
@@ -97,6 +98,7 @@ struct mtc_dvd_work {
 };
 
 static struct mtc_dvd_drv *dvd_dev;
+static int dvd_flag1;
 
 static struct early_suspend dvd_early_suspend;
 static struct dev_pm_ops dvd_pm_ops;
@@ -143,9 +145,10 @@ dvd_resume(struct device *dev)
 
 /* fully decompiled */
 static irqreturn_t
-dvd_isr(unsigned int irq)
+dvd_isr(int irq, void * data)
 {
-	disable_irq_nosync(irq);
+	(void)data;
+	disable_irq_nosync((unsigned int)irq);
 	queue_work(dvd_dev->dvd_rev_wq, &dvd_dev->dvd_work);
 
 	return IRQ_HANDLED;
@@ -501,11 +504,11 @@ dvd_power(int pwr)
 		memset(dvd_dev->array3, 0, 32);
 		memset(dvd_dev->array4, 0, 32);
 
-		*(&dvd_dev + 4) = 0; // unknown offset
+		dvd_flag1 = 0;
 		dvd_dev->dvd_power_on = 1;
 		dvd_dev->dvd_byteval_18 = 0;
 		*(pp_mtc_keys_drv + 0x32) = 0; // unknown offset
-		*(pp_dvd_probe + 124) = 24;    // unknown offset
+		*(pp_dvd_probe + 124) = 24;    // byte_C0BC9A2C   DCB 0x18
 
 		gpio_direction_input(gpio_DVD_DATA);
 		gpio_direction_input(gpio_DVD_STB);
@@ -901,24 +904,23 @@ dvd_get_position(char *buf)
 	return sprintf(buf, "%d", dvd_dev->dvd_position);
 }
 
-/* dirty code */
+/* fully decompiled */
 static void
-dvd_send_command(int command)
+dvd_send_command(unsigned int command)
 {
-	int v1; // r3@7
+	int dvd_cmd_b3 = command & 0xFF0000;
 
 	if (dvd_dev->dvd_power_on) {
-		if (*(pp_mtc_dvd_dev_15 + 4) == 1) {
-			v1 = command & 0xFF0000;
-			if ((command & 0xFF0000) == 0x20000) {
+		if (dvd_flag1 == 1) {
+			if (dvd_cmd_b3 == 0x20000) {
 				command = (command & 0xFF00) | 0x30000;
 			} else {
-				if (v1 == 0x30000) {
+				if (dvd_cmd_b3 == 0x30000) {
 					dvd_send_command_direct(0x100000);
 					return;
 				}
 
-				if (v1 == 0xF0000) {
+				if (dvd_cmd_b3 == 0xF0000) {
 					dvd_send_command_direct(
 					    (command & 0xFF00) | 0x570000);
 					return;
@@ -930,8 +932,8 @@ dvd_send_command(int command)
 		return;
 	}
 
-	if ((command & 0xFF0000) == 0xF0000) {
-		dvd_dev->_gap16[4] = command & 0xFF00;
+	if (dvd_cmd_b3 == 0xF0000) {
+		dvd_dev->dvd_command_byte2 = command & 0xFF00;
 	}
 }
 
@@ -973,7 +975,7 @@ dvd_probe(struct platform_device *pdev)
 			     "dvd", dvd_dev);
 	disable_irq_nosync(dvd_dev->dvd_irq);
 
-	dvd_dev->media_wq = create_singlethread_workqueue("dvd_wq");
+	dvd_dev->dvd_wq = create_singlethread_workqueue("dvd_wq");
 
 	/* creating input device */
 	dvd_dev->input_dev = input_allocate_device();
