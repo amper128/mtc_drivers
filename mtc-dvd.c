@@ -105,6 +105,7 @@ static struct dev_pm_ops dvd_pm_ops;
 static struct platform_driver mtc_dvd_driver;
 
 static struct mutex dvd_rev_mutex;
+static char dvd_cmd_bit_count = 24;
 
 static int dvd_poweroff(void);
 
@@ -508,7 +509,7 @@ dvd_power(int pwr)
 		dvd_dev->dvd_power_on = 1;
 		dvd_dev->dvd_byteval_18 = 0;
 		*(pp_mtc_keys_drv + 0x32) = 0; // unknown offset
-		*(pp_dvd_probe + 124) = 24;    // byte_C0BC9A2C   DCB 0x18
+		dvd_cmd_bit_count = 24;
 
 		gpio_direction_input(gpio_DVD_DATA);
 		gpio_direction_input(gpio_DVD_STB);
