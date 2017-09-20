@@ -5,11 +5,13 @@
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/gpio.h>
+#include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/time.h>
 #include <linux/workqueue.h>
 #include <stdbool.h>
 
@@ -154,11 +156,10 @@ car_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 static int
 arm_send_cmd(unsigned int cmd)
 {
-	int clk_timeout;
-	int bit_pos;
-	int timeout_word;
+	long clk_timeout;
+	long timeout_word;
 	unsigned int bit;
-	int timeout;
+	int bit_pos;
 
 	while (1) {
 		if (!getPin2(gpio_MCU_CLK)) {
@@ -200,6 +201,8 @@ LABEL_10:
 	timeout_word = GetCurTimer();
 	do {
 		if (getPin(gpio_MCU_DIN)) {
+			long timeout;
+
 			if ((cmd & 0x8000) == 0) {
 				bit = 0;
 			} else {
@@ -246,7 +249,7 @@ send_err1:
 static int
 arm_send_ack()
 {
-	int timeout;
+	long timeout;
 
 	gpio_direction_input(gpio_MCU_CLK);
 	timeout = GetCurTimer();
@@ -314,12 +317,14 @@ LABEL_2:
 					goto err_rev;
 				}
 			}
+
 			bit_n = (bit_n + 1);
 			gpio_set_value(gpio_MCU_DOUT, 1);
 			if (bit_n != 8) {
 				goto LABEL_2;
 			}
 			*byteval = byte;
+
 			return 1;
 		}
 	} while (!CheckTimeOut(timeout));
@@ -441,7 +446,8 @@ arm_rev()
 			timeout = GetCurTimer();
 			do {
 				if (!getPin(gpio_MCU_CLK)) {
-					arm_rev_cmd = (unsigned char)(arm_rev_cmd << 1);
+					arm_rev_cmd =
+					    (unsigned char)(arm_rev_cmd << 1);
 					if (getPin(gpio_MCU_DIN)) {
 						arm_rev_cmd |= 1u;
 					}
@@ -450,9 +456,10 @@ arm_rev()
 					timeout = GetCurTimer();
 					while (!getPin(gpio_MCU_CLK)) {
 						if (CheckTimeOut(timeout)) {
-							printk(
-							    "~ arm_rev_16bits err1 %d\n",
-							    bit_pos);
+							printk("~ "
+							       "arm_rev_16bits "
+							       "err1 %d\n",
+							       bit_pos);
 							goto LABEL_19;
 						}
 					}
@@ -703,7 +710,7 @@ car_comm_init()
 
 	car_comm->mcc_rev_wq = create_singlethread_workqueue("mcu_rev_wq");
 
-	INIT_WORK(car_comm->work, mtc_car_work);
+	INIT_WORK(&car_comm->work, mtc_car_work);
 
 	return 0;
 }
