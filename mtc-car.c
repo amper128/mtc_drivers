@@ -35,7 +35,7 @@ struct mtc_car_struct {
 static struct mtc_car_struct *mtc_car_struct;
 
 /* fully decompiled */
-static inline int
+static inline long
 GetCurTimer()
 {
 	struct timeval tv;
@@ -46,7 +46,7 @@ GetCurTimer()
 
 /* fully decompiled */
 static bool
-CheckTimeOut(unsigned int timeout)
+CheckTimeOut(long timeout)
 {
 	long usec;
 	struct timeval tv;
@@ -283,12 +283,12 @@ send_error:
 
 /* fully decompiled */
 int
-arm_rev_8bits(char *byteval)
+arm_rev_8bits(unsigned char *byteval)
 {
-	char byte;
+	unsigned char byte;
 	int bit_n;
-	int timeout;
-	int timeout_bit;
+	long timeout;
+	long timeout_bit;
 
 	byte = 0;
 	gpio_direction_input(gpio_MCU_CLK);
@@ -298,7 +298,7 @@ LABEL_2:
 	timeout = GetCurTimer();
 	do {
 		if (!getPin(gpio_MCU_CLK)) {
-			byte = (char)(byte << 1u);
+			byte = (unsigned char)(byte << 1u);
 			if (getPin(gpio_MCU_DIN)) {
 				byte |= 1u;
 			}
@@ -334,7 +334,7 @@ err_rev:
 
 /* fully decompiled */
 int
-arm_rev_bytes(char *buf, int count)
+arm_rev_bytes(unsigned char *buf, int count)
 {
 	int pos;
 	int result;
@@ -363,7 +363,7 @@ arm_rev_bytes(char *buf, int count)
 static int
 arm_rev_ack()
 {
-	int timeout;
+	long timeout;
 
 	timeout = GetCurTimer();
 	while (getPin(gpio_MCU_DIN)) {
@@ -400,7 +400,7 @@ arm_send(unsigned int cmd)
 {
 	int res;
 	int hi_byte;
-	char byteval = 0;
+	unsigned char byteval = 0;
 
 	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
 	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
@@ -432,14 +432,14 @@ arm_send(unsigned int cmd)
 static int
 arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 {
-	int recv;	   // r0@1
-	int pos;	    // r10@5 MAPDST
-	unsigned char byte; // r6@6 MAPDST
-	char bitval;	// zf@10
-	int bit;	    // r1@11 MAPDST
-	int timeout;	// r9@13 MAPDST
-	int res;	    // r5@18
-	int bit_pos;	// r6@27
+	int recv;
+	int pos;
+	unsigned char byte;
+	char bitval;
+	int bit;
+	long timeout;
+	int res;
+	int bit_pos;
 
 	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
 	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
@@ -529,41 +529,50 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 		}
 		goto LABEL_18;
 	}
+
 	if (!count) {
 	LABEL_21:
 		res = arm_send_ack();
 		goto LABEL_19;
 	}
-	pos = 0;
-	do {
+
+	for (pos = 0; pos < count; pos++) {
 		byte = buf[pos];
 		bit_pos = 8;
+
 		while (1) {
 			while (!getPin(gpio_MCU_DIN)) {
 				;
 			}
+
 			bitval = (byte & 0x80) == 0;
-			byte *= 2;
+			byte = (unsigned char)(byte << 1);
 			bit = bitval ? 0 : 1;
-			_gpio_set_value(gpio_MCU_DOUT, bit);
+			gpio_set_value(gpio_MCU_DOUT, bit);
 			gpio_direction_output(gpio_MCU_CLK, 0);
+
 			while (getPin(gpio_MCU_DIN)) {
 				;
 			}
+
 			if (bit_pos == 1) {
 				break;
 			}
-			bit_pos = (bit_pos - 1);
+
+			bit_pos--;
 			gpio_direction_output(gpio_MCU_CLK, 1);
+
 			if (!bit_pos) {
 				goto LABEL_36;
 			}
 		}
-		_gpio_set_value(170, 1);
+
+		gpio_set_value(gpio_MCU_DOUT, 1);
 		gpio_direction_output(gpio_MCU_CLK, 1);
+
 	LABEL_36:
-		++pos;
-	} while (pos != count);
+		;
+	}
 
 	res = arm_send_ack();
 
