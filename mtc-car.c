@@ -34,6 +34,8 @@ struct mtc_car_struct {
 
 static struct mtc_car_struct *mtc_car_struct;
 
+static int arm_rev(void);
+
 /* fully decompiled */
 static inline long
 GetCurTimer()
@@ -396,6 +398,91 @@ send_ack_err:
 
 /* fully decompiled */
 static int
+arm_rev()
+{
+	int mcu_clk_val;
+	int mcu_din_val;
+	unsigned int arm_rev_cmd;
+	int bit_pos;
+	long timeout;
+
+	mcu_clk_val = getPin2(gpio_MCU_CLK);
+	if (mcu_clk_val) {
+		if (getPin2(gpio_MCU_DIN)) {
+			mcu_clk_val = 0;
+		} else {
+			gpio_direction_output(gpio_MCU_CLK, 0);
+			udelay(1);
+
+			timeout = GetCurTimer();
+			while (1) {
+				mcu_din_val = getPin2(gpio_MCU_DIN);
+				if (mcu_din_val) {
+					break;
+				}
+
+				if (CheckTimeOut(timeout)) {
+					printk("~ arm_rev err0\n");
+					gpio_direction_input(gpio_MCU_CLK);
+					udelay(10);
+
+					return mcu_din_val;
+				}
+			}
+
+			gpio_direction_output(gpio_MCU_CLK, 1);
+			udelay(1);
+			mtc_car_struct->arm_rev_status = 0x20000;
+			gpio_direction_input(gpio_MCU_CLK);
+			arm_rev_cmd = 0;
+			bit_pos = 0;
+
+		LABEL_8:
+			timeout = GetCurTimer();
+			do {
+				if (!getPin(gpio_MCU_CLK)) {
+					arm_rev_cmd = (unsigned char)(arm_rev_cmd << 1);
+					if (getPin(gpio_MCU_DIN)) {
+						arm_rev_cmd |= 1u;
+					}
+
+					gpio_set_value(gpio_MCU_DOUT, 0);
+					timeout = GetCurTimer();
+					while (!getPin(gpio_MCU_CLK)) {
+						if (CheckTimeOut(timeout)) {
+							printk(
+							    "~ arm_rev_16bits err1 %d\n",
+							    bit_pos);
+							goto LABEL_19;
+						}
+					}
+
+					bit_pos++;
+					gpio_set_value(gpio_MCU_DOUT, 1);
+					if (bit_pos != 16) {
+						goto LABEL_8;
+					}
+
+					mtc_car_struct->arm_rev_cmd =
+					    arm_rev_cmd;
+
+					return process_mcu_command(arm_rev_cmd);
+				}
+			} while (!CheckTimeOut(timeout));
+
+			printk("~ arm_rev_16bits err0 %d\n", bit_pos);
+
+		LABEL_19:
+			gpio_set_value(gpio_MCU_DOUT, 1);
+			mcu_clk_val = 0;
+		}
+	}
+
+	return mcu_clk_val;
+}
+
+/* fully decompiled */
+static int
 arm_send(unsigned int cmd)
 {
 	int res;
@@ -570,8 +657,7 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 		gpio_set_value(gpio_MCU_DOUT, 1);
 		gpio_direction_output(gpio_MCU_CLK, 1);
 
-	LABEL_36:
-		;
+	LABEL_36:;
 	}
 
 	res = arm_send_ack();
