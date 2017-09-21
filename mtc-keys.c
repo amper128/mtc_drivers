@@ -33,16 +33,15 @@ keys_remove(struct platform_device *pdev)
 /* recovered structures */
 
 static struct dev_pm_ops keys_pm_ops = {
-	.suspend = keys_suspend,
-	.resume = keys_resume,
+    .suspend = keys_suspend, .resume = keys_resume,
 };
 
 static struct platform_driver mtc_keys_driver = {
-	.probe = keys_probe,
-	.remove = __devexit_p(keys_remove),
-	.driver = {
-		.name = "mtc-keys",
-		.pm = &keys_pm_ops,
+    .probe = keys_probe,
+    .remove = __devexit_p(keys_remove),
+    .driver =
+	{
+	    .name = "mtc-keys", .pm = &keys_pm_ops,
 	},
 };
 
