@@ -15,4 +15,9 @@ enum mtc_gpio {
 	gpio_PARROT_BOOT = 199,
 };
 
+enum MTC_CMD {
+	MTC_CMD_SHUTDOWN = 0x0755,	// send when ARM reboot
+	MTC_CMD_REBOOT = 0x0EFE,	// send when ARM shutdown
+};
+
 #endif // _MTC_SHARED_H
