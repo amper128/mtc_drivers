@@ -16,8 +16,19 @@ enum mtc_gpio {
 };
 
 enum MTC_CMD {
+	MTC_CMD_DVD_DOOR_OPEN = 0x0101,
+	MTC_CMD_DVD_DOOR_CLOSE = 0x0102,
+	MTC_CMD_DVD_EJECT = 0x0105,
+
+	MTC_CMD_BOOT_ANDROID = 0x204,
+	MTC_CMD_BOOT_RECOVERY = 0x208,
+
 	MTC_CMD_SHUTDOWN = 0x0755,	// send when ARM reboot
 	MTC_CMD_REBOOT = 0x0EFE,	// send when ARM shutdown
+
+	MTC_CMD_DTV_IR = 0x9523,
+
+	MTC_CMD_CANBUS_RSP = 0xC000,
 };
 
 extern void arm_send(unsigned int cmd);
