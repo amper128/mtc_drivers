@@ -489,10 +489,9 @@ arm_rev()
 }
 
 /* fully decompiled */
-static int
+void
 arm_send(unsigned int cmd)
 {
-	int res;
 	int hi_byte;
 	unsigned char byteval = 0;
 
@@ -503,24 +502,18 @@ arm_send(unsigned int cmd)
 		hi_byte = cmd & 0xFF00;
 
 		if ((hi_byte == 0xF00) || (cmd == 0x201)) {
-			res = arm_rev_8bits(&byteval);
-			if (res) {
+			if (arm_rev_8bits(&byteval)) {
 				arm_rev_ack();
-				res = hi_byte | byteval;
 			}
 		} else {
 			arm_send_ack();
-			res = 1;
 		}
-	} else {
-		res = 0;
 	}
 
 	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
 	mutex_unlock(&mtc_car_struct->car_comm->snd_lock);
-
-	return res;
 }
+EXPORT_SYMBOL_GPL(arm_send);
 
 /* fully decompiled */
 static int

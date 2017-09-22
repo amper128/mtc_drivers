@@ -20,4 +20,6 @@ enum MTC_CMD {
 	MTC_CMD_REBOOT = 0x0EFE,	// send when ARM shutdown
 };
 
+extern void arm_send(unsigned int cmd);
+
 #endif // _MTC_SHARED_H
