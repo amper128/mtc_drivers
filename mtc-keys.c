@@ -208,7 +208,7 @@ keys_probe(struct platform_device *pdev)
 			setup_timer(&keys_dev->keys_input[cur_dev].mcu_timer, adc_mcu_timer,
 				    &keys_dev->keys_input[cur_dev].callback_param);
 			mod_timer(&keys_dev->keys_input[cur_dev].mcu_timer,
-				  msecs_to_jiffies(100u) - 30000);
+				  msecs_to_jiffies(100u) - jiffies_64);
 
 			goto skip_input_setup;
 		}
