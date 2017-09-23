@@ -58,6 +58,63 @@ enum RPT_KEY_MODE {
 	RPT_KEY_MODE_RECOVERY = 3,
 };
 
+/* 512-byte config data */
+/* may contains unknown fields */
+struct mtc_config_data
+{
+	char _gap0[1];
+	char cfg_canbus;
+	char cfg_dtv;
+	char cfg_ipod;
+	char cfg_dvd;
+	char cfg_bt;
+	char cfg_radio;
+	char cfg_radio_area;
+	char cfg_launcher;
+	char cfg_led_type;
+	char cfg_key0;
+	char cfg_language_selection[2];
+	char _gap1[7];
+	char cfg_rds;
+	char _gap[2];
+	char cfg_frontview;
+	char cfg_logo_type;
+	char _gap3[2];
+	char cfg_rudder;
+	char _gap4[1];
+	char cfg_dvr;
+	char cfg_appdisable;
+	char cfg_ill;
+	char cfg_customer[16];
+	char cfg_model[16];
+	char cfg_sn[16];
+	char cfg_password[16];
+	char cfg_logo1[16];
+	char cfg_logo2[16];
+	char _gap5[75];
+	char cfg_wheelstudy_type;
+	char _gap6[1];
+	char canbus_cfg;
+	char _gap7[1];
+	char cfg_atvmode;
+	char _gap8[120];
+	char steer_data[150];
+	char _gap9[2];
+	char cfg_color[2];
+	char cfg_powerdelay;
+	char cfg_backlight;
+	char ctl_beep;
+	char cfg_led[3];
+	char _gap10[1];
+	char wifi_pwr;
+	char _gap11[1];
+	char cfg_mirror;
+	char cfg_led_multi;
+	char _gap12[2];
+	char cfg_blmode;
+	char _gap13[16];
+};
+
 extern void arm_send(unsigned int cmd);
 
 #endif // _MTC_SHARED_H
