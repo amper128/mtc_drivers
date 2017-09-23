@@ -31,6 +31,13 @@ enum MTC_CMD {
 	MTC_CMD_CANBUS_RSP = 0xC000,
 };
 
+enum RPT_KEY_MODE {
+	RPT_KEY_MODE_NORMAL = 0,
+	RPT_KEY_MODE_ASSIGN = 1,
+	RPT_KEY_MODE_STEERING = 2,
+	RPT_KEY_MODE_RECOVERY = 3,
+};
+
 extern void arm_send(unsigned int cmd);
 
 #endif // _MTC_SHARED_H
