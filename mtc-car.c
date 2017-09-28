@@ -206,6 +206,37 @@ car_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
  * ==================================
  */
 
+/* fully decompiled */
+void
+arm_parrot_boot(int mode)
+{
+	signed int i; // r4@6
+
+	if (mode) {
+		if (mode == 1) {
+			gpio_direction_output(gpio_PARROT_RESET, 0);
+			gpio_direction_output(gpio_PARROT_BOOT, 0);
+			udelay(10);
+			gpio_direction_output(gpio_PARROT_BOOT, 1);
+			udelay(40);
+			gpio_direction_output(gpio_PARROT_RESET, 1);
+
+			for (i = 0; i < 12; i++) {
+				udelay(1000);
+			}
+
+			gpio_direction_output(gpio_PARROT_BOOT, 0);
+		} else if (mode == 2) {
+			gpio_direction_output(gpio_PARROT_RESET, 1);
+		}
+	} else {
+		gpio_direction_output(gpio_PARROT_RESET, 1);
+		gpio_direction_output(gpio_PARROT_BOOT, mode);
+	}
+}
+
+EXPORT_SYMBOL_GPL(arm_parrot_boot)
+
 /* все это очень сильно смахивает на SPI, почему не использовали хардверную
  * шину?? */
 /* fully decompiled */
@@ -248,7 +279,7 @@ arm_send_cmd(unsigned int cmd)
 	}
 
 	bit_pos = 0;
-	mtc_car_struct->arm_rev_status = 0x10000;
+	mtc_car_struct->rev_bytes_count = 0x10000;
 	mtc_car_struct->arm_rev_cmd = cmd;
 
 	udelay(10);
@@ -342,7 +373,7 @@ send_error:
 }
 
 /* fully decompiled */
-int
+static int
 arm_rev_8bits(unsigned char *byteval)
 {
 	unsigned char byte;
@@ -393,7 +424,7 @@ err_rev:
 }
 
 /* fully decompiled */
-int
+static int
 arm_rev_bytes(unsigned char *buf, int count)
 {
 	int pos;
@@ -564,10 +595,10 @@ arm_send(unsigned int cmd)
 	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
 	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 }
-EXPORT_SYMBOL_GPL(arm_send);
+EXPORT_SYMBOL_GPL(arm_send)
 
 /* fully decompiled */
-static int
+int
 arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 {
 	int recv;
@@ -707,6 +738,8 @@ LABEL_19:
 
 	return res;
 }
+
+EXPORT_SYMBOL_GPL(arm_send_multi)
 
 /*
  * ==================================
@@ -3142,7 +3175,7 @@ car_ioctl(int a1, int a2, unsigned int a3)
 							sprintf(p_buf2, off_C08338C8, touch_w,
 								touch_h, touch_info1,
 								touch_info2); // "%d x %d (0x%02x
-									      // 0x%02x)"
+							// 0x%02x)"
 							goto LABEL_30;
 						}
 						if (!strcmp(car_struct->ioctl_buf1,

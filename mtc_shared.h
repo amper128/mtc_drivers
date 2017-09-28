@@ -138,7 +138,9 @@ struct mtc_work
 };
 
 /* mtc_car functions */
+void arm_parrot_boot(int mode);
 extern void arm_send(unsigned int cmd);
+int arm_send_multi(unsigned int cmd, int count, unsigned char *buf);
 extern int car_comm_init(void);
 extern void car_add_work(int a1, int a2, int flush);
 extern void car_add_work_delay(int a1, int a2, unsigned int delay);
