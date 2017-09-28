@@ -624,7 +624,7 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 		if (cmd & 0x8000) {
 			if (count) {
 				for (pos = 0; pos < count; pos++) {
-					mtc_car_struct->arm_rev_status += 0x100;
+					mtc_car_struct->rev_bytes_count += 0x100;
 					byte = buf[pos];
 
 					for (bit_pos = 0; bit_pos < 7; bit_pos++) {
