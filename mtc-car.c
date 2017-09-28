@@ -21,7 +21,7 @@ struct mtc_car_comm {
 	unsigned int mcu_din_gpio;
 	struct workqueue_struct *mcc_rev_wq;
 	struct work_struct work;
-	struct mutex snd_lock;
+	struct mutex car_lock;
 };
 
 struct mtc_car_struct {
@@ -491,7 +491,7 @@ arm_send(unsigned int cmd)
 	unsigned char byteval = 0;
 
 	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
-	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
+	mutex_lock(&mtc_car_struct->car_comm->car_lock);
 
 	if (arm_send_cmd(cmd)) {
 		hi_byte = cmd & 0xFF00;
@@ -506,7 +506,7 @@ arm_send(unsigned int cmd)
 	}
 
 	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
-	mutex_unlock(&mtc_car_struct->car_comm->snd_lock);
+	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 }
 EXPORT_SYMBOL_GPL(arm_send);
 
@@ -524,7 +524,7 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 	int bit_pos;
 
 	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
-	mutex_lock(&mtc_car_struct->car_comm->snd_lock);
+	mutex_lock(&mtc_car_struct->car_comm->car_lock);
 	recv = arm_send_cmd(cmd);
 
 	if (!recv) {
@@ -647,9 +647,26 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 
 LABEL_19:
 	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
-	mutex_unlock(&mtc_car_struct->car_comm->snd_lock);
+	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 
 	return res;
+}
+
+/* fully decompiled */
+static void
+mtc_car_work(struct work_struct *work)
+{
+	(void)work;
+
+	mutex_lock(&mtc_car_struct->car_comm->car_lock);
+	udelay(20);
+
+	while (!getPin(gpio_MCU_DIN) && arm_rev()) {
+		;
+	}
+
+	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 }
 
 /* fully decompiled */
@@ -660,7 +677,7 @@ car_comm_init()
 
 	car_comm = kmalloc(sizeof(struct mtc_car_comm), GFP_ATOMIC | GFP_NOIO);
 
-	mutex_init(&car_comm->snd_lock);
+	mutex_init(&car_comm->car_lock);
 
 	mtc_car_struct->car_comm = car_comm;
 
