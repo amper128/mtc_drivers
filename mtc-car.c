@@ -122,7 +122,7 @@ CheckTimeOut(long timeout)
 /* антидребезг? */
 /* fully decompiled */
 static int
-getPin(int gpio)
+getPin(unsigned int gpio)
 {
 	int value;
 
@@ -137,7 +137,7 @@ getPin(int gpio)
 /* антидребезг? */
 /* fully decompiled */
 static int
-getPin2(int gpio)
+getPin2(unsigned int gpio)
 {
 	int value;
 
@@ -245,7 +245,7 @@ arm_send_cmd(unsigned int cmd)
 {
 	long clk_timeout;
 	long timeout_word;
-	unsigned int bit;
+	int bit;
 	int bit_pos;
 
 	while (1) {
@@ -414,7 +414,7 @@ LABEL_2:
 		}
 	} while (!CheckTimeOut(timeout));
 
-	printk("~ arm_rev_8bits err0 %x %x %d\n", mtc_car_struct->arm_rev_status,
+	printk("~ arm_rev_8bits err0 %x %x %d\n", mtc_car_struct->rev_bytes_count,
 	       mtc_car_struct->arm_rev_cmd, bit_n);
 
 err_rev:
@@ -433,7 +433,7 @@ arm_rev_bytes(unsigned char *buf, int count)
 	if (count) {
 		pos = 0;
 		while (1) {
-			mtc_car_struct->arm_rev_status++;
+			mtc_car_struct->rev_bytes_count++;
 			result = arm_rev_8bits(&buf[pos++]);
 
 			if (!result) {
@@ -521,7 +521,7 @@ arm_rev()
 
 			gpio_direction_output(gpio_MCU_CLK, 1);
 			udelay(1);
-			mtc_car_struct->arm_rev_status = 0x20000;
+			mtc_car_struct->rev_bytes_count = 0x20000;
 			gpio_direction_input(gpio_MCU_CLK);
 			arm_rev_cmd = 0;
 			bit_pos = 0;
