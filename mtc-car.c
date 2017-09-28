@@ -215,8 +215,7 @@ LABEL_10:
 			timeout = GetCurTimer();
 			while (getPin(gpio_MCU_DIN)) {
 				if (CheckTimeOut(timeout)) {
-					printk("~ arm_send_16bits err1 %d\n",
-					       bit_pos);
+					printk("~ arm_send_16bits err1 %d\n", bit_pos);
 					goto send_err0;
 				}
 			}
@@ -312,8 +311,7 @@ LABEL_2:
 			timeout_bit = GetCurTimer();
 			while (!getPin(gpio_MCU_CLK)) {
 				if (CheckTimeOut(timeout_bit)) {
-					printk("~ arm_rev_8bits err1 %d\n",
-					       bit_n);
+					printk("~ arm_rev_8bits err1 %d\n", bit_n);
 					goto err_rev;
 				}
 			}
@@ -329,9 +327,8 @@ LABEL_2:
 		}
 	} while (!CheckTimeOut(timeout));
 
-	printk("~ arm_rev_8bits err0 %x %x %d\n",
-	       mtc_car_struct->arm_rev_status, mtc_car_struct->arm_rev_cmd,
-	       bit_n);
+	printk("~ arm_rev_8bits err0 %x %x %d\n", mtc_car_struct->arm_rev_status,
+	       mtc_car_struct->arm_rev_cmd, bit_n);
 
 err_rev:
 	gpio_set_value(gpio_MCU_DOUT, 1);
@@ -446,8 +443,7 @@ arm_rev()
 			timeout = GetCurTimer();
 			do {
 				if (!getPin(gpio_MCU_CLK)) {
-					arm_rev_cmd =
-					    (unsigned char)(arm_rev_cmd << 1);
+					arm_rev_cmd = (unsigned char)(arm_rev_cmd << 1);
 					if (getPin(gpio_MCU_DIN)) {
 						arm_rev_cmd |= 1u;
 					}
@@ -470,8 +466,7 @@ arm_rev()
 						goto LABEL_8;
 					}
 
-					mtc_car_struct->arm_rev_cmd =
-					    arm_rev_cmd;
+					mtc_car_struct->arm_rev_cmd = arm_rev_cmd;
 
 					return process_mcu_command(arm_rev_cmd);
 				}
@@ -545,24 +540,18 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 					mtc_car_struct->arm_rev_status += 0x100;
 					byte = buf[pos];
 
-					for (bit_pos = 0; bit_pos < 7;
-					     bit_pos++) {
+					for (bit_pos = 0; bit_pos < 7; bit_pos++) {
 						timeout = GetCurTimer();
 						while (!getPin(gpio_MCU_DIN)) {
-							if (CheckTimeOut(
-								timeout)) {
-								printk(
-								    "~ "
-								    "arm_send_"
-								    "8bits "
-								    "err0 %d\n",
-								    bit_pos);
+							if (CheckTimeOut(timeout)) {
+								printk("~ "
+								       "arm_send_"
+								       "8bits "
+								       "err0 %d\n",
+								       bit_pos);
 							LABEL_23:
-								gpio_set_value(
-								    gpio_MCU_DOUT,
-								    1);
-								gpio_direction_input(
-								    gpio_MCU_CLK);
+								gpio_set_value(gpio_MCU_DOUT, 1);
+								gpio_direction_input(gpio_MCU_CLK);
 								res = 0;
 								udelay(10);
 
@@ -576,30 +565,24 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 							bit = 1;
 						}
 
-						byte =
-						    (unsigned char)(byte << 1);
+						byte = (unsigned char)(byte << 1);
 
-						gpio_set_value(gpio_MCU_DOUT,
-							       bit);
-						gpio_direction_output(
-						    gpio_MCU_CLK, 0);
+						gpio_set_value(gpio_MCU_DOUT, bit);
+						gpio_direction_output(gpio_MCU_CLK, 0);
 						timeout = GetCurTimer();
 						while (getPin(gpio_MCU_DIN)) {
-							if (CheckTimeOut(
-								timeout)) {
-								printk(
-								    "~ "
-								    "arm_send_"
-								    "8bits "
-								    "err1 %d\n",
-								    bit_pos);
+							if (CheckTimeOut(timeout)) {
+								printk("~ "
+								       "arm_send_"
+								       "8bits "
+								       "err1 %d\n",
+								       bit_pos);
 								goto LABEL_23;
 							}
 						}
 
 						if (bit_pos != 7) {
-							gpio_direction_output(
-							    gpio_MCU_CLK, 1);
+							gpio_direction_output(gpio_MCU_CLK, 1);
 						}
 					}
 					gpio_set_value(gpio_MCU_DOUT, 1);
@@ -753,8 +736,7 @@ static irqreturn_t
 mcu_isr(unsigned int irq)
 {
 	disable_irq_nosync(irq);
-	queue_work(mtc_car_struct->car_comm->mcc_rev_wq,
-		   &mtc_car_struct->car_comm->work);
+	queue_work(mtc_car_struct->car_comm->mcc_rev_wq, &mtc_car_struct->car_comm->work);
 
 	return IRQ_HANDLED;
 }
@@ -762,10 +744,7 @@ mcu_isr(unsigned int irq)
 /* recovered structures */
 
 static struct file_operations mtc_car_fops = {
-    .read = car_read,
-    .write = car_write,
-    .unlocked_ioctl = car_ioctl,
-    .open = car_open,
+    .read = car_read, .write = car_write, .unlocked_ioctl = car_ioctl, .open = car_open,
 };
 
 static struct miscdevice mtc_car_miscdev = {
