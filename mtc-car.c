@@ -24,14 +24,70 @@ struct mtc_car_comm {
 	struct mutex car_lock;
 };
 
+struct mtc_car_status {
+	char _gap0[2];
+	char rpt_power;
+	char _gap1[1];
+	char rpt_boot_android;
+	char _gap2[2];
+	char touch_type;
+	char _gap3[12];
+	char battery;
+	char _gap4[11];
+	char wipe_flag;
+	char backlight_status;
+	char _gap5[6];
+	char sta_view;
+	char _gap6[1];
+	char key_mode;
+	char _gap7[1];
+	char backview_vol;
+	char sta_video_signal;
+	char av_channel_flag1;
+	char _gap8[25];
+	char _gap9[22];
+	char is1024screen;
+	char _gap10[5];
+	char uv_cal;
+	char _gap11[32];
+	char rpt_boot_appinit;
+	char cfg_maxvolume;
+	char _gap12[1];
+	int touch_width;
+	int touch_height;
+	char touch_info1;
+	char touch_info2;
+	char mtc_customer;
+	char wipe_check;
+	char _gap13[4];
+	char av_gps_switch;
+	char av_gps_monitor;
+	char av_gps_gain;
+	char _gap14[5];
+};
+
 struct mtc_car_struct {
 	struct mtc_car_drv *car_dev;
-	struct mtc_keys_drv *keys_dev;
-	char _gap0[156];
+	struct mtc_car_status car_status;
 	struct mtc_car_comm *car_comm;
-	int arm_rev_status;
+	int rev_bytes_count;
 	unsigned int arm_rev_cmd;
-	char _gap1[28];
+	char _gap0[16];
+	struct mtc_config_data config_data;
+	char _gap1[16];
+	struct workqueue_struct *car_wq;
+	struct mutex car_io_lock;
+	char _gap2[4];
+	struct mutex car_cmd_lock;
+	char _gap3[12];
+	struct delayed_work wipecheckclear_work;
+	char mcu_version[16];
+	char mcu_date[16];
+	char mcu_time[16];
+	char _gap4[4];
+	unsigned char ioctl_buf1[3072];
+	unsigned char buffer2[3072];
+	char _gap5[4];
 };
 
 static struct mtc_car_struct *mtc_car_struct;
@@ -652,6 +708,52 @@ LABEL_19:
 	return res;
 }
 
+/*
+ * ==================================
+ *	     work functions
+ * ==================================
+ */
+
+/* fully decompiled */
+void
+car_add_work(int a1, int a2, int flush)
+{
+	struct mtc_work *work; // r4@2
+
+	work = kmalloc(sizeof(struct mtc_work), __GFP_IO);
+	// TODO: alloc check
+
+	INIT_DELAYED_WORK(work->dwork, &car_work);
+
+	work->cmd1 = a1;
+	work->cmd2 = a2;
+	queue_delayed_work(mtc_car_struct->car_wq, &work->dwork, msecs_to_jiffies(0));
+
+	if (flush) {
+		flush_workqueue(mtc_car_struct->car_wq);
+	}
+}
+
+EXPORT_SYMBOL_GPL(car_add_work)
+
+/* fully decompiled */
+void
+car_add_work_delay(int a1, int a2, unsigned int delay)
+{
+	struct mtc_work *work; // r4@2
+
+	work = kmalloc(sizeof(struct mtc_work), __GFP_IO);
+	// TODO: alloc check
+
+	INIT_DELAYED_WORK(work->dwork, &car_work);
+
+	work->cmd1 = a1;
+	work->cmd2 = a2;
+	queue_delayed_work(mtc_car_struct->car_wq, &work->dwork, msecs_to_jiffies(delay));
+}
+
+EXPORT_SYMBOL_GPL(car_add_work_delay)
+
 /* fully decompiled */
 static void
 mtc_car_work(struct work_struct *work)
@@ -669,9 +771,50 @@ mtc_car_work(struct work_struct *work)
 	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 }
 
+static void
+car_avm(void)
+{
+	unsigned char buf[7];
+
+	if (mtc_car_struct->config_data.cfg_canbus == 0xA) {
+		key_beep();
+
+		buf[0] = 0x06;	// length?
+		buf[1] = 0x2E;
+		buf[2] = 0xC6u;
+		buf[3] = 0x02;
+		buf[4] = 0x02;
+		buf[5] = 0x01;
+		buf[6] = 0x34;
+
+		if (mtc_car_struct->car_status._gap5[0]) {	// ?
+			printk("mBackView\n");
+			arm_send_multi(0xC000u, 7, buf);
+		} else {
+			arm_send_multi(0xC000u, 7, buf);
+		}
+	} else if (mtc_car_struct->config_data.cfg_canbus == 0x25) {
+		key_beep();
+
+		buf[0] = 0x05;	// length?
+		buf[1] = 0x2E;
+		buf[2] = 0xC7;
+		buf[3] = 0x01;
+		buf[4] = 0x01;
+		buf[5] = 0x36;
+
+		if (mtc_car_struct->car_status._gap5[0]) {	// ?
+			printk("mBackView\n");
+			arm_send_multi(0xC000u, 6, buf);
+		} else {
+			arm_send_multi(0xC000u, 6, buf);
+		}
+	}
+}
+
 /* fully decompiled */
 int
-car_comm_init()
+car_comm_init(void)
 {
 	struct mtc_car_comm *car_comm;
 
@@ -707,6 +850,8 @@ car_comm_init()
 
 	return 0;
 }
+
+EXPORT_SYMBOL_GPL(car_comm_init)
 
 /* fully decompiled */
 static int
