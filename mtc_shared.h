@@ -34,7 +34,7 @@ enum MTC_CMD {
 	MTC_CMD_MCUVER = 0x1530,
 	MTC_CMD_MCUDATE = 0x1531,
 	MTC_CMD_MCUTIME = 0x1532,
-	MTC_CMD_MCUCONFIG = 0x15FF,
+	MTC_CMD_GET_MCUCONFIG = 0x15FF,
 
 	MTC_CMD_FM_STEREO_ON = 0x9201,
 	MTC_CMD_FM_STEREO_OFF = 0x9202,
@@ -72,7 +72,7 @@ enum RPT_KEY_MODE {
 /* may contains unknown fields */
 struct mtc_config_data
 {
-	char _gap0[1];
+	char checksum; /*  */
 	char cfg_canbus;
 	char cfg_dtv;
 	char cfg_ipod;
