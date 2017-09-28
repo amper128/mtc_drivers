@@ -781,7 +781,12 @@ static struct platform_driver mtc_car_driver = {
 	},
 };
 
-module_platform_driver(mtc_car_driver);
+int __init
+car_init()
+{
+	platform_driver_register(&mtc_car_driver);
+	return 0;
+}
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC CAR driver");
