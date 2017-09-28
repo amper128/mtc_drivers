@@ -1,4 +1,5 @@
 #include <linux/gpio.h>
+#include <linux/workqueue.h>
 
 #ifndef _MTC_SHARED_H
 #define _MTC_SHARED_H
@@ -124,6 +125,18 @@ struct mtc_config_data
 	char cfg_blmode;
 	char _gap13[16];
 };
+
+/* used in all workqueue functions */
+struct mtc_work
+{
+	  int cmd1;
+	  int cmd2;
+	  int cmd3;
+	  int val1;
+	  int val2;
+	  struct delayed_work dwork;
+};
+
 
 extern void arm_send(unsigned int cmd);
 
