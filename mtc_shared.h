@@ -137,7 +137,10 @@ struct mtc_work
 	  struct delayed_work dwork;
 };
 
-
+/* mtc_car functions */
 extern void arm_send(unsigned int cmd);
+extern int car_comm_init(void);
+extern void car_add_work(int a1, int a2, int flush);
+extern void car_add_work_delay(int a1, int a2, unsigned int delay);
 
 #endif // _MTC_SHARED_H
