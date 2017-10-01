@@ -681,407 +681,374 @@ EXPORT_SYMBOL_GPL(arm_send_multi)
 static void
 car_work(struct work_struct *work)
 {
-	struct work_struct *v1;		   // r5@1
-	mtc_work *car_work_data;	   // r6@1
-	int v4;				   // r0@1
-	int v5;				   // r1@1
-	int v6;				   // r2@1
-	int cmd1;			   // r7@3
-	int v8;				   // r3@35
-	int v9;				   // r3@44
-	struct mtc_car_struct *v10;	// r4@44
-	int v11;			   // r3@45
-	int v12;			   // r3@49
-	unsigned __int8 v13;		   // r3@50
-	int v14;			   // r3@55
-	int v15;			   // r3@62
-	signed int v16;			   // r0@63
-	struct mtc_car_struct *car_struct; // r12@69 MAPDST
-	int v18;			   // r5@70
-	int v20;			   // r3@82
-	int v21;			   // r5@85
-	int v22;			   // r3@89
-	int v23;			   // r3@90
-	__int32 v24;			   // r2@93
-	int v25;			   // r12@93
-	__int32 v26;			   // r0@93
-	int v27;			   // r0@94
-	int v28;			   // r1@97
-	int v29;			   // r0@98
-	int v30;			   // r7@121
-	int v31;			   // r5@124
-	int v32;			   // r5@128
-	char v33;			   // [sp+7h] [bp-21h]@25
-	struct timeval tv;		   // [sp+8h] [bp-20h]@89
+	struct mtc_work *car_work_data;
+	unsigned int t = 40;
 
-	v1 = work;
-	car_struct = p_mtc_car_struct_0;
-	car_work_data = CONTAINING_RECORD(work, mtc_work, dwork);
-	mutex_lock(&p_mtc_car_struct_0->car_cmd_lock);
-	while (!car_struct->car_status._gap0[0]) {
+	car_work_data = container_of(work, mtc_work, dwork);
+
+	mutex_lock(&mtc_car_struct.car_cmd_lock);
+
+	while (!car_status->_gap0[0]) {
 		msleep(10u);
 	}
-	cmd1 = CONTAINING_RECORD(v1, mtc_work, dwork)->cmd1;
-	if (cmd1 == 42) {
-		printk(log_mtc_on_d, v1[-1].data.counter);
-		car_struct = p_mtc_car_struct_0;
-		if (car_struct->car_status._gap1[0] &&
-		    (vs_send(2, 0xF1, 0, 0), v30 = v1[-1].data.counter,
-		     car_struct->car_status._gap1[0])) // cmd1
-		{
-			car_struct->car_status._gap0[1] = 1;
-			car_struct->car_status._gap9[16] = 1;
+
+	switch (car_work_data->cmd1) {
+
+	case 29:
+		if (++car_status->_gap0[1]) {
+			audio_active(v3, v4, v5);
+			backlight_on();
+			break;
+		}
+
+		backlight_on();
+		break;
+
+	case 30:
+		if (!car_status->_gap0[1]) {
+			break;
+		}
+
+		if (--car_status->_gap0[1]) {
+			break;
+		}
+
+		audio_deactive();
+		if (car_status->_gap5[0]) {
+			break;
+		}
+
+		backlight_off();
+		break;
+
+	case 31:
+		capture_add_work(0x38u, 0, 0, 0);
+		break;
+
+	case 32:
+		capture_add_work(0x39u, 0, 0, 0);
+		break;
+
+	case 33:
+		capture_add_work(0x3Cu, 0, 0, 0);
+		break;
+
+	case 34:
+		capture_add_work(0x3Bu, 0, 0, 0);
+		break;
+
+	case 35:
+		backlight_on();
+		break;
+
+	case 36:
+		backlight_off();
+		break;
+
+	case 37:
+		arm_send(0x202u);
+		car_status->_gap1[0] = 1;
+		if (car_status->_gap0[1]) {
+			vs_send(2, 0xF2u, 0, 0);
+			audio_add_work(0x14u, 0, 0, 0);
+		}
+		if (car_status->wipe_flag & 0x10) {
+			vs_send(2, 0x88u, 0, 0);
+		}
+		if (car_status->_gap9[3]) {
+			vs_send(2, 0x9Fu, 0, 0);
+		}
+		capture_add_work(0x3Au, 2000, 0, 0);
+
+		break;
+
+	case 38:
+		if (car_status->_gap9[3]) {
+			audio_add_work(0x16u, 0, 0, 0);
+		}
+		break;
+
+	case 42:
+		printk("--mtc on %d\n", car_work_data->cmd2);
+		if (car_status->_gap1[0]) {
+			vs_send(2, 0xF1, 0, 0);
+
+			car_status->_gap0[1] = 1;
+			car_status->_gap9[0] = 1;
+
 			audio_add_work(20, 0, 0, 0);
 			capture_add_work(46, 1, 0, 0);
-			if (v30) {
+
+			if (car_work_data->cmd2) {
 				backlight_on();
 			}
 		} else {
-			car_struct->car_status._gap0[1] = 1;
-			car_struct->car_status._gap9[16] = 1;
+			car_status->_gap0[1] = 1;
+			car_status->_gap9[0] = 1;
 			capture_add_work(47, 0, 0, 0);
 			backlight_on();
 		}
-		if (!v1[0xFFFFFFFF].data.counter) // cmd1
-		{
+		if (!car_work_data->cmd2) {
 			capture_add_work(56, 1000, 0, 0);
 		}
-		goto LABEL_33;
-	}
-	if (cmd1 > 0x2A) {
-		if (cmd1 != 69) {
-			if (cmd1 > 0x45) {
-				if (cmd1 == 73) {
-					kernel_power_off();
-				} else if (cmd1 > 0x49) {
-					if (cmd1 == 74) {
-						arm_parrot_boot(LOBYTE(v1[-1].data.counter));
-					} else if (cmd1 == 0xFFFF) {
-						printk(log_TT); // "--TT\n"
-						car_add_work_delay(0xFFFF, 0, 0x7D0u);
-					}
-				} else if (cmd1 == 70) {
-					v15 = v1[-1].data.counter;
-					if (v15 <= 31) {
-						if (v15 == 1) {
-						LABEL_96:
-							send_ir_key(18);
-						} else if (v15 == 2) {
-							send_ir_key(26);
-						}
-					} else {
-						v16 = v15 - 32;
-						v1[-1].data.counter = v15 - 32;
-						if (v15 == 50 || v16 == 26) {
-							send_ir_key(v16);
-						}
-					}
-				} else if (cmd1 == 72 && car_struct->car_status.wipe_check) {
-					arm_send_multi(0xA124u, 0, 0);
-					kernel_restart(cmd);
-				}
-				goto LABEL_33;
-			}
-			if (cmd1 == 45) {
-				vs_send(2, -118, 0, 0);
-				if (car_struct->car_status._gap5[0]) {
-					capture_add_work(59, 0, 0, 1);
-				} else if (p_mtc_car_struct_0->car_status._gap5[3]) {
-					capture_add_work(55, car_struct->car_status._gap5[0],
-							 car_struct->car_status._gap5[0], 1);
-				}
-				car_struct = p_mtc_car_struct_0;
-				if (car_struct->car_status._gap0[1]) {
-					p_mtc_car_struct_0->car_status._gap0[1] = 0;
-					car_struct->car_status.rpt_power = 1;
-					vs_send(2, -16, 0, 0);
-					LOBYTE(v31) = 40;
-					do {
-						msleep(0x28u);
-						v31 = (v31 - 1);
-					} while (car_struct->car_status.rpt_power && v31);
-				}
-				LOBYTE(v18) = 80;
-				printk(log_mtc_off_acc);
-				power_soft_off();
-				do {
-					msleep(0x32u);
-					v18 = (v18 - 1);
-				} while (car_struct->car_status.rpt_power && v18);
-			} else {
-				if (cmd1 > 0x2D) {
-					if (cmd1 != 67) {
-						if (cmd1 == 68) {
-							v33 = v1[0xFFFFFFFF].data.counter;
-							vs_send(2, -93, &v33, 1);
-						}
-						goto LABEL_33;
-					}
-					vs_send(2, 0xA4, 0, 0);
-					v12 = v1[-1].data.counter;
-					if (v12 <= 31) {
-						goto LABEL_33;
-					}
-					v13 = v12 - 32;
-					if (!v13) {
-						arm_send_multi(0x9527u, 0, 0);
-						goto LABEL_33;
-					}
-					if (v13 == 40) {
-						arm_send_multi(0x9528u, 0, 0);
-						goto LABEL_33;
-					}
-					if (v13 != 99) {
-						if (v13 != 94) {
-							send_ir_key(v13);
-							goto LABEL_33;
-						}
-					LABEL_135:
-						car_avm();
-						goto LABEL_33;
-					}
-				LABEL_97:
-					v28 = car_struct->car_status.backlight_status;
-					if (car_struct->car_status.backlight_status) {
-						v28 = 0;
-						v29 = 36;
-					} else {
-						v29 = 35;
-					}
-					car_add_work(v29, v28, v28);
-					goto LABEL_33;
-				}
-				if (cmd1 != 43) {
-					if (cmd1 == 44) {
-						printk(log_mtc_on_acc);
-						vs_send(2, -117, 0, 0);
-					}
-					goto LABEL_33;
-				}
-				printk(log_mtc_off);
-				v20 = car_struct->car_status._gap5[3];
-				car_struct->car_status._gap0[1] = 0;
-				if (v20) {
-					capture_add_work(55, 0, 0, 1);
-				}
-				if (car_struct->car_status._gap1[0]) {
-					p_mtc_car_struct_0->car_status.rpt_power = 1;
-					LOBYTE(v32) = 40;
-					vs_send(2, 0xF0, 0, 0);
-					do {
-						msleep(0x32u);
-						v32 = (v32 - 1);
-					} while (car_struct->car_status.rpt_power && v32);
-				}
-				power_soft_off();
-				LOBYTE(v21) = 80;
-				do {
-					msleep(0x32u);
-					v21 = (v21 - 1);
-				} while (car_struct->car_status.rpt_power && v21);
-			}
-			arm_send(0x20Bu);
-			goto LABEL_33;
+
+		break;
+
+	case 43:
+		printk("--mtc off\n");
+		car_status->_gap0[1] = 0;
+		if (car_status->_gap5[3]) {
+			capture_add_work(0x37u, 0, 0, 1);
 		}
+		if (car_status->_gap1[0]) {
+			car_status->rpt_power = 1;
+			t = 40;
+			vs_send(2, 0xF0u, 0, 0);
+			do {
+				msleep(50u);
+				t--;
+			} while (car_status->rpt_power && t);
+		}
+		power_soft_off();
+		t = 80;
+		do {
+			msleep(50u);
+			t--;
+		} while (car_status->rpt_power && t);
+
+		arm_send(0x20Bu);
+
+		break;
+
+	case 44:
+		printk("--mtc on acc\n");
+		vs_send(2, 0x8Bu, 0, 0);
+
+		break;
+
+	case 45:
+		vs_send(2, 0x8Au, 0, 0);
+		if (car_status->_gap5[0]) {
+			capture_add_work(0x3Bu, 0, 0, 1);
+		} else if (car_status->_gap5[3]) {
+			capture_add_work(0x37u, 0, 0, 1);
+		}
+		if (car_status->_gap0[1]) {
+			car_status->_gap0[1] = 0;
+			car_status->rpt_power = 1;
+
+			vs_send(2, 0xF0u, 0, 0);
+
+			do {
+				msleep(40u);
+				t--;
+			} while (car_status->rpt_power && (t > 0));
+		}
+
+		t = 80;
+		printk("--mtc off acc\n");
+		power_soft_off();
+		do {
+			msleep(50u);
+			t--;
+		} while (car_status->rpt_power && (t > 0));
+
+		break;
+
+	case 67:
+		vs_send(2, 0xA4u, 0, 0);
+		cmd2 = CONTAINING_RECORD(work, mtc_work, dwork)->cmd2;
+		if (cmd2 <= 31) {
+			break;
+		}
+		cmd2_32 = cmd2 - 32;
+		if (!cmd2_32) {
+			arm_send_multi(0x9527u, 0, 0);
+			break;
+		}
+		if (cmd2_32 == 0x28) {
+			arm_send_multi(0x9528u, 0, 0);
+			break;
+		}
+		if (cmd2_32 != 0x63) {
+			if (cmd2_32 != 0x5E) {
+				send_ir_key(cmd2_32);
+				break;
+			}
+		LABEL_135:
+			car_avm();
+			break;
+		}
+
+	LABEL_97:
+		if (car_status->backlight_status) {
+			car_add_work(CAR_WORK_BL_ON, 0, 0);
+		} else {
+			car_add_work(CAR_WORK_BL_OFF, 0, 0);
+		}
+		break;
+
+	case 68: {
+		char cmd_data = (char)car_work_data->cmd2;
+
+		vs_send(2, 0xA3u, &cmd_data, 1);
+		break;
+	}
+
+	case 69:
 		do_gettimeofday(&tv);
-		v22 = v1[-1].data.counter;
-		if (v22 <= 31) {
+		cmd2 = car_work_data->cmd2;
+		if (cmd2 <= 0x1F) {
 		LABEL_93:
-			v24 = tv.tv_usec;
-			v25 = *&car_struct->_gap3[8];
-			v26 = tv.tv_sec - *&car_struct->_gap3[4];
-			*&car_struct->_gap3[4] = tv.tv_sec;
-			*&car_struct->_gap3[8] = v24;
-			if (v24 - v25 + 1000000 * v26 <= 29999) {
-				goto LABEL_33;
+			old_sec = tv.tv_sec - mtc_car_struct.tv.tv_sec;
+			mtc_car_struct.tv = tv;
+			if (tv.tv_usec - mtc_car_struct.tv.tv_usec + 1000000 * old_sec <= 29999) {
+				break;
 			}
-			v27 = v1[-1].data.counter;
-			if (v27 > 31) {
-				send_ir_key(v27 - 32);
-				goto LABEL_33;
+			cmd2 = car_work_data->cmd2;
+			if (cmd2 > 31) {
+				send_ir_key(cmd2 - 32);
+				break;
 			}
-			switch (v27) {
+			switch (cmd2) {
 			case 1:
 				goto LABEL_96;
 			case 2:
 				send_ir_key(26);
-				goto LABEL_33;
+				break;
 			case 3:
 				send_ir_key(58);
-				goto LABEL_33;
+				break;
 			case 4:
 				send_ir_key(57);
-				goto LABEL_33;
+				break;
 			case 5:
 				send_ir_key(68);
-				goto LABEL_33;
+				break;
 			case 6:
 				send_ir_key(3);
-				goto LABEL_33;
+				break;
 			case 7:
 				send_ir_key(1);
-				goto LABEL_33;
+				break;
 			case 8:
 				send_ir_key(69);
-				goto LABEL_33;
+				break;
 			case 9:
 				send_ir_key(5);
-				goto LABEL_33;
+				break;
 			case 10:
 				send_ir_key(13);
-				goto LABEL_33;
+				break;
 			case 11:
 				send_ir_key(8);
-				goto LABEL_33;
+				break;
 			case 12:
 				send_ir_key(10);
-				goto LABEL_33;
+				break;
 			case 13:
 				send_ir_key(9);
-				goto LABEL_33;
+				break;
 			default:
-				goto LABEL_33;
+				break;
 			case 16:
 				send_ir_key(54);
-				goto LABEL_33;
+				break;
 			case 17:
 				send_ir_key(66);
-				goto LABEL_33;
+				break;
 			case 18:
 				send_ir_key(50);
-				goto LABEL_33;
+				break;
 			case 19:
 				send_event_key(28);
-				goto LABEL_33;
+				break;
 			case 20:
 				send_event_key(139);
-				goto LABEL_33;
+				break;
 			case 21:
 				goto LABEL_97;
 			}
 			goto LABEL_97;
 		}
-		v23 = (v22 - 32);
-		if (v23 == 64) {
-			car_struct->car_status._gap9[19] = 1;
+		_cmd2_32 = (cmd2 - 32);
+		if (_cmd2_32 == 0x40) {
+			car_status->_gap9[3] = 1;
 			key_beep();
-			if (car_struct->car_status.rpt_boot_android) {
-				audio_add_work(22, 0, 0, 0);
+			if (car_status->rpt_boot_android) {
+				audio_add_work(0x16u, 0, 0, 0);
 			}
-			if (car_struct->car_status._gap1[0]) {
-				vs_send(2, -97, 0, 0);
+			if (car_status->_gap1[0]) {
+				vs_send(2, 0x9Fu, 0, 0);
 			}
 		} else {
-			if (v23 != 65) {
-				if (v23 == 94) {
+			if (_cmd2_32 != 0x41) {
+				if (_cmd2_32 == 0x5E) {
 					goto LABEL_135;
 				}
 				goto LABEL_93;
 			}
-			car_struct->car_status._gap9[19] = 0;
+			car_status->_gap9[3] = 0;
 			key_beep();
-			if (car_struct->car_status.rpt_boot_android) {
-				if (p_mtc_car_struct_0->car_status._gap9[20] &&
-				    p_mtc_car_struct_0->car_status._gap0[1] == 1) {
-					backlight_off();
+			if (car_status->rpt_boot_android) {
+				if (car_status->_gap9[4]) {
+					if (car_status->_gap0[1] == 1) {
+						backlight_off();
+					}
 				}
-				audio_add_work(23, 0, 0, 0);
+				audio_add_work(0x17u, 0, 0, 0);
 			}
-			if (car_struct->car_status._gap1[0]) {
-				vs_send(2, -96, 0, 0);
+			if (car_status->_gap1[0]) {
+				vs_send(2, 0xA0u, 0, 0);
 			}
 		}
-		goto LABEL_33;
-	}
-	if (cmd1 == 33) {
-		capture_add_work(60, 0, 0, 0);
-		goto LABEL_33;
-	}
-	if (cmd1 <= 0x21) {
-		if (cmd1 != 30) {
-			if (cmd1 > 0x1E) {
-				if (cmd1 == 31) {
-					capture_add_work(56, 0, 0, 0);
-				} else if (cmd1 == 32) {
-					capture_add_work(57, 0, 0, 0);
-				}
-				goto LABEL_33;
+		break;
+
+	case 70:
+		if (car_work_data->cmd2 <= 0x1F) {
+			if (car_work_data->cmd2 == 1) {
+				send_ir_key(0x12);
+			} else if (car_work_data->cmd2 == 2) {
+				send_ir_key(0x1A);
 			}
-			if (cmd1 != 29) {
-				goto LABEL_33;
+		} else {
+			int cmd2 = car_work_data->cmd2 - 32;
+
+			if (cmd2 == 0x32 || cmd2 == 0x1A) {
+				send_ir_key(cmd2);
 			}
-			v8 = (car_struct->car_status._gap0[1] + 1);
-			car_struct->car_status._gap0[1] = v8;
-			if (v8) {
-				audio_active(v4, v5, v6);
-				backlight_on();
-				goto LABEL_33;
-			}
-		LABEL_36:
-			backlight_on();
-			goto LABEL_33;
 		}
-		v9 = car_struct->car_status._gap0[1];
-		v10 = p_mtc_car_struct_0;
-		if (!v9) {
-			goto LABEL_33;
+		break;
+
+	case 72:
+		if (car_status->boot_flags) {
+			arm_send_multi(MTC_CMD_RESET2, 0, 0);
+			kernel_restart("recovery");
 		}
-		v11 = (v9 - 1);
-		p_mtc_car_struct_0->car_status._gap0[1] = v11;
-		if (v11) {
-			goto LABEL_33;
-		}
-		audio_deactive();
-		if (v10->car_status._gap5[0]) {
-			goto LABEL_33;
-		}
-	LABEL_47:
-		backlight_off();
-		goto LABEL_33;
+		break;
+
+	case 73:
+		kernel_power_off();
+		break;
+
+	case 74:
+		arm_parrot_boot(car_work_data->cmd2);
+		break;
+
+	case 0xFFFF:
+		printk("--TT\n");
+		car_add_work_delay(0xFFFF, 0, 2000u);
+		break;
 	}
-	if (cmd1 == 36) {
-		goto LABEL_47;
-	}
-	if (cmd1 > 0x24) {
-		if (cmd1 == 37) {
-			arm_send(0x202u);
-			v14 = car_struct->car_status._gap0[1];
-			car_struct->car_status._gap1[0] = 1;
-			if (v14) {
-				vs_send(2, -14, 0, 0);
-				audio_add_work(20, 0, 0, 0);
-			}
-			if (car_struct->car_status.wipe_flag & 0x10) {
-				vs_send(2, -120, 0, 0);
-			}
-			if (car_struct->car_status._gap9[19]) {
-				vs_send(2, -97, 0, 0);
-			}
-			capture_add_work(58, 2000, 0, 0);
-		} else if (cmd1 == 38 && car_struct->car_status._gap9[19]) {
-			audio_add_work(22, 0, 0, 0);
-		}
-		goto LABEL_33;
-	}
-	if (cmd1 == 34) {
-		capture_add_work(59, 0, 0, 0);
-		goto LABEL_33;
-	}
-	if (cmd1 == 35) {
-		goto LABEL_36;
-	}
-LABEL_33:
+
 	kzfree(car_work_data);
-	mutex_unlock(off_C0830630);
+	mutex_unlock(&mtc_car_struct.car_cmd_lock);
 }
 
 // very dirty code
 static int
-car_ioctl(int a1, int a2, unsigned int a3)
+car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct mtc_car_struct *car_struct;     // r6@1 MAPDST
-	int user_cmd;			       // r7@1
-	unsigned int userbuf;		       // r4@1
 	struct task_struct *v6;		       // r5@5
 	int v7;				       // r3@5
 	unsigned __int8 v8;		       // cf@5
@@ -1362,11 +1329,9 @@ car_ioctl(int a1, int a2, unsigned int a3)
 	unsigned __int8 dtv_ir[4];	     // [sp+10h] [bp-90h]@556
 	char can_buf[100];		       // [sp+14h] [bp-8Ch]@94
 
-	car_struct = p_mtc_car_struct_12;
-	user_cmd = a2;
-	userbuf = a3;
-	mutex_lock(&p_mtc_car_struct_12->car_io_lock);
-	if (user_cmd == 0xFE010000) {
+	mutex_lock(&mtc_car_struct.car_io_lock);
+
+	if (cmd == 0xFE010000) {
 		cur_task = get_current();
 		buf1 = car_struct->ioctl_buf1;
 		v29 = *(cur_task + 2);

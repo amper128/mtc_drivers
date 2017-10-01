@@ -54,7 +54,7 @@ struct mtc_car_status {
 	char touch_info1;
 	char touch_info2;
 	char mtc_customer;
-	char wipe_check;
+	char boot_flags;
 	char _gap13[4];
 	char av_gps_switch;
 	char av_gps_monitor;
