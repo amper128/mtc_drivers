@@ -15,80 +15,7 @@
 #include <linux/workqueue.h>
 #include <stdbool.h>
 
-#include "mtc_shared.h"
-
-struct mtc_car_comm {
-	unsigned int mcu_din_gpio;
-	struct workqueue_struct *mcc_rev_wq;
-	struct work_struct work;
-	struct mutex car_lock;
-};
-
-struct mtc_car_status {
-	char _gap0[2];
-	char rpt_power;
-	char _gap1[1];
-	char rpt_boot_android;
-	char _gap2[2];
-	char touch_type;
-	char _gap3[12];
-	char battery;
-	char _gap4[11];
-	char wipe_flag;
-	char backlight_status;
-	char _gap5[6];
-	char sta_view;
-	char _gap6[1];
-	char key_mode;
-	char _gap7[1];
-	char backview_vol;
-	char sta_video_signal;
-	char av_channel_flag1;
-	char _gap8[25];
-	char _gap9[22];
-	char is1024screen;
-	char _gap10[5];
-	char uv_cal;
-	char _gap11[32];
-	char rpt_boot_appinit;
-	char cfg_maxvolume;
-	char _gap12[1];
-	int touch_width;
-	int touch_height;
-	char touch_info1;
-	char touch_info2;
-	char mtc_customer;
-	char wipe_check;
-	char _gap13[4];
-	char av_gps_switch;
-	char av_gps_monitor;
-	char av_gps_gain;
-	char _gap14[5];
-};
-
-struct mtc_car_struct {
-	struct mtc_car_drv *car_dev;
-	struct mtc_car_status car_status;
-	struct mtc_car_comm *car_comm;
-	int rev_bytes_count;
-	unsigned int arm_rev_cmd;
-	char _gap0[16];
-	struct mtc_config_data config_data;
-	char _gap1[16];
-	struct workqueue_struct *car_wq;
-	struct mutex car_io_lock;
-	char _gap2[4];
-	struct mutex car_cmd_lock;
-	char _gap3[12];
-	struct delayed_work wipecheckclear_work;
-	char mcu_version[16];
-	char mcu_date[16];
-	char mcu_time[16];
-	char _gap4[4];
-	unsigned char ioctl_buf1[3072];
-	unsigned char buffer2[3072];
-	char _gap5[4];
-};
+#include "mtc-car.h"
 
 static struct mtc_car_struct *mtc_car_struct;
 
@@ -3936,252 +3863,222 @@ car_resume(struct device *dev)
 static int
 car_probe(struct platform_device *pdev)
 {
-	const char *screen_width;	      // r0@1
-	char check;			       // zf@1
-	struct miscdevice *_p_car_miscdev;     // r0@5
-	bool mcu_clk_val;		       // r0@5
-	char mtc_bootmode;		       // r0@6
-	char mtc_boot_mode;		       // r0@6
-	void(__cdecl * p_work_func)(void *);   // r3@7
-	struct workqueue_struct *wq;	   // r4@7
-	unsigned __int32 delay_60s;	    // r0@7
-	int ver_part;			       // r5@8
-	int pos;			       // r4@8
-	char v16;			       // r0@8
-	char v17;			       // r0@8
-	int cur_byte;			       // r7@9
-	int check_hmf;			       // r0@21
-	struct mtc_car_struct *mtc_car_struct; // r4@21 MAPDST
-	int check_c_kz;			       // r0@37
-	struct mtc_config_data *config_data;   // r5@61
-	unsigned int cfg_backlight;	    // r3@61
-	const char *s_mtc_config;	      // r0@61
-	int config_byte;		       // r4@61
-	int cfg_canbus;			       // r3@68
-	char canbus_is_7_or_40;		       // zf@68
-	char cfg_maxvolume;		       // r3@75
-	int v32;			       // r0@79
-	char wipe_flag;			       // r3@81
-	char v35;			       // r1@81
-	char v37;			       // lr@85
-	const char *_log_car_probe_end;	// r0@92
+	const char *screen_width; // r0@1
+	bool mcu_clk_val;	 // r0@5
+	char mtc_bootmode;	// r0@6
+	char mtc_boot_mode;       // r0@6
+	int ver_part;		  // r5@8
+	int pos;		  // r4@8
+	char v16;		  // r0@8
+	char v17;		  // r0@8
+	int cur_byte;		  // r7@9
 
-	printk(log_mtc_car);
-	mtc_car_struct = p_mtc_car_struct_21;
-	gpio_request(gpio_FCAM_PWR, gpio_fcam_pwr_nm);
+	struct mtc_car_status *car_status = &mtc_car_struct->car_status;
+	union mtc_config_data *config_data = &mtc_car_struct->config_data;
+
+	struct mutex *car_io_lock = &mtc_car_struct->car_io_lock;
+	struct mutex *car_cmd_lock = &mtc_car_struct->car_cmd_lock;
+
+	printk("--mtc car\n");
+	gpio_request(gpio_FCAM_PWR, "fcam_pwr");
 	gpio_pull_updown(gpio_FCAM_PWR, 0);
 	gpio_direction_output(gpio_FCAM_PWR, 0);
-	_mutex_init(&mtc_car_struct->car_io_lock, nm_car_io_lock, &mtc_car_struct->car_cmd_lock);
-	_mutex_init(&mtc_car_struct->car_cmd_lock, nm_car_cmd_lock, &mtc_car_struct->_gap3[4]);
-	_memzero(&mtc_car_struct->car_status, 160u);
+
+	mutex_init(car_io_lock);
+	mutex_init(car_cmd_lock);
+
+	memzero(&mtc_car_struct->car_status, 160u);
+
 	screen_width = mtc_get_screen_width();
-	check = screen_width == 1024;
+
 	if (screen_width == 1024) {
-		screen_width = log_mtc_resolution_1024x600;
+		screen_width = "--mtc resolution 1024x600\n";
 		mtc_car_struct->car_status.is1024screen = 1;
-	}
-	if (!check) {
-		screen_width = log_mtc_resolution_800x480;
+	} else {
+		screen_width = "--mtc resolution 800x480\n";
 	}
 	printk(screen_width);
-	mtc_car_struct->car_status.key_mode = 0;
+
+	mtc_car_struct->car_status.key_mode = RPT_KEY_MODE_NORMAL;
 	*&mtc_car_struct->car_status._gap4[3] = 0x3FF;
 	*&mtc_car_struct->car_status._gap4[7] = 0x3FF;
 	*&mtc_car_struct->car_status._gap3[4] = 0x3FF;
 	*&mtc_car_struct->car_status._gap3[8] = 0x3FF;
-	_p_car_miscdev = p_mtc_car_miscdev;
+
 	mtc_car_struct->car_status.sta_view = 1;
-	misc_register(_p_car_miscdev);
-	gpio_request(gpio_MCU_CLK, gpio_mcu_clk_nm);
-	mtc_car_struct = p_mtc_car_struct_21;
-	gpio_pull_updown(gpio_MCU_CLK, 0);
+
+	misc_register(&mtc_car_miscdev);
+
+	gpio_request(gpio_MCU_CLK, "mcu_clk");
+	gpio_pull_updown(gpio_MCU_CLK, 0u);
 	gpio_direction_input(gpio_MCU_CLK);
-	mcu_clk_val = _gpio_get_value(gpio_MCU_CLK) == 0;
+	mcu_clk_val = gpio_get_value(gpio_MCU_CLK) == 0;
 	mtc_car_struct->car_status._gap8[2] = mcu_clk_val;
 	if (mcu_clk_val) {
 		return 0;
 	}
-	*&mtc_car_struct->_gap3[8] = 0;
-	*&mtc_car_struct->_gap3[4] = 0;
-	mtc_car_struct->car_wq =
-	    _alloc_workqueue_key(car_wq_nm, WQ_MEM_RECLAIM | WQ_UNBOUND, 1, 0, 0);
+
+	mtc_car_struct->tv.tv_usec = 0;
+	mtc_car_struct->tv.tv_sec = 0;
+
+	mtc_car_struct->car_wq = create_singlethread_workqueue("car_wq");
 	car_comm_init();
 	mtc_bootmode = board_boot_mode();
+
 	arm_send(mtc_bootmode & 0xF | MTC_CMD_BOOTMODE);
 	mtc_boot_mode = board_boot_mode();
-	printk(log_mtc_bootmode_d, mtc_boot_mode & 0xF);
+	printk("--mtc bootmode %d\n", mtc_boot_mode & 0xF);
+
 	if (!(board_boot_mode() & 0xF)) {
-		mtc_car_struct->wipecheckclear_work.work.entry.next =
-		    &mtc_car_struct->wipecheckclear_work.work.entry;
-		mtc_car_struct->wipecheckclear_work.work.entry.prev =
-		    &mtc_car_struct->wipecheckclear_work.work.entry;
-		p_work_func = p_wipechecker_work;
+		INIT_DELAYED_WORK(mtc_car_struct->wipecheckclear_work, &WipeCheckClear_work);
 		mtc_car_struct->car_status.wipe_check = 1;
-		mtc_car_struct->wipecheckclear_work.work.data.counter = 0x500;
-		mtc_car_struct->wipecheckclear_work.work.func = p_work_func;
-		init_timer_key(&mtc_car_struct->wipecheckclear_work.timer, 0, 0);
-		wq = mtc_car_struct->car_wq;
-		delay_60s = msecs_to_jiffies(60000u);
-		queue_delayed_work(wq, &mtc_car_struct->wipecheckclear_work, delay_60s);
+		queue_delayed_work(mtc_car_struct->car_wq, &mtc_car_struct->wipecheckclear_work,
+				   msecs_to_jiffies(60000u));
 	}
-	mtc_car_struct = p_mtc_car_struct_21;
+
 	arm_send(0x201u);
 	ver_part = 0;
-	pos = 0;
-	mtc_car_struct->car_status.wipe_flag = v16;
+
+	mtc_car_struct->car_status.wipe_flag = 0;
 	arm_send(0xF02u);
 	mtc_car_struct->car_status.backview_vol = 11;
-	mtc_car_struct->car_status._gap3[0] = v17;
+	mtc_car_struct->car_status._gap3[0] = 0;
+
 	rk_fb_show_logo();
-	_memzero(&mtc_car_struct->config_data, 512u);
-	printk(log_mtc_config_pre);
-	arm_send_multi(MTC_CMD_MCUVER, 16, mtc_car_struct->mcu_version);
-	do {
-		cur_byte = p_mcu_version[pos];
-		if (!p_mcu_version[pos]) {
+
+	memzero(&mtc_car_struct->config_data, 512u);
+	printk("--mtc config_pre\n");
+
+	arm_send_multi(MTC_CMD_MCUVER, 16, &mtc_car_struct->mcu_version);
+	for (pos = 0; pos < 16; pos++) {
+
+		cur_byte = mtc_car_struct->mcu_version[pos];
+		if (cur_byte == 0) {
 			break;
 		}
+
 		if (cur_byte == '-') {
-			ver_part = (ver_part + 1);
+			ver_part++;
 		} else if (ver_part == 1) {
-			mtc_car_struct->car_status._gap9[strlen(p_mcu_version - 748)] = cur_byte;
+			car_status->mcuver1[strlen(car_status->mcuver1)] = cur_byte;
 		} else if (ver_part == 2) {
-			mtc_car_struct->car_status._gap8[strlen(p_mcu_version - 764) + 9] =
-			    cur_byte;
-		}
-		++pos;
-	} while (pos != 16);
-	if (check_customer(customer_YZ) || check_customer(customer_RM) ||
-	    check_customer(customer_ZT)) {
-		p_mtc_car_struct_21->car_status.mtc_customer = 1;
-	} else {
-		check_hmf = check_customer(customer_HMF);
-		mtc_car_struct = p_mtc_car_struct_21;
-		if (check_hmf) {
-			p_mtc_car_struct_21->car_status.mtc_customer = 2;
-			decorder_power(1);
-			decorder_power(0);
-		} else if (check_customer(customer_KGL)) {
-			mtc_car_struct->car_status.mtc_customer = 3;
-		} else if (check_customer(customer_KLD)) {
-			mtc_car_struct->car_status.mtc_customer = 4;
-		} else if (check_customer(customer_FY)) {
-			mtc_car_struct->car_status.mtc_customer = 5;
-		} else if (check_customer(customer_HZC)) {
-			mtc_car_struct->car_status.mtc_customer = 16;
-		} else if (check_customer(customer_JY)) {
-			mtc_car_struct->car_status.mtc_customer = 6;
-		} else if (check_customer(customer_MX)) {
-			mtc_car_struct->car_status.mtc_customer = 9;
-		} else if (check_customer(customer_AM)) {
-			mtc_car_struct->car_status.mtc_customer = 8;
-		} else {
-			check_c_kz = check_customer(customer_KZ);
-			mtc_car_struct = p_mtc_car_struct_21;
-			if (check_c_kz) {
-				p_mtc_car_struct_21->car_status.mtc_customer = 18;
-			} else if (check_customer(customer_KSP)) {
-				mtc_car_struct->car_status.mtc_customer = 7;
-			} else if (check_customer(customer_HLA)) {
-				mtc_car_struct->car_status.mtc_customer = 10;
-			} else if (check_customer(customer_JWT)) {
-				mtc_car_struct->car_status.mtc_customer = 11;
-			} else if (check_customer(customer_KED)) {
-				mtc_car_struct->car_status.mtc_customer = 12;
-			} else if (check_customer(customer_SH)) {
-				mtc_car_struct->car_status.mtc_customer = 13;
-			} else if (check_customer(customer_HH)) {
-				mtc_car_struct->car_status.mtc_customer = 14;
-			} else if (check_customer(customer_KY)) {
-				mtc_car_struct->car_status.mtc_customer = 15;
-			} else if (check_customer(customer_LM)) {
-				mtc_car_struct->car_status.mtc_customer = 17;
-			} else if (check_customer(customer_YM)) {
-				mtc_car_struct->car_status.mtc_customer = 19;
-			} else if (check_customer(customer_YMZ)) {
-				p_mtc_car_struct_21->car_status.mtc_customer = 20;
-			}
+			car_status->mcuver2[strlen(car_status->mcuver2)] = cur_byte;
 		}
 	}
-	mtc_car_struct = p_mtc_car_struct_21;
-	if (p_mtc_car_struct_21->car_status.mtc_customer != 4) {
+
+	if (check_customer("YZ") || check_customer("RM") || check_customer("ZT")) {
+		car_status->mtc_customer = 1;
+	} else if (check_customer("HMF")) {
+		car_status->mtc_customer = 2;
+		decorder_power(1);
+		decorder_power(0);
+	} else if (check_customer("KGL")) {
+		car_status->mtc_customer = 3;
+	} else if (check_customer("KLD")) {
+		car_status->mtc_customer = 4;
+	} else if (check_customer("FY")) {
+		car_status->mtc_customer = 5;
+	} else if (check_customer("HZC")) {
+		car_status->mtc_customer = 16;
+	} else if (check_customer("JY")) {
+		car_status->mtc_customer = 6;
+	} else if (check_customer("MX")) {
+		car_status->mtc_customer = 9;
+	} else if (check_customer("AM")) {
+		car_status->mtc_customer = 8;
+	} else if (check_customer("KZ")) {
+		car_status->mtc_customer = 18;
+	} else if (check_customer("KSP")) {
+		car_status->mtc_customer = 7;
+	} else if (check_customer("HLA")) {
+		car_status->mtc_customer = 10;
+	} else if (check_customer("JWT")) {
+		car_status->mtc_customer = 11;
+	} else if (check_customer("KED")) {
+		car_status->mtc_customer = 12;
+	} else if (check_customer("SH")) {
+		car_status->mtc_customer = 13;
+	} else if (check_customer("HH")) {
+		car_status->mtc_customer = 14;
+	} else if (check_customer("KY")) {
+		car_status->mtc_customer = 15;
+	} else if (check_customer("LM")) {
+		car_status->mtc_customer = 17;
+	} else if (check_customer("YM")) {
+		car_status->mtc_customer = 19;
+	} else if (check_customer("YMZ")) {
+		car_status->mtc_customer = 20;
+	}
+
+	if (car_status->mtc_customer != 4) {
 		iomux_set(0x1A51u);
 	}
-	config_data = p_config_data_35;
-	arm_send_multi(0x1510u, 1, p_cfg_backlight);
-	cfg_backlight = mtc_car_struct->config_data.cfg_backlight;
-	s_mtc_config = log_mtc_config;
-	config_byte = 0;
-	if (cfg_backlight <= 9) {
-		p_mtc_car_struct_21->config_data.cfg_backlight = 10;
+
+	arm_send_multi(0x1510u, 1, &config_data->d.cfg_backlight);
+
+	if (config_data->d.cfg_backlight <= 9u) {
+		config_data->cfg_backlight = 10;
 	}
-	printk(s_mtc_config);
-	arm_send_multi(MTC_CMD_MCUDATE, 16, p_mcu_date);
-	arm_send_multi(MTC_CMD_MCUTIME, 16, p_mcu_time);
-	arm_send_multi(MTC_CMD_GET_MCUCONFIG, 512, p_config_data_35);
-	printk(log_mtc_mcu_config);
-	do {
-		printk(str_fmt_02x, *(&config_data->checksum + config_byte));
-		check = (config_byte++ & 0xF) == 15;
-		if (check) {
-			printk(str_newline_0);
+
+	printk("--mtc config\n");
+	arm_send_multi(MTC_CMD_MCUDATE, 16, &mtc_car_struct->mcu_date);
+	arm_send_multi(MTC_CMD_MCUTIME, 16, &mtc_car_struct->mcu_time);
+
+	arm_send_multi(MTC_CMD_GET_MCUCONFIG, 512, config_data->u8);
+	printk("--mtc MCU config \n");
+	for (int i = 0; i < 512; i++) {
+		printk("%02x ", config_data->u8[i]);
+
+		if ((i & 0xF) == 15) {
+			printk("\n");
 		}
-	} while (config_byte != 512);
+	}
+
 	stw_range_check();
-	cfg_canbus = p_mtc_car_struct_21->config_data.cfg_canbus;
-	canbus_is_7_or_40 = cfg_canbus == 7;
-	if (cfg_canbus != 7) {
-		canbus_is_7_or_40 = cfg_canbus == 40;
-	}
-	if (canbus_is_7_or_40 || cfg_canbus == 21 || cfg_canbus == 36) {
-		p_mtc_car_struct_21->car_status.cfg_maxvolume = 40;
+
+	if (config_data->d.cfg_canbus == 7 || config_data->d.cfg_canbus == 21 ||
+	    config_data->d.cfg_canbus == 36 || config_data->d.cfg_canbus == 40) {
+		car_status->cfg_maxvolume = 40;
+	} else if (config_data->d.cfg_canbus == 15) {
+		car_status->cfg_maxvolume = 35;
 	} else {
-		if (cfg_canbus == 15) {
-			cfg_maxvolume = 35;
+		car_status->cfg_maxvolume = 30;
+	}
+
+	if (car_status->mtc_customer == 4) {
+		mtc_car_struct->_gap4[0] = 1;
+	}
+
+	if (car_status->wipe_flag & 1) {
+		v16 = 1;
+	}
+	car_status->_gap0[1] = v16;
+	car_status->_gap9[0] = v16;
+
+	if (car_status->wipe_flag & 8) {
+		if (car_status->wipe_flag & 2) {
+			v17 = 5;
 		} else {
-			cfg_maxvolume = 30;
+			v17 = 6;
 		}
-		p_mtc_car_struct_21->car_status.cfg_maxvolume = cfg_maxvolume;
-	}
-	mtc_car_struct = p_mtc_car_struct_21;
-	if (p_mtc_car_struct_21->car_status.mtc_customer == 4) {
-		p_mtc_car_struct_21->_gap4[0] = 1;
-		v32 = *off_C09BC724;
-		if (v32 != 255) {
-			rk29sdk_wifi_power(v32);
-		}
-	}
-	wipe_flag = mtc_car_struct->car_status.wipe_flag;
-	mtc_car_struct = p_mtc_car_struct_21;
-	v35 = wipe_flag & 1;
-	mtc_car_struct = p_mtc_car_struct_21;
-	if (mtc_car_struct->car_status.wipe_flag & 1) {
-		v35 = 1;
-	}
-	p_mtc_car_struct_21->car_status._gap0[1] = v35;
-	mtc_car_struct->car_status._gap9[16] = v35;
-	if (wipe_flag & 8) {
-		if (wipe_flag & 2) {
-			v37 = 5;
-		} else {
-			v37 = 6;
-		}
-		mtc_car_struct->car_status._gap14[1] = v37;
-		mtc_car_struct->car_status._gap8[0] = -1;
-		capture_add_work(56, 1, 0, 1);
-	} else if (mtc_car_struct->car_status._gap0[1]) {
-		if (mtc_car_struct->car_status.mtc_customer == 8) {
+
+		car_status->_gap14[1] = v17;
+		car_status->_gap8[0] = 0xFF;
+		capture_add_work(0x38u, 1, 0, 1);
+	} else if (car_status->_gap0[1]) {
+		if (car_status->mtc_customer == 8) {
 			msleep(1000u);
 		}
 		backlight_on();
 	}
-	mtc_car_struct = p_mtc_car_struct_21;
-	_log_car_probe_end = log_car_probe_end;
-	p_mtc_car_struct_21->car_status._gap0[0] = 1;
-	printk(_log_car_probe_end);
-	if (mtc_car_struct->config_data.cfg_bt == 3) {
+
+	car_status->_gap0[0] = 1;
+
+	printk("car_probe end \n");
+	if (config_data->d.cfg_bt == 3) {
 		car_add_work_delay(74, 2, 20u);
 	}
+
 	return 0;
 }
 
@@ -4227,12 +4124,21 @@ static struct platform_driver mtc_car_driver = {
 	},
 };
 
-int __init
+static int __init
 car_init()
 {
 	platform_driver_register(&mtc_car_driver);
 	return 0;
 }
+
+static void
+car_exit()
+{
+	platform_driver_unregister(&mtc_car_driver);
+}
+
+module_init(car_init);
+module_exit(car_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC CAR driver");
