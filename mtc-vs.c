@@ -1,6 +1,7 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 
 #include "mtc-vs.h"
 
@@ -12,6 +13,8 @@ static struct platform_driver mtc_vs_driver;
 static DEFINE_MUTEX(mtc_vs_mutex);
 
 static struct mtc_vs_portlist vs_portlist;
+
+static bool vs_uart_init = false;
 
 /*
  * ===========================================
@@ -315,7 +318,7 @@ vs_send_raw(int port_num, unsigned char *data, int count)
 
 	vs_port = vs_portlist.vss_dev[port_num];
 
-	if (dword_C168AC7C && car_status._gap1[0] && vs_port->vs_rx) {
+	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
 		mutex_lock(&vs_port->lock);
 
 		printk("vs_send raw ");
@@ -385,7 +388,7 @@ vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count)
 
 	_port_num = port_num;
 	vs_port = vs_portlist.vss_dev[port_num];
-	if (dword_C168AC7C[0] && car_status._gap1[0] && vs_port->vs_rx) {
+	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
 		size = count + 4;
 		mutex_lock(&vs_port->lock);
 		data = _kmalloc(size, __GFP_ZERO | __GFP_FS | __GFP_IO | __GFP_WAIT);
@@ -458,69 +461,69 @@ vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count)
 	}
 }
 
-/* dirty code */
+/* decompiled, but contains unknown structure fields */
 static int
 vs_probe(struct platform_device *pdev)
 {
-	char *port_list;	     // r5@2
-	unsigned int port;	   // r4@2 MAPDST
-	int uartreg_ok;		     // r4@3
-	struct mtc_vs_port *vss;     // r3@6
-	struct uart_port *uart_port; // t1@10
-	int port_added;		     // r3@10
+	unsigned int i;
+	struct mtc_vs_port **vss;
+	struct uart_port *uart_port;
+	int port_added;
 
 	printk("vs_probe\n");
 	mutex_lock(&mtc_vs_mutex);
-	if (*&vs_portlist._gap0[0] || (*&vs_portlist._gap0[0] = 1,
-				       (uartreg_ok = uart_register_driver(&vs_uart_driver)) == 0)) {
-		port_list = vs_portlist._gap0;
-		port = 0;
-		do {
-			if (size) {
-				vss = kmem_cache_alloc_trace(size, 0x80D0, __GFP_COLD | __GFP_WAIT);
-			} else {
-				vss = ZERO_SIZE_PTR;
-			}
-			*(port_list + 1) = vss; // vs_drv->vss_dev[port] = vss;
-			if (!vss) {
-				uartreg_ok = -12;
-				dev_warn(&pdev->dev, "kmalloc for vs structure %d failed!\n", port);
-				mutex_unlock(&mtc_vs_mutex);
-				return uartreg_ok;
-			}
-			vss->dwordD0 = 1;
-			vss->dwordF0 = 1;
-			vss->uart_port.flags = 0x10000040;
-			vss->port_n = port; // ?
-			vss->uart_port.line = port;
-			vss->p_line = port; // ?
-			vss->pdev = pdev;
-			vss->dwordCC = 0;
-			vss->uart_port.uartclk = 1843200;
-			vss->uart_port.fifosize = 16;
-			vss->uart_port.ops = &vs_uart_ops;
-			vss->uart_port.type = 86;
-			vss->uart_port.dev = &pdev->dev;
-			__mutex_init(&vss->lock, "&vss[i]->lock", dword_C168AC7C);
-			uart_port = *(port_list + 1);
-			port_list += 4;
-			port_added = uart_add_one_port(&vs_uart_driver, uart_port);
-			if (port_added < 0) {
-				dev_warn(&pdev->dev,
-					 "uart_add_one_port failed for line %d with error %d\n",
-					 port, port_added);
-			}
-			++port;
+
+	if (!vs_portlist.ports_added) {
+		int res = uart_register_driver(&vs_uart_driver);
+
+		if (res) {
+			printk("<3>Couldn't register vs uart driver\n");
 			mutex_unlock(&mtc_vs_mutex);
-		} while (port != 4);
-		uartreg_ok = 0;
-		dev_set_drvdata(&pdev->dev, vs_portlist.vss_dev);
-		dword_C168AC7C[0] = 1;
-	} else {
-		printk("<3>Couldn't register vs uart driver\n");
-		mutex_unlock(&mtc_vs_mutex);
+
+			return res;
+		}
 	}
-	return uartreg_ok;
+
+	vss = vs_portlist.vss_dev;
+
+	for (i = 0; i < 4; i++) {
+		vss[i] = kmalloc(sizeof(struct mtc_vs_port), __GFP_COLD | __GFP_WAIT);
+
+		if (!vss[i]) {
+			dev_warn(&pdev->dev, "kmalloc for vs structure %d failed!\n", i);
+			mutex_unlock(&mtc_vs_mutex);
+
+			return -ENOMEM;
+		}
+
+		vss[i]->dwordD0 = 1;
+		vss[i]->dwordF0 = 1;
+		vss[i]->uart_port.flags = 0x10000040;
+		vss[i]->port_n = i; // ?
+		vss[i]->uart_port.line = i;
+		vss[i]->p_line = i; // ?
+		vss[i]->pdev = pdev;
+		vss[i]->dwordCC = 0;
+		vss[i]->uart_port.uartclk = 1843200;
+		vss[i]->uart_port.fifosize = 16;
+		vss[i]->uart_port.ops = &vs_uart_ops;
+		vss[i]->uart_port.type = 86;
+		vss[i]->uart_port.dev = &pdev->dev;
+		mutex_init(&vss[i]->lock);
+
+		port_added = uart_add_one_port(&vs_uart_driver, uart_port);
+		if (port_added < 0) {
+			dev_warn(&pdev->dev, "uart_add_one_port failed for line %d with error %d\n",
+				 i, port_added);
+		}
+	}
+
+	mutex_unlock(&mtc_vs_mutex);
+
+	dev_set_drvdata(&pdev->dev, vs_portlist.vss_dev);
+	vs_uart_init = true;
+
+	return 0;
 }
 
 /* fully decompiled */
