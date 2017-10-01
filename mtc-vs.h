@@ -3,12 +3,11 @@
 #ifndef _MTC_VS_H
 #define _MTC_VS_H
 
-struct mtc_vs_port
-{
+struct mtc_vs_port {
 	struct uart_port uart_port;
 	struct platform_device *pdev;
 	int mctrl_type;
-	int tx_empty;
+	unsigned int tx_empty;
 	char gap8[12];
 	int value1;
 	speed_t vs_uart_speed;
@@ -24,6 +23,12 @@ struct mtc_vs_port
 	int dwordF0;
 	int p_line;
 	struct mutex lock;
+};
+
+struct mtc_vs_portlist {
+	char _gap0[4];
+	struct mtc_vs_port *vss_dev[4];
+	char init_ok;
 };
 
 #endif

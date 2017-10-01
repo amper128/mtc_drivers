@@ -1,8 +1,18 @@
 #include <linux/device.h>
 #include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 
 #include "mtc-vs.h"
+
+/* forward declarations */
+static struct uart_ops vs_uart_ops;
+static struct uart_driver vs_uart_driver;
+static struct platform_driver mtc_vs_driver;
+
+static DEFINE_MUTEX(mtc_vs_mutex);
+
+static struct mtc_vs_portlist vs_portlist;
 
 /*
  * ===========================================
@@ -116,17 +126,20 @@ vs_break_ctl(struct uart_port *port, int break_state)
 
 /* fully decompiled */
 static int
-vs_resume(struct device *dev)
+vs_resume(struct platform_device *pdev)
 {
-	dev_get_drvdata(dev);
+	dev_get_drvdata(&pdev->dev);
+
 	return 0;
 }
 
 /* fully decompiled */
 static int
-vs_suspend(struct device *dev)
+vs_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	dev_get_drvdata(dev);
+	(void)state;
+	dev_get_drvdata(&pdev->dev);
+
 	return 0;
 }
 
@@ -277,7 +290,7 @@ vs_start_tx(struct uart_port *port)
 }
 
 /* fully decompiled */
-static int
+static unsigned int
 vs_tx_empty(struct uart_port *port)
 {
 	struct mtc_vs_port *vs_port = (struct mtc_vs_port *)port;
@@ -453,12 +466,12 @@ vs_probe(struct platform_device *pdev)
 	char *port_list;	     // r5@2
 	unsigned int port;	   // r4@2 MAPDST
 	int uartreg_ok;		     // r4@3
-	mtc_vs_port *vss;	    // r3@6
+	struct mtc_vs_port *vss;     // r3@6
 	struct uart_port *uart_port; // t1@10
 	int port_added;		     // r3@10
 
 	printk("vs_probe\n");
-	mutex_lock(mtc_vs_mutex);
+	mutex_lock(&mtc_vs_mutex);
 	if (*&vs_portlist._gap0[0] || (*&vs_portlist._gap0[0] = 1,
 				       (uartreg_ok = uart_register_driver(&vs_uart_driver)) == 0)) {
 		port_list = vs_portlist._gap0;
@@ -473,7 +486,7 @@ vs_probe(struct platform_device *pdev)
 			if (!vss) {
 				uartreg_ok = -12;
 				dev_warn(&pdev->dev, "kmalloc for vs structure %d failed!\n", port);
-				mutex_unlock(mtc_vs_mutex);
+				mutex_unlock(&mtc_vs_mutex);
 				return uartreg_ok;
 			}
 			vss->dwordD0 = 1;
@@ -489,7 +502,7 @@ vs_probe(struct platform_device *pdev)
 			vss->uart_port.ops = &vs_uart_ops;
 			vss->uart_port.type = 86;
 			vss->uart_port.dev = &pdev->dev;
-			_mutex_init(&vss->lock, "&vss[i]->lock", dword_C168AC7C);
+			__mutex_init(&vss->lock, "&vss[i]->lock", dword_C168AC7C);
 			uart_port = *(port_list + 1);
 			port_list += 4;
 			port_added = uart_add_one_port(&vs_uart_driver, uart_port);
@@ -499,18 +512,19 @@ vs_probe(struct platform_device *pdev)
 					 port, port_added);
 			}
 			++port;
-			mutex_unlock(mtc_vs_mutex);
+			mutex_unlock(&mtc_vs_mutex);
 		} while (port != 4);
 		uartreg_ok = 0;
 		dev_set_drvdata(&pdev->dev, vs_portlist.vss_dev);
 		dword_C168AC7C[0] = 1;
 	} else {
 		printk("<3>Couldn't register vs uart driver\n");
-		mutex_unlock(mtc_vs_mutex);
+		mutex_unlock(&mtc_vs_mutex);
 	}
 	return uartreg_ok;
 }
 
+/* fully decompiled */
 static int __devexit
 vs_remove(struct platform_device *pdev)
 {
@@ -518,7 +532,7 @@ vs_remove(struct platform_device *pdev)
 	struct uart_port **port_list;
 
 	port_list = dev_get_drvdata(&pdev->dev);
-	mutex_lock(mtc_vs_mutex);
+	mutex_lock(&mtc_vs_mutex);
 
 	for (port = 0; port < 4; port++) {
 		uart_remove_one_port(&vs_uart_driver, port_list[port]);
@@ -527,11 +541,34 @@ vs_remove(struct platform_device *pdev)
 	}
 
 	uart_unregister_driver(&vs_uart_driver);
-	mutex_unlock(mtc_vs_mutex);
+	mutex_unlock(&mtc_vs_mutex);
 	return 0;
 }
 
 /* recovered structures */
+
+static struct uart_ops vs_uart_ops = {
+    .tx_empty = vs_tx_empty,
+    .set_mctrl = vs_set_mctrl,
+    .get_mctrl = vs_get_mctrl,
+    .stop_tx = vs_stop_tx,
+    .start_tx = vs_start_tx,
+    .stop_rx = vs_stop_rx,
+    .enable_ms = vs_enable_ms,
+    .break_ctl = vs_break_ctl,
+    .startup = vs_startup,
+    .shutdown = vs_shutdown,
+    .set_termios = vs_set_termios,
+    .type = vs_type,
+    .release_port = vs_release_port,
+    .request_port = vs_request_port,
+    .config_port = vs_config_port,
+    .verify_port = vs_verify_port,
+};
+
+static struct uart_driver vs_uart_driver = {
+    .driver_name = "ttyV", .dev_name = "ttyV", .major = 204, .minor = 209, .nr = 4,
+};
 
 static struct platform_driver mtc_vs_driver = {
     .probe = vs_probe,
@@ -544,7 +581,20 @@ static struct platform_driver mtc_vs_driver = {
 	},
 };
 
-module_platform_driver(mtc_vs_driver);
+static int
+vs_init()
+{
+	return platform_driver_register(&mtc_vs_driver);
+}
+
+static void
+vs_exit()
+{
+	platform_driver_unregister(&mtc_vs_driver);
+}
+
+module_init(vs_init);
+module_exit(vs_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC VS driver");
