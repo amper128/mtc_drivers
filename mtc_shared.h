@@ -29,8 +29,8 @@ enum MTC_CMD {
 
 	MTC_CMD_BOOTMODE = 0x500,
 
-	MTC_CMD_SHUTDOWN = 0x0755,	// send when ARM reboot
-	MTC_CMD_REBOOT = 0x0EFE,	// send when ARM shutdown
+	MTC_CMD_SHUTDOWN = 0x0755, // send when ARM reboot
+	MTC_CMD_REBOOT = 0x0EFE,   // send when ARM shutdown
 
 	MTC_CMD_MCUVER = 0x1530,
 	MTC_CMD_MCUDATE = 0x1531,
@@ -52,12 +52,12 @@ enum MTC_CMD {
 
 	MTC_CMD_DTV_IR = 0x9523,
 
-	MTC_CMD_CONFIG_DATA = 0x95FE,	// sending 512 bytes of configuration data
+	MTC_CMD_CONFIG_DATA = 0x95FE, // sending 512 bytes of configuration data
 
 	MTC_CMD_MCU_UPDDTE = 0xA000,
 
 	MTC_CMD_RESET = 0xA123,
-	MTC_CMD_RESET2 = 0xA124,	// send when reboot to recovery
+	MTC_CMD_RESET2 = 0xA124, // send when reboot to recovery
 
 	MTC_CMD_CANBUS_RSP = 0xC000,
 };
@@ -71,70 +71,71 @@ enum RPT_KEY_MODE {
 
 /* 512-byte config data */
 /* may contains unknown fields */
-struct mtc_config_data
-{
-	char checksum; /*  */
-	char cfg_canbus;
-	char cfg_dtv;
-	char cfg_ipod;
-	char cfg_dvd;
-	char cfg_bt;
-	char cfg_radio;
-	char cfg_radio_area;
-	char cfg_launcher;
-	char cfg_led_type;
-	char cfg_key0;
-	char cfg_language_selection[2];
-	char _gap1[7];
-	char cfg_rds;
-	char _gap[2];
-	char cfg_frontview;
-	char cfg_logo_type;
-	char _gap3[2];
-	char cfg_rudder;
-	char _gap4[1];
-	char cfg_dvr;
-	char cfg_appdisable;
-	char cfg_ill;
-	char cfg_customer[16];
-	char cfg_model[16];
-	char cfg_sn[16];
-	char cfg_password[16];
-	char cfg_logo1[16];
-	char cfg_logo2[16];
-	char _gap5[75];
-	char cfg_wheelstudy_type;
-	char _gap6[1];
-	char canbus_cfg;
-	char _gap7[1];
-	char cfg_atvmode;
-	char _gap8[120];
-	char steer_data[150];
-	char _gap9[2];
-	char cfg_color[2];
-	char cfg_powerdelay;
-	char cfg_backlight;
-	char ctl_beep;
-	char cfg_led[3];
-	char _gap10[1];
-	char wifi_pwr;
-	char _gap11[1];
-	char cfg_mirror;
-	char cfg_led_multi;
-	char _gap12[2];
-	char cfg_blmode;
-	char _gap13[16];
+union mtc_config_data {
+	struct {
+		char checksum;
+		char cfg_canbus;
+		char cfg_dtv;
+		char cfg_ipod;
+		char cfg_dvd;
+		char cfg_bt;
+		char cfg_radio;
+		char cfg_radio_area;
+		char cfg_launcher;
+		char cfg_led_type;
+		char cfg_key0;
+		char cfg_language_selection[2];
+		char _gap1[7];
+		char cfg_rds;
+		char _gap[2];
+		char cfg_frontview;
+		char cfg_logo_type;
+		char _gap3[2];
+		char cfg_rudder;
+		char _gap4[1];
+		char cfg_dvr;
+		char cfg_appdisable;
+		char cfg_ill;
+		char cfg_customer[16];
+		char cfg_model[16];
+		char cfg_sn[16];
+		char cfg_password[16];
+		char cfg_logo1[16];
+		char cfg_logo2[16];
+		char _gap5[75];
+		char cfg_wheelstudy_type;
+		char _gap6[1];
+		char canbus_cfg;
+		char _gap7[1];
+		char cfg_atvmode;
+		char _gap8[120];
+		char steer_data[150];
+		char _gap9[2];
+		char cfg_color[2];
+		char cfg_powerdelay;
+		char cfg_backlight;
+		char ctl_beep;
+		char cfg_led[3];
+		char _gap10[1];
+		char wifi_pwr;
+		char _gap11[1];
+		char cfg_mirror;
+		char cfg_led_multi;
+		char _gap12[2];
+		char cfg_blmode;
+		char _gap13[16];
+	} d;
+	u8 u8[512];
 };
 
 /* used in all workqueue functions */
-struct mtc_work
-{
-	  int cmd1;
-	  int cmd2;
-	  int cmd3;
-	  int val1;
-	  int val2;
-	  struct delayed_work dwork;
+struct mtc_work {
+	int cmd1;
+	int cmd2;
+	int cmd3;
+	int val1;
+	int val2;
+	struct delayed_work dwork;
 };
 
 /* mtc_car functions */
