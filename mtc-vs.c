@@ -147,19 +147,20 @@ static void
 vs_set_termios(struct uart_port *port, struct ktermios *termios, struct ktermios *old)
 {
 	struct mtc_vs_port *vs_port = (struct mtc_vs_port *)port;
+	struct tty_struct *tty = port->state->port.tty;
 
 	(void)old;
 
-	if (port->state->port.tty) {
+	if (tty) {
 		speed_t port_speed;
 
-		port_speed = tty_get_baud_rate(port->state->port.tty);
-		tty_encode_baud_rate(port->state->port.tty, port_speed, port_speed);
+		port_speed = tty_get_baud_rate(tty);
+		tty_encode_baud_rate(tty, port_speed, port_speed);
 		vs_port->vs_uart_speed = port_speed;
 
 		termios->c_cflag &= ~CMSPAR;
 		vs_port->uart_port.ignore_status_mask = 0;
-		port->state->port.tty->low_latency = 1;
+		tty->low_latency = 1;
 
 		uart_update_timeout(&vs_port->uart_port, termios->c_cflag, port_speed);
 	}
