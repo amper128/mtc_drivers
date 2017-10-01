@@ -1,4 +1,3 @@
-#include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -143,7 +142,7 @@ vs_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-/* dirty code */
+/* fully decompiled */
 static void
 vs_set_termios(struct uart_port *port, struct ktermios *termios, struct ktermios *old)
 {
@@ -158,11 +157,9 @@ vs_set_termios(struct uart_port *port, struct ktermios *termios, struct ktermios
 		tty_encode_baud_rate(port->state->port.tty, port_speed, port_speed);
 		vs_port->vs_uart_speed = port_speed;
 
-		termios->c_cflag &= 0xBFFFFFFF;
-
+		termios->c_cflag &= ~CMSPAR;
 		vs_port->uart_port.ignore_status_mask = 0;
-
-		/*LOBYTE(port->state->port.tty->link) |= 0x10u;*/ // wut?
+		port->state->port.tty->low_latency = 1;
 
 		uart_update_timeout(&vs_port->uart_port, termios->c_cflag, port_speed);
 	}
@@ -173,6 +170,7 @@ static void
 vs_work(struct work_struct *work)
 {
 	struct mtc_vs_port *vss = container_of(work, mtc_vs_port, vs_work);
+	struct tty_struct *tty = vss->uart_port.state->port.tty;
 	struct task_info *task;
 	// int tx;
 	void *pd;
@@ -200,7 +198,7 @@ vs_work(struct work_struct *work)
 		if (pd == pdev) {
 			goto LABEL_13;
 		}
-		if (vss->uart_port.state->port.tty->link & 3) {
+		if (tty->stopped || tty->hw_stopped) {
 			goto LABEL_4;
 		}
 
@@ -219,7 +217,7 @@ vs_work(struct work_struct *work)
 			return;
 		}
 	} while (!(*task->stack & 0x80000) && vss->uart_port.private_data != vss->pdev &&
-		 !(vss->uart_port.state->port.tty->link & 3)); // what is it???
+		 !(tty->stopped || tty->hw_stopped)); // what is it???
 }
 
 /* fully decompiled */
