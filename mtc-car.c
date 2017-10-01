@@ -17,7 +17,10 @@
 
 #include "mtc-car.h"
 
-static struct mtc_car_struct *mtc_car_struct;
+static struct mtc_car_struct mtc_car_struct;
+
+static struct mtc_car_status *car_status = &mtc_car_struct.car_status;
+static union mtc_config_data *config_data = &mtc_car_struct.config_data;
 
 static int arm_rev(void);
 
@@ -3711,10 +3714,10 @@ car_add_work(int a1, int a2, int flush)
 
 	work->cmd1 = a1;
 	work->cmd2 = a2;
-	queue_delayed_work(mtc_car_struct->car_wq, &work->dwork, msecs_to_jiffies(0));
+	queue_delayed_work(mtc_car_struct.car_wq, &work->dwork, msecs_to_jiffies(0));
 
 	if (flush) {
-		flush_workqueue(mtc_car_struct->car_wq);
+		flush_workqueue(mtc_car_struct.car_wq);
 	}
 }
 
@@ -3733,7 +3736,7 @@ car_add_work_delay(int a1, int a2, unsigned int delay)
 
 	work->cmd1 = a1;
 	work->cmd2 = a2;
-	queue_delayed_work(mtc_car_struct->car_wq, &work->dwork, msecs_to_jiffies(delay));
+	queue_delayed_work(mtc_car_struct.car_wq, &work->dwork, msecs_to_jiffies(delay));
 }
 
 EXPORT_SYMBOL_GPL(car_add_work_delay)
@@ -3744,15 +3747,15 @@ mtc_car_work(struct work_struct *work)
 {
 	(void)work;
 
-	mutex_lock(&mtc_car_struct->car_comm->car_lock);
+	mutex_lock(&mtc_car_struct.car_comm->car_lock);
 	udelay(20);
 
 	while (!getPin(gpio_MCU_DIN) && arm_rev()) {
 		;
 	}
 
-	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
-	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
+	enable_irq(mtc_car_struct.car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct.car_comm->car_lock);
 }
 
 static void
@@ -3760,7 +3763,7 @@ car_avm(void)
 {
 	unsigned char buf[7];
 
-	if (mtc_car_struct->config_data.cfg_canbus == 0xA) {
+	if (config_data->cfg_canbus == 0xA) {
 		key_beep();
 
 		buf[0] = 0x06; // length?
@@ -3777,7 +3780,7 @@ car_avm(void)
 		} else {
 			arm_send_multi(0xC000u, 7, buf);
 		}
-	} else if (mtc_car_struct->config_data.cfg_canbus == 0x25) {
+	} else if (config_data->cfg_canbus == 0x25) {
 		key_beep();
 
 		buf[0] = 0x05; // length?
@@ -3806,7 +3809,7 @@ car_comm_init(void)
 
 	mutex_init(&car_comm->car_lock);
 
-	mtc_car_struct->car_comm = car_comm;
+	mtc_car_struct.car_comm = car_comm;
 
 	gpio_request(gpio_MCU_CLK, "mcu_clk");
 	gpio_pull_updown(gpio_MCU_CLK, 0);
@@ -3863,21 +3866,18 @@ car_resume(struct device *dev)
 static int
 car_probe(struct platform_device *pdev)
 {
-	const char *screen_width; // r0@1
-	bool mcu_clk_val;	 // r0@5
-	char mtc_bootmode;	// r0@6
-	char mtc_boot_mode;       // r0@6
-	int ver_part;		  // r5@8
-	int pos;		  // r4@8
-	char v16;		  // r0@8
-	char v17;		  // r0@8
-	int cur_byte;		  // r7@9
+	bool mcu_clk_val;
+	char mtc_bootmode;
+	char mtc_boot_mode;
+	int ver_part;
+	int pos;
+	char v16;
+	char v17;
+	int cur_byte;
 
-	struct mtc_car_status *car_status = &mtc_car_struct->car_status;
-	union mtc_config_data *config_data = &mtc_car_struct->config_data;
-
-	struct mutex *car_io_lock = &mtc_car_struct->car_io_lock;
-	struct mutex *car_cmd_lock = &mtc_car_struct->car_cmd_lock;
+	// tmp defines
+	struct mutex *car_io_lock = &mtc_car_struct.car_io_lock;
+	struct mutex *car_cmd_lock = &mtc_car_struct.car_cmd_lock;
 
 	printk("--mtc car\n");
 	gpio_request(gpio_FCAM_PWR, "fcam_pwr");
@@ -3887,25 +3887,22 @@ car_probe(struct platform_device *pdev)
 	mutex_init(car_io_lock);
 	mutex_init(car_cmd_lock);
 
-	memzero(&mtc_car_struct->car_status, 160u);
+	memzero(car_status, 160u);
 
-	screen_width = mtc_get_screen_width();
-
-	if (screen_width == 1024) {
-		screen_width = "--mtc resolution 1024x600\n";
-		mtc_car_struct->car_status.is1024screen = 1;
+	if (mtc_get_screen_width() == 1024) {
+		printk("--mtc resolution 1024x600\n");
+		car_status->is1024screen = 1;
 	} else {
-		screen_width = "--mtc resolution 800x480\n";
+		printk("--mtc resolution 800x480\n");
 	}
-	printk(screen_width);
 
-	mtc_car_struct->car_status.key_mode = RPT_KEY_MODE_NORMAL;
-	*&mtc_car_struct->car_status._gap4[3] = 0x3FF;
-	*&mtc_car_struct->car_status._gap4[7] = 0x3FF;
-	*&mtc_car_struct->car_status._gap3[4] = 0x3FF;
-	*&mtc_car_struct->car_status._gap3[8] = 0x3FF;
+	car_status->key_mode = RPT_KEY_MODE_NORMAL;
+	car_status->intval3 = 0x3FF;
+	car_status->intval4 = 0x3FF;
+	car_status->intval1 = 0x3FF;
+	car_status->intval2 = 0x3FF;
 
-	mtc_car_struct->car_status.sta_view = 1;
+	car_status->sta_view = 1;
 
 	misc_register(&mtc_car_miscdev);
 
@@ -3913,15 +3910,15 @@ car_probe(struct platform_device *pdev)
 	gpio_pull_updown(gpio_MCU_CLK, 0u);
 	gpio_direction_input(gpio_MCU_CLK);
 	mcu_clk_val = gpio_get_value(gpio_MCU_CLK) == 0;
-	mtc_car_struct->car_status._gap8[2] = mcu_clk_val;
+	car_status->mcu_clk = mcu_clk_val;
 	if (mcu_clk_val) {
 		return 0;
 	}
 
-	mtc_car_struct->tv.tv_usec = 0;
-	mtc_car_struct->tv.tv_sec = 0;
+	mtc_car_struct.tv.tv_usec = 0;
+	mtc_car_struct.tv.tv_sec = 0;
 
-	mtc_car_struct->car_wq = create_singlethread_workqueue("car_wq");
+	mtc_car_struct.car_wq = create_singlethread_workqueue("car_wq");
 	car_comm_init();
 	mtc_bootmode = board_boot_mode();
 
@@ -3930,29 +3927,29 @@ car_probe(struct platform_device *pdev)
 	printk("--mtc bootmode %d\n", mtc_boot_mode & 0xF);
 
 	if (!(board_boot_mode() & 0xF)) {
-		INIT_DELAYED_WORK(mtc_car_struct->wipecheckclear_work, &WipeCheckClear_work);
-		mtc_car_struct->car_status.wipe_check = 1;
-		queue_delayed_work(mtc_car_struct->car_wq, &mtc_car_struct->wipecheckclear_work,
+		INIT_DELAYED_WORK(mtc_car_struct.wipecheckclear_work, &WipeCheckClear_work);
+		car_status->wipe_check = 1;
+		queue_delayed_work(mtc_car_struct.car_wq, &mtc_car_struct.wipecheckclear_work,
 				   msecs_to_jiffies(60000u));
 	}
 
 	arm_send(0x201u);
 	ver_part = 0;
 
-	mtc_car_struct->car_status.wipe_flag = 0;
+	car_status->wipe_flag = 0;
 	arm_send(0xF02u);
-	mtc_car_struct->car_status.backview_vol = 11;
-	mtc_car_struct->car_status._gap3[0] = 0;
+	car_status->backview_vol = 11;
+	car_status->_gap3[0] = 0;
 
 	rk_fb_show_logo();
 
-	memzero(&mtc_car_struct->config_data, 512u);
+	memzero(config_data, 512u);
 	printk("--mtc config_pre\n");
 
-	arm_send_multi(MTC_CMD_MCUVER, 16, &mtc_car_struct->mcu_version);
+	arm_send_multi(MTC_CMD_MCUVER, 16, mtc_car_struct.mcu_version);
 	for (pos = 0; pos < 16; pos++) {
 
-		cur_byte = mtc_car_struct->mcu_version[pos];
+		cur_byte = mtc_car_struct.mcu_version[pos];
 		if (cur_byte == 0) {
 			break;
 		}
@@ -4016,13 +4013,13 @@ car_probe(struct platform_device *pdev)
 
 	arm_send_multi(0x1510u, 1, &config_data->d.cfg_backlight);
 
-	if (config_data->d.cfg_backlight <= 9u) {
-		config_data->cfg_backlight = 10;
+	if (config_data->d.cfg_backlight <= 9) {
+		config_data->d.cfg_backlight = 10;
 	}
 
 	printk("--mtc config\n");
-	arm_send_multi(MTC_CMD_MCUDATE, 16, &mtc_car_struct->mcu_date);
-	arm_send_multi(MTC_CMD_MCUTIME, 16, &mtc_car_struct->mcu_time);
+	arm_send_multi(MTC_CMD_MCUDATE, 16, mtc_car_struct.mcu_date);
+	arm_send_multi(MTC_CMD_MCUTIME, 16, mtc_car_struct.mcu_time);
 
 	arm_send_multi(MTC_CMD_GET_MCUCONFIG, 512, config_data->u8);
 	printk("--mtc MCU config \n");
@@ -4046,7 +4043,7 @@ car_probe(struct platform_device *pdev)
 	}
 
 	if (car_status->mtc_customer == 4) {
-		mtc_car_struct->_gap4[0] = 1;
+		mtc_car_struct._gap4[0] = 1;
 	}
 
 	if (car_status->wipe_flag & 1) {

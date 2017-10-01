@@ -19,9 +19,13 @@ struct mtc_car_status {
 	char rpt_boot_android;
 	char _gap2[2];
 	char touch_type;
-	char _gap3[12];
+	char _gap3[3];
+	int intval1;
+	int intval2;
 	char battery;
-	char _gap4[11];
+	char _gap4[3];
+	int intval3;
+	int intval4;
 	char wipe_flag;
 	char backlight_status;
 	char _gap5[6];
@@ -32,8 +36,12 @@ struct mtc_car_status {
 	char backview_vol;
 	char sta_video_signal;
 	char av_channel_flag1;
-	char _gap8[25];
-	char _gap9[22];
+	char _gap8[2];
+	char mcu_clk;
+	char _gap81[6];
+	char mcuver2[16];
+	char mcuver1[16];
+	char _gap9[6];
 	char is1024screen;
 	char _gap10[5];
 	char uv_cal;
@@ -65,17 +73,16 @@ struct mtc_car_struct {
 	char _gap1[16];
 	struct workqueue_struct *car_wq;
 	struct mutex car_io_lock;
-	char _gap2[4];
 	struct mutex car_cmd_lock;
-	char _gap3[12];
+	struct timeval tv;
 	struct delayed_work wipecheckclear_work;
 	char mcu_version[16];
 	unsigned char mcu_date[16];
 	unsigned char mcu_time[16];
-	char _gap4[4];
+	char _gap2[4];
 	unsigned char ioctl_buf1[3072];
 	unsigned char buffer2[3072];
-	char _gap5[4];
+	char _gap3[4];
 };
 
 #endif
