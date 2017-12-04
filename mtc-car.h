@@ -85,4 +85,6 @@ struct mtc_car_struct {
 	char _gap3[4];
 };
 
+extern struct mtc_car_struct car_struct;
+
 #endif

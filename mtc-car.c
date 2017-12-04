@@ -345,7 +345,7 @@ LABEL_2:
 	} while (!CheckTimeOut(timeout));
 
 	printk("~ arm_rev_8bits err0 %x %x %d\n", mtc_car_struct->rev_bytes_count,
-	       mtc_car_struct->arm_rev_cmd, bit_n);
+	       mtc_car_struct.arm_rev_cmd, bit_n);
 
 err_rev:
 	gpio_set_value(gpio_MCU_DOUT, 1);

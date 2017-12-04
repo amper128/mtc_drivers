@@ -12,6 +12,8 @@
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 
+#include "mtc-car.h"
+
 static unsigned int mtc_keycodes[] = {
     KEY_NUMERIC_0,
     KEY_BACK,
@@ -39,6 +41,8 @@ static unsigned int mtc_keycodes[] = {
     KEY_CAMERA_UP,
     KEY_CAMERA_DOWN,
 };
+
+static struct early_suspend mtc_keys_early_suspend;
 
 struct mtc_keys_data {
 	struct workqueue_struct *process_wq;
@@ -142,18 +146,14 @@ keys_probe(struct platform_device *pdev)
 
 	printk("--mtc keys_probe\n");
 
-	// unknown operations
-	v3 = keys_dev->keys_input[0]._gap6[6];
-	if (v3 == 12) {
+	if (car_struct.car_status.mtc_customer == 12) {
 		LOBYTE(keys_data->intval1) = 1;
-	} else if (v3 == 8) {
-		v4 = *(off_C09BD358 + 22); // unknown data
-		if (v4 != 3) {
-			if (v4 == 1) {
-				BYTE1(keys_data->intval1) = 1;
-			}
-			keys_data->no_adc_ch1 = 1;
+	} else if (car_struct.car_status.mtc_customer == 8 &&
+		   car_struct.config_data.d.arr[1] != 3) {
+		if (car_struct.config_data.d.arr[1] == 1) {
+			BYTE1(keys_data->intval1) = 1;
 		}
+		keys_data->no_adc_ch1 = 1;
 	}
 
 	keys_data->keys_ws.wheel_wq = create_workqueue("wheel_wq");
@@ -162,7 +162,7 @@ keys_probe(struct platform_device *pdev)
 	INIT_WORK(keys_data->keys_ws.volkey_work, volkey_work);
 	INIT_WORK(keys_data->keys_ws.modemute_work, modemute_work);
 
-	keys_data->keys_dev = kzalloc(sizeof(struct mtc_keys_drv), GFP_KERNEL);
+	keys_data->keys_dev = kzalloc(sizeof(struct mtc_keys_drv), GFP_KERNEL); // 0x748 bytes
 	if (!keys_data->keys_dev) {
 		register_result = -ENOMEM;
 		goto dev_create_failed;
@@ -386,9 +386,9 @@ keys_probe(struct platform_device *pdev)
 	register_result = input_register_device(gpio_keys_input0);
 	if (!register_result) {
 		device_init_wakeup(&pdev->dev, wakeup);
-		register_early_suspend(mtc_keys_early_suspend);
+		register_early_suspend(&mtc_keys_early_suspend);
 		keys_data->p_input_dev = gpio_keys_input0;
-		BYTE1(keys_dev->keys_input0) = 1; // ?
+		car_struct.car_status._gap2[0] = 1;
 
 		return register_result;
 	}
@@ -405,13 +405,14 @@ dev_create_failed:
 	return register_result;
 }
 
+/* decompiled */
 static int __devexit
 keys_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
 	dev_get_drvdata(dev);
-	off_C09BDE20[2] = 0;
+	keys_data->p_input_dev = NULL;
 	device_init_wakeup(dev, 0);
 
 	return 0;
@@ -421,6 +422,13 @@ keys_remove(struct platform_device *pdev)
 
 static struct dev_pm_ops keys_pm_ops = {
     .suspend = keys_suspend, .resume = keys_resume,
+};
+
+static struct early_suspend mtc_keys_early_suspend = {
+	.level = 0x2f,
+	.suspend = keys_early_suspend,
+	.resume = keys_later_resume,
+
 };
 
 static struct platform_driver mtc_keys_driver = {
