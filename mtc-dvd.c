@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 #include "mtc_shared.h"
+#include "mtc-car.h"
 
 struct mtc_dvd_drv {
 	char _gap0[4];
@@ -102,6 +103,7 @@ static int dvd_flag1;
 static struct mtc_dvd_drv *dvd_dev;
 static struct dev_pm_ops dvd_pm_ops;
 
+static void cmd_work(struct work_struct *work);
 static int dvd_poweroff(void);
 
 /*
@@ -622,9 +624,9 @@ dvd_poweroff(void)
 		gpio_direction_input(gpio_DVD_STB);
 		gpio_direction_input(gpio_DVD_ACK);
 
-		arm_send_multi(0x9101, 0, 0);
+		arm_send_multi(MTC_CMD_AUDIO_DVD_OFF, 0, 0);
 		msleep(100u);
-		arm_send(0x104);
+		arm_send(MTC_CMD_DVD_PWR_OFF);
 
 		result = 0;
 	} else {
@@ -634,6 +636,7 @@ dvd_poweroff(void)
 	return result;
 }
 
+/* contained unknown fields */
 static int
 dvd_power(int pwr)
 {
@@ -651,9 +654,9 @@ dvd_power(int pwr)
 			disable_irq_nosync(dvd_dev->dvd_irq);
 		}
 
-		arm_send(0x103);
+		arm_send(MTC_CMD_DVD_PWR_ON);
 
-		dvd_dev->dvd_byteval_19 = 0;
+		dvd_dev->dvd_command_byte2 = 0;
 		dvd_dev->dvd_intval_13 = 0;
 		dvd_dev->dvd_intval_14 = 0;
 		dvd_dev->dvd_intval_15 = 0;
@@ -675,7 +678,7 @@ dvd_power(int pwr)
 		dvd_dev->folder_idx = -1;
 		dvd_dev->dvd_u16val_8 = 0;
 		dvd_dev->media_idx = 0;
-		dvd_dev->dvd_byteval_12 = 0;
+		dvd_dev->do_media_index = 0;
 
 		free_folder(&dvd_dev->folder_list);
 		free_media(&dvd_dev->media_list);
@@ -687,8 +690,8 @@ dvd_power(int pwr)
 
 		dvd_flag1 = 0;
 		dvd_dev->dvd_power_on = 1;
-		dvd_dev->dvd_byteval_18 = 0;
-		*(pp_mtc_keys_drv + 0x32) = 0; // unknown offset
+		dvd_dev->dvd_command_byte2 = 0;
+		car_struct.car_status._gap81[0] = 0;
 		dvd_cmd_bit_count = 24;
 
 		gpio_direction_input(gpio_DVD_DATA);
@@ -696,7 +699,7 @@ dvd_power(int pwr)
 		gpio_direction_input(gpio_DVD_ACK);
 
 		arm_send_multi(0x9102, 0, 0);
-		arm_send_multi(0x9100, 0, 0);
+		arm_send_multi(MTC_CMD_AUDIO_DVD_ON, 0, 0);
 		msleep(150u);
 		arm_send_multi(0x9103, 0, 0);
 		msleep(150u);
