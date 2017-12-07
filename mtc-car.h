@@ -83,6 +83,7 @@ struct mtc_car_struct {
 	unsigned char ioctl_buf1[3072];
 	unsigned char buffer2[3072];
 	char _gap3[4];
+	struct mtc_audio_struct *audio;
 };
 
 extern struct mtc_car_struct car_struct;
