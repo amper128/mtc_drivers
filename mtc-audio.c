@@ -1608,29 +1608,3 @@ audio_init()
 	audio->gap6[2] = 0; // ?
 }
 EXPORT_SYMBOL_GPL(audio_init)
-
-/* recovered structures */
-
-static struct early_suspend audio_early_suspend = {
-    .suspend = audio_s_suspend, .resume = audio_s_resume,
-};
-
-static struct dev_pm_ops audio_pm_ops = {
-    .suspend = audio_suspend, .resume = audio_resume,
-};
-
-static struct platform_driver mtc_audio_driver = {
-    .probe = audio_probe,
-    .remove = __devexit_p(audio_remove),
-    .driver =
-	{
-	    .name = "mtc-audio", .pm = &audio_pm_ops,
-	},
-};
-
-module_platform_driver(mtc_audio_driver);
-
-MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
-MODULE_DESCRIPTION("Decompiled MTC AUDIO driver");
-MODULE_LICENSE("BSD");
-MODULE_ALIAS("platform:mtc-audio");
