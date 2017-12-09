@@ -10,6 +10,7 @@ enum mtc_gpio {
 	gpio_DVD_STB = 168,
 	gpio_MCU_DIN = 169,
 	gpio_MCU_DOUT = 170,
+	gpio_CODEC_PWR = 172,
 	gpio_DVD_ACK = 174,
 	gpio_DVD_DATA = 175,
 	gpio_PARROT_RESET = 198,
@@ -65,6 +66,9 @@ enum MTC_CMD {
 	MTC_CMD_RADIO_UNMUTE = 0x9205,
 	MTC_CMD_RADIO_ON = 0x9206,
 	MTC_CMD_RADIO_OFF = 0x9207,
+
+	MTC_CMD_TV_ON = 0x9400,
+	MTC_CMD_TV_OFF = 0x9401,
 	MTC_CMD_TV_FREQ = 0x9403,
 	MTC_CMD_TV_DEMOD = 0x9404,
 
