@@ -30,7 +30,7 @@ struct mtc_car_status {
 	char backlight_status;
 	char _gap5[6];
 	char sta_view;
-	char _gap6[1];
+	char ch_mode;
 	char key_mode;
 	char _gap7[1];
 	char backview_vol;
@@ -43,7 +43,9 @@ struct mtc_car_status {
 	char mcuver1[16];
 	char _gap9[6];
 	char is1024screen;
-	char _gap10[5];
+	char _gap10[2];
+	char ch_status;
+	char _gap101[2];
 	char uv_cal;
 	char _gap11[32];
 	char rpt_boot_appinit;
