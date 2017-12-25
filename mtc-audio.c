@@ -113,6 +113,7 @@ inPhoneMode()
 {
 	return 1;
 }
+EXPORT_SYMBOL_GPL(inPhoneMode)
 
 /* decompiled */
 void
@@ -120,6 +121,7 @@ Func_set_balance(unsigned char *balance_val)
 {
 	arm_send_multi(MTC_CMD_SET_BALANCE, 4, balance_val);
 }
+EXPORT_SYMBOL_GPL(Func_set_balance)
 
 /* decompiled */
 void
@@ -128,6 +130,7 @@ Func_set_balance_v151(unsigned char *balance)
 	/* for old MCU */
 	arm_send_multi(MTC_CMD_SET_BALANCE, 2, balance);
 }
+EXPORT_SYMBOL_GPL(Func_set_balance_v151)
 
 /* decompiled */
 void
@@ -135,6 +138,7 @@ Func_set_equalizer(unsigned char *eq_val)
 {
 	arm_send_multi(MTC_CMD_SET_EQUALIZER, 3, eq_val);
 }
+EXPORT_SYMBOL_GPL(Func_set_equalizer)
 
 /* decompiled */
 void
@@ -143,6 +147,7 @@ Func_set_equalizer_v151(unsigned char *eq_val)
 	/* for old MCU */
 	arm_send_multi(MTC_CMD_SET_EQUALIZER, 4, eq_val);
 }
+EXPORT_SYMBOL_GPL(Func_set_equalizer_v151)
 
 /* decompiled */
 void
@@ -150,6 +155,7 @@ Func_set_channel(unsigned char *ch_val)
 {
 	arm_send_multi(MTC_CMD_SET_CHANNEL, 2, ch_val);
 }
+EXPORT_SYMBOL_GPL(Func_set_channel)
 
 /* decompiled */
 void
@@ -157,6 +163,7 @@ Func_set_volume(unsigned char *volume)
 {
 	arm_send_multi(MTC_CMD_SET_VOLUME, 2, volume);
 }
+EXPORT_SYMBOL_GPL(Func_set_volume)
 
 /* decompiled */
 int
@@ -164,6 +171,7 @@ getAudioChannel()
 {
 	return car_struct.audio->audio_ch;
 }
+EXPORT_SYMBOL_GPL(getAudioChannel)
 
 /* decompiled */
 bool
@@ -175,6 +183,7 @@ isAudioMute()
 
 	return false;
 }
+EXPORT_SYMBOL_GPL(isAudioMute)
 
 /* decompiled */
 void
@@ -182,18 +191,20 @@ btMicControl()
 {
 	if (car_struct.car_status.ch_mode != 3 || car_struct.config_data.cfg_bt == 6 ||
 	    car_struct.config_data.cfg_bt == 7) {
-		gpio_direction_output(172u, 0);
+		gpio_direction_output(gpio_CODEC_PWR, 0);
 	} else {
-		gpio_direction_output(172u, 1);
+		gpio_direction_output(gpio_CODEC_PWR, 1);
 	}
 }
+EXPORT_SYMBOL_GPL(btMicControl)
 
 /* decompiled */
 void
 SetbtMicControl(int val)
 {
-	gpio_direction_output(172u, val);
+	gpio_direction_output(gpio_CODEC_PWR, val);
 }
+EXPORT_SYMBOL_GPL(SetbtMicControl)
 
 /* decompiled */
 void
@@ -201,6 +212,7 @@ Audio_SoftMute()
 {
 	arm_send_multi(MTC_CMD_SOFT_MUTE, 0, 0);
 }
+EXPORT_SYMBOL_GPL(Audio_SoftMute)
 
 /* dirty code */
 void
@@ -417,6 +429,7 @@ Audio_FadeIn()
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_FadeIn)
 
 /* decompiled */
 void
@@ -437,6 +450,7 @@ Audio_FadeOut()
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_FadeOut)
 
 /* decompiled */
 void
@@ -459,6 +473,7 @@ Audio_Channel(int ch)
 
 	Func_set_channel(channel);
 }
+EXPORT_SYMBOL_GPL(Audio_Channel)
 
 /* decompiled */
 void
@@ -480,6 +495,7 @@ Audio_Mute(signed int mute)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_Mute)
 
 /* dirty code */
 void
@@ -621,6 +637,7 @@ Audio_Eq()
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_Eq)
 
 /* contains unknown fields */
 void
@@ -660,6 +677,7 @@ Audio_AJXChannel(int mode)
 		Audio_SetVolume(0);
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_AJXChannel)
 
 /* contains unknown fields */
 void
@@ -702,6 +720,7 @@ Audio_TAChannel(unsigned int mode)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_TAChannel)
 
 /* contains unknown fields */
 void
@@ -762,6 +781,7 @@ Audio_PhoneChannel(unsigned int mode)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(Audio_PhoneChannel)
 
 /* dirty code */
 void
@@ -1189,6 +1209,7 @@ audio_deactive()
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(audio_deactive)
 
 /* dirty code */
 static void
@@ -1245,6 +1266,7 @@ audio_work(struct work_struct *work)
 		}
 		goto free_work;
 	case 2:
+		// toggle mute
 		if (car_struct.audio->audio_active) {
 			Audio_Mute(container_of(work, mtc_work, dwork)->cmd2);
 		}
@@ -1533,6 +1555,7 @@ audio_add_work(unsigned int cmd1, int cmd2, int cmd3, int val1)
 		queue_work(car_struct.audio->audio_wq, &a_work->dwork.work);
 	}
 }
+EXPORT_SYMBOL_GPL(audio_add_work)
 
 /* decompiled */
 void
@@ -1540,6 +1563,7 @@ audio_add_work_delay(int data, unsigned int delay, int a3)
 {
 	audio_add_dwork(data, delay, a3, &car_struct.car_status);
 }
+EXPORT_SYMBOL_GPL(audio_add_work_delay)
 
 /* contains unknown fields */
 void
@@ -1555,6 +1579,7 @@ audio_add_dwork(int data, unsigned int delay, int a3, struct mtc_car_status *c_s
 				   msecs_to_jiffies(delay));
 	}
 }
+EXPORT_SYMBOL_GPL(audio_add_dwork)
 
 /* contains unknown fields */
 void
