@@ -15,6 +15,9 @@ enum mtc_gpio {
 	gpio_DVD_DATA = 175,
 	gpio_PARROT_RESET = 198,
 	gpio_PARROT_BOOT = 199,
+	gpio_LCD_DAT = 228,
+	gpio_LCD_CLK = 229,
+	gpio_LCD_CS = 236,
 };
 
 enum MTC_CMD {
