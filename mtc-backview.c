@@ -1,11 +1,49 @@
+#include <asm/io.h>
+#include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/gpio.h>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/slab.h>
+#include <mach/io.h>
 
 #include "mtc-car.h"
 
 static struct i2c_driver mtc_backview_i2c_driver;
+
+struct mtc_backview_drv {
+	struct mutex back_cmd_lock;
+	struct mutex vip_lock;
+	struct workqueue_struct *cap_wq;
+	resource_size_t cif0_phys_addr;
+	resource_size_t cif0_phys_size;
+	int cif0_irq;
+	struct clk *pd_cif0;
+	struct clk *aclk_cif0;
+	struct clk *hclk_cif0;
+	struct clk *clk_cif0_in;
+	struct clk *clk_cif0_out;
+	void *cif0_phys;
+	struct resource *res;
+	void *mpan1_phys;
+	void *lcd0_phys;
+	void *cif0_phys1;
+	struct i2c_client *i2c_client;
+	struct delayed_work capture_dwork;
+	struct work_struct mirror_work;
+	char dtv_type;
+	char _gap0[2];
+	char decoder_type;
+	char mirror_image;
+	char _gap1[2];
+	char camera_working;
+	char _gap2[8];
+	char _gap3[8];
+};
+
+static struct mtc_backview_drv mtc_backview_dev;
 
 /*
  * =======================================
@@ -406,7 +444,183 @@ T132B_Init(struct i2c_client *client, int type)
 	return result;
 }
 
+/* decompiled */
 int
+check_tv_signal()
+{
+	int decoder_type;
+	signed int i;
+	int ret;
+	int v3;
+	int result;
+	char dat2;
+	char dat;
+
+	decoder_type = car_struct.car_status.video_decoder_type;
+
+	if (decoder_type) {
+		i = 3;
+
+		while (1) {
+			ret = T132B_i2c_read(mtc_backview_dev.i2c_client, 0x42u, 0x13, &dat);
+			if (ret) {
+				break;
+			}
+
+			v3 = dat & 0x15;
+			result = dat & 0x15;
+
+			if (v3 == 5) {
+				result = 2;
+				if (i == 1) {
+					return result;
+				}
+			} else {
+				if (v3 != 1) {
+					return ret;
+				}
+
+				if (i == 1) {
+					return result;
+				}
+			}
+
+			msleep(10u);
+
+			if (!--i) {
+				return result;
+			}
+		}
+
+		result = 0;
+	} else {
+		ret = T132B_i2c_read(mtc_backview_dev.i2c_client, 0x44u, 0x3A, &dat);
+		result = 0;
+
+		if (ret) {
+			result = decoder_type;
+		} else {
+			ret = T132B_i2c_read(mtc_backview_dev.i2c_client, 0x44u, 0x3C, &dat2);
+
+			if (!ret) {
+				if (dat & 1) {
+					result = ret;
+				} else if (dat2 & 1) {
+					result = 3;
+				} else {
+					result = 2;
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+/* decompiled */
+void
+decorder_power(int pwr)
+{
+	if (pwr) {
+		/* power on */
+		gpio_set_value(gpio_T132_RST, 0);
+		gpio_set_value(gpio_T132_PWR, 1);
+		msleep(20u);
+		gpio_set_value(gpio_T132_RST, 1);
+		msleep(10u);
+	} else if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_HMF) {
+		/* power off for HMF*/
+		T132B_Write(mtc_backview_dev.i2c_client, &ADV7181D_PDN);
+	} else {
+		/* power off */
+		gpio_set_value(gpio_T132_RST, 0);
+		gpio_set_value(gpio_T132_PWR, 0);
+	}
+}
+
+/* decompiled */
+void
+cif_power(int pwr)
+{
+	decorder_power(pwr != 0);
+}
+
+/* decompiled */
+void
+capture_add_work(unsigned int cmd1, int cmd2, unsigned int delay, int flush)
+{
+	struct mtc_work *c_work;
+
+	c_work = kzalloc(sizeof(struct mtc_work), __GFP_IO);
+
+	INIT_DELAYED_WORK(&c_work->dwork, capture_work);
+
+	c_work->cmd1 = cmd1;
+	c_work->cmd2 = cmd2;
+
+	queue_delayed_work(mtc_backview_dev.cap_wq, &c_work->dwork, msecs_to_jiffies(delay));
+	if (flush) {
+		flush_workqueue(mtc_backview_dev.cap_wq);
+	}
+}
+
+static int
+backview_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+	void *cif0_phys;
+
+	mutex_init(&mtc_backview_dev.back_cmd_lock); // &back_cmd_lock
+	mutex_init(&mtc_backview_dev.vip_lock);      // &vip_lock
+
+	mtc_backview_dev.cap_wq = create_singlethread_workqueue("cap_wq");
+
+	mtc_backview_dev.cif0_phys_addr = RK30_CIF0_PHYS;
+	mtc_backview_dev.cif0_phys_size = 0x2000;
+
+	mtc_backview_dev.cif0_irq = 43;
+	mtc_backview_dev.pd_cif0 = clk_get(0, "pd_cif0");
+	mtc_backview_dev.aclk_cif0 = clk_get(0, "aclk_cif0");
+	mtc_backview_dev.hclk_cif0 = clk_get(0, "hclk_cif0");
+	mtc_backview_dev.clk_cif0_in = clk_get(0, "cif0_in");
+	mtc_backview_dev.clk_cif0_out = clk_get(0, "cif0_out");
+
+	/* лень сворачивать макросы, позже доделаем */
+	mtc_backview_dev.res = client->dev.platform_data;
+	__request_region(&iomem_resource, mtc_backview_dev.res->start,
+			 mtc_backview_dev.res->end + 1 - mtc_backview_dev.res->start, "MPAN1", 0);
+	mtc_backview_dev.mpan1_phys =
+	    __arm_ioremap(mtc_backview_dev.res->start,
+			  mtc_backview_dev.res->end + 1 - mtc_backview_dev.res->start, 0);
+
+	__request_region(&iomem_resource, RK30_LCDC0_PHYS, 0x2000u, "MLCDC0", 0);
+	mtc_backview_dev.lcd0_phys = __arm_ioremap(RK30_LCDC0_PHYS, 0x2000u, 0);
+
+	__request_region(&iomem_resource, RK30_CIF0_PHYS, 0x2000u, "MCIF0", 0);
+	cif0_phys = __arm_ioremap(RK30_CIF0_PHYS, 0x2000u, 0);
+
+	mtc_backview_dev.cif0_phys = cif0_phys;
+	mtc_backview_dev.cif0_phys1 = cif0_phys;
+
+	request_threaded_irq(mtc_backview_dev.cif0_irq, cif0_irq, 0, 0, "CIF0",
+			     &mtc_backview_dev.cif0_phys_addr);
+
+	INIT_DELAYED_WORK(&mtc_backview_dev.capture_dwork, capture_check_work);
+	INIT_WORK(&mtc_backview_dev.mirror_work, ipp_mirror_work);
+
+	rk_direct_fb_show(rk_get_fb(1));
+
+	return 0;
+}
+
+static int
+backview_remove(struct i2c_client *client)
+{
+	(void)client;
+
+	return 0;
+}
+
+static int
 backview_init()
 {
 	int result;
@@ -424,9 +638,10 @@ static const struct i2c_device_id backview_id[] = {{"mtc-backview", 0}, {}};
 static struct i2c_driver mtc_backview_i2c_driver = {
     .probe = backview_probe,
     .remove = backview_remove,
-    .driver{
-	.name = "mtc-backview",
-    },
+    .driver =
+	{
+	    .name = "mtc-backview",
+	},
     .id_table = backview_id,
 };
 
