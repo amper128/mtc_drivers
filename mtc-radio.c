@@ -26,16 +26,16 @@ struct mtc_radio_work {
 struct mtc_radio_struct2 {
 	char psn_data[10];
 	char _gap0[2];
-	char _gap8[4];
-	char mem1[1116];
+	char rds_pti[4];              /* was _gap8[4]: RDS PTY/PI/TAC -> packet 0x98 (semantic-only) */
+	char rds_psn_buf[1116];     /* was mem1[1116]: RDS PS buffer [156/157]=PI/PTY?, [162..]=PS-текст (semantic-only) */
 	char mem2[5192];
 };
 
 struct __attribute__((aligned(4))) mtc_radio_struct {
-	char _gap0[4];
+	char sta_valid[4];           /* was _gap0[4]: [0]=флаг STA-валидности (semantic-only) */
 	int power;
 	struct workqueue_struct *radio_wq;
-	char _gap1[4];
+	char customer_rds_bits[4];   /* was _gap1[4]: per-customer RDS-константы (semantic-only) */
 	struct mtc_tef6606_drv *tef_drv;
 	struct mtc_radio_struct2 _s2;
 	char mem1[244];
@@ -50,7 +50,7 @@ struct __attribute__((aligned(4))) mtc_radio_struct {
 	struct delayed_work ta_work;
 	struct delayed_work rdslost_dwork;
 	struct delayed_work dwork_sta_valid;
-	char _gap5[12];
+	char sta_rds_cache[12];      /* was _gap5[12]: [0]=STA flag, [4..7]=кэш RDS 0x98 (semantic-only) */
 	char psn_data[10];
 	char _gap6[2];
 	int radio_freq;
@@ -151,8 +151,8 @@ sta_invalid()
 {
 	cancel_delayed_work(&radio.dwork_sta_valid);
 
-	radio._gap5[0] = 0;
-	radio._gap0[0] = 0;
+	radio.sta_rds_cache[0] = 0;
+	radio.sta_valid[0] = 0;
 
 	schedule_delayed_work(&radio.dwork_sta_valid, msecs_to_jiffies(20u));
 }
@@ -181,15 +181,15 @@ rds_send_sta()
 	char cmd_data[5];
 
 	cmd_data[0] = radio._s2.psn_data[1];
-	cmd_data[2] = radio._s2._gap8[0];
-	cmd_data[3] = radio._s2.mem1[156];
+	cmd_data[2] = radio._s2.rds_pti[0];
+	cmd_data[3] = radio._s2.rds_psn_buf[156];
 	cmd_data[1] = radio._s2.psn_data[0];
-	cmd_data[4] = radio._s2.mem1[157];
+	cmd_data[4] = radio._s2.rds_psn_buf[157];
 
-	if (!memcmp(cmd_data, &radio._gap5[4], 4u)) {
+	if (!memcmp(cmd_data, &radio.sta_rds_cache[4], 4u)) {
 		vs_send(2, 0x98u, cmd_data, 5);
 	} else {
-		memcpy(&radio._gap5[4], cmd_data, 4u);
+		memcpy(&radio.sta_rds_cache[4], cmd_data, 4u);
 	}
 }
 EXPORT_SYMBOL_GPL(rds_send_sta)
@@ -241,13 +241,13 @@ Radio_Set_Frequency_com(signed int freq, int a2)
 	}
 
 	buf[0] = (v5 >> 8) & 0xFF;
-	radio._gap9[9] = 0;
+	radio._gap11[1] = 0; /* was _gap9[9] — OOB: реальный байт +9 = _gap11[1] (naming_report2 OOB-①) */
 
 	if (a2) {
 		count = 2;
 	}
 
-	radio._gap9[10] = 0;
+	radio._gap11[2] = 0; /* was _gap9[10] — OOB: реальный байт +10 = _gap11[2] (naming_report2 OOB-①) */
 
 	if (a2) {
 		v6 = buf;
@@ -290,10 +290,10 @@ rds_send_rt()
 
 	cmd_data[0] = radio._s2.psn_data[1];
 	cmd_data[1] = radio._s2.psn_data[0];
-	len = strlen(&radio._s2.mem1[162]);
-	memcpy(&cmd_data[2], &radio._s2.mem1[162], len + 1);
+	len = strlen(&radio._s2.rds_psn_buf[162]);
+	memcpy(&cmd_data[2], &radio._s2.rds_psn_buf[162], len + 1);
 	// зачем два раза????
-	vs_len = strlen(&radio._s2.mem1[162]);
+	vs_len = strlen(&radio._s2.rds_psn_buf[162]);
 	vs_send(2, 0x9Cu, cmd_data, vs_len + 3);
 }
 
@@ -425,9 +425,9 @@ tef6606_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	signed int result;
 
 	if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_YZ_RM_ZT) {
-		radio._gap1[0] = 0x1F;
+		radio.customer_rds_bits[0] = 0x1F;
 	} else if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_MX) {
-		radio._gap1[1] = 0xF7u;
+		radio.customer_rds_bits[1] = 0xF7u;
 	}
 	pr_info("mtc_radio: v0.01: probe radio_tef6606\n");
 

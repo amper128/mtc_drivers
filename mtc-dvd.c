@@ -40,7 +40,7 @@ struct mtc_dvd_drv {
 	char _gap8[8];
 	struct list_head folder_list;
 	struct list_head media_list;
-	char dvd_byteval_4;
+	char media_state;           /* was dvd_byteval_4: дискриминатор режима/состояния (naming_report2, semantic-only) */
 	char unk_byte;
 	char dvd_byteval_5;
 	char dvd_byteval_6;
@@ -62,16 +62,16 @@ struct mtc_dvd_drv {
 	u16 dvd_u16val_9;
 	u16 surface_flag;
 	u16 dvd_u16val_10;
-	char dvd_byteval_11;
+	char track_flag;            /* was dvd_byteval_11: bit0-флаг готовность/смена трека (naming_report2, semantic-only) */
 	char _gap12[1];
 	struct delayed_work stop_work;
 	char do_media_index;
 	char _gap13[3];
 	struct delayed_work media_work;
 	struct delayed_work media_index_work;
-	u32 dvd_intval_13;
-	int dvd_intval_14;
-	int dvd_intval_15;
+	u32 mcu_cmd_data;           /* was dvd_intval_13: staging MCU-команды (naming_report2, semantic-only) */
+	int mcu_cmd_t9;             /* was dvd_intval_14: кодовое слово 0x9xxxx: (command+1)|0x90000 (naming_report2, semantic-only) */
+	int mcu_cmd_tD;             /* was dvd_intval_15: кодовое слово 0xDxxxx: (command>>8)|0xD0000 (naming_report2, semantic-only) */
 	char _gap14[4];
 	char dvd_byteval_16;
 	char dvd_byteval_17;
@@ -544,10 +544,10 @@ media_index_work(struct work_struct *work)
 					   &dvd_dev->media_index_work,
 					   msecs_to_jiffies(1000u));
 		} else {
-			if (dvd_dev->dvd_byteval_11 & 1) {
-				dvd_dev->dvd_intval_13 = 0;
+			if (dvd_dev->track_flag & 1) {
+				dvd_dev->mcu_cmd_data = 0;
 			} else {
-				u32 dvd_cmd_1 = dvd_dev->dvd_intval_13;
+				u32 dvd_cmd_1 = dvd_dev->mcu_cmd_data;
 
 				if (dvd_cmd_1) {
 					if ((dvd_flag1)&0xFF) {
@@ -567,7 +567,7 @@ media_index_work(struct work_struct *work)
 							 0xC0000);
 					}
 
-					dvd_dev->dvd_intval_13 = 0;
+					dvd_dev->mcu_cmd_data = 0;
 					dvd_dev->dvd_byteval_6 = 1;
 				}
 			}
@@ -602,7 +602,9 @@ stop_work(struct work_struct *work)
 		queue_delayed_work(dvd_dev->dvd_wq, &dvd_dev->stop_work,
 				   msecs_to_jiffies(2000u));
 	} else {
-		dvd_dev->dvd_byteval_12 = 0; // ?
+		/* binaRE CONFIRMED (decompiled_stop_work else-ветка: *(dvd_base+0x1F0)=0): оффсет 496 = do_media_index
+		 * (layout: byteval_5@286, stop_work@452, intval_13@588); кандидат @66 отклонён */
+		dvd_dev->do_media_index = 0;
 	}
 }
 
@@ -657,20 +659,20 @@ dvd_power(int pwr)
 		arm_send(MTC_CMD_DVD_PWR_ON);
 
 		dvd_dev->dvd_command_byte2 = 0;
-		dvd_dev->dvd_intval_13 = 0;
-		dvd_dev->dvd_intval_14 = 0;
-		dvd_dev->dvd_intval_15 = 0;
+		dvd_dev->mcu_cmd_data = 0;
+		dvd_dev->mcu_cmd_t9 = 0;
+		dvd_dev->mcu_cmd_tD = 0;
 		dvd_dev->dvd_byteval_16 = 0;
 		dvd_dev->dvd_byteval_17 = 0;
 		dvd_dev->dvd_intval_2 = 0;
-		dvd_dev->dvd_byteval_4 = 0;
+		dvd_dev->media_state = 0;
 		dvd_dev->dvd_u16val_3 = 0;
 		dvd_dev->dvd_byteval_5 = 0;
 		dvd_dev->dvd_byteval_6 = 0;
 		dvd_dev->dvd_u16val_9 = 0;
 		dvd_dev->surface_flag = 0;
 		dvd_dev->dvd_u16val_10 = 0;
-		dvd_dev->dvd_byteval_11 = 0;
+		dvd_dev->track_flag = 0;
 		dvd_dev->media_count = 0;
 		dvd_dev->dvd_length = 0;
 		dvd_dev->dvd_position = 0;
@@ -784,11 +786,11 @@ dvd_send_command_direct(u32 command)
 	v8 = v7 ? 1 : 0;
 	if (v7) {
 	LABEL_36:
-		dvd_dev->dvd_intval_13 = 0;
-		dvd_dev->dvd_intval_14 = 0;
-		dvd_dev->dvd_intval_15 = 0;
+		dvd_dev->mcu_cmd_data = 0;
+		dvd_dev->mcu_cmd_t9 = 0;
+		dvd_dev->mcu_cmd_tD = 0;
 		cancel_delayed_work_sync(&dvd_dev->media_index_work);
-		if ((dvd_dev->dvd_byteval_4 - 2) <= 1u &&
+		if ((dvd_dev->media_state - 2) <= 1u &&
 		    *&dvd_dev->dvd_byteval_5) {
 			cancel_delayed_work_sync(&dvd_dev->stop_work);
 			dvd_dev->do_media_index = 1;
@@ -799,8 +801,8 @@ dvd_send_command_direct(u32 command)
 	}
 	v10 = command & 0xFF0000;
 	if ((command & 0xFF0000) == 0x90000) {
-		dvd_dev->dvd_intval_13 = v8;
-		dvd_dev->dvd_intval_14 = (command + 1) | 0x90000;
+		dvd_dev->mcu_cmd_data = v8;
+		dvd_dev->mcu_cmd_t9 = (command + 1) | 0x90000;
 	LABEL_31:
 		cancel_delayed_work_sync(&dvd_dev->media_work);
 		dvd_dev->dvd_byteval_16 = 1;
@@ -809,22 +811,22 @@ dvd_send_command_direct(u32 command)
 		return;
 	}
 	if (v10 == 0xD0000) {
-		dvd_dev->dvd_intval_13 = v8;
-		dvd_dev->dvd_intval_14 = v8;
-		dvd_dev->dvd_intval_15 = (command >> 8) | 0xD0000;
+		dvd_dev->mcu_cmd_data = v8;
+		dvd_dev->mcu_cmd_t9 = v8;
+		dvd_dev->mcu_cmd_tD = (command >> 8) | 0xD0000;
 		goto LABEL_31;
 	}
-	v11 = dvd_dev->dvd_byteval_11 & 1;
-	if (!(dvd_dev->dvd_byteval_11 & 1)) {
+	v11 = dvd_dev->track_flag & 1;
+	if (!(dvd_dev->track_flag & 1)) {
 		cmd = 0x20F0D;
 		if (!v5) {
 			cmd = 0x30F00;
 		}
 		if (command == cmd) {
 			cancel_delayed_work_sync(&dvd_dev->media_index_work);
-			dvd_dev->dvd_intval_13 = v11;
-			dvd_dev->dvd_intval_14 = v11;
-			dvd_dev->dvd_intval_15 = v11;
+			dvd_dev->mcu_cmd_data = v11;
+			dvd_dev->mcu_cmd_t9 = v11;
+			dvd_dev->mcu_cmd_tD = v11;
 			dvd_dev->dvd_byteval_17 = v11;
 			dvd_add_work(1, command);
 		} else {
@@ -835,8 +837,8 @@ dvd_send_command_direct(u32 command)
 			if (media_count <= dvd_dev->media_count) {
 				dvd_dev->media_idx = command;
 				dvd_add_work(6, 0xE800);
-				v16 = dvd_dev->dvd_byteval_4;
-				dvd_dev->dvd_intval_13 = media_count | 0xB0000;
+				v16 = dvd_dev->media_state;
+				dvd_dev->mcu_cmd_data = media_count | 0xB0000;
 
 				if (v16 == 1) {
 					dvd_dev->dvd_length = 0;

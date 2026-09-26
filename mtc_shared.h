@@ -149,12 +149,12 @@ union mtc_config_data {
 		char reserved_21[2];  /* @21..22 was _gap[2]: unused */
 		char cfg_frontview;
 		char cfg_logo_type;
-		char default_ajx_ch;  /* @25 was _gap3[0]: канал после AJX-unmute (код, mtc-audio.c:745). РАСХОЖДЕНИЕ: бинарный
-		 * Audio_AJXChannel читает @28 (reserved_28) — layout-shift, naming_report §6.5; чинить здесь нельзя */
+		char adc_wheel_gate;    /* @25 was _gap3[0]: гейт fallback-обработки колёса — бинар: единственный потребитель
+		 * adc_wheel_callback (A:0x00D9 r2 w0). Имя TENTATIVE. */
 		char reserved_26;	   /* @26 was _gap3[1]: unused */
 		char cfg_rudder;
-		char reserved_28;	   /* @28 was _gap4[1]: бинар — Audio_AJXChannel читает AJX-канал по умолчанию СЮДА (кандидат
-		 * на default_ajx_ch); в ручном коде не используется */
+		char default_ajx_ch;    /* @28 was _gap4[1]: AJX-канал по умолчанию — бинар: Audio_AJXChannel читает СЮДА
+		 * (A:0x00DC r2 w0, decompiled_Audio_AJXChannel.c:17) */
 		char cfg_dvr;
 		char cfg_appdisable;
 		char cfg_ill;

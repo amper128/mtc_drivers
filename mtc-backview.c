@@ -363,8 +363,8 @@ T132B_i2c_write(struct i2c_client *client, unsigned int dev_addr, u8 reg, u8 dat
 static void
 T132B_UV_Set()
 {
-	car_struct.car_status.u_value = car_struct.config_data.reserved_490 + 112; /* OOB-расхождение #6: бинарный T132B_UV_Set читает @493 = uv_off_u */
-	car_struct.car_status.v_value = car_struct.config_data.reserved_490[1] - 124; /* OOB @491; бинарный источник: @494 = uv_off_v (расхождение #6) */
+	car_struct.car_status.u_value = car_struct.config_data.uv_off_u + 112;   /* CONFIRMED (naming_report2 T3): cfg+493 (A:0x02AD) */
+	car_struct.car_status.v_value = car_struct.config_data.uv_off_v - 124;   /* CONFIRMED (naming_report2 T3): cfg+494 (A:0x02AE) */
 
 	T132B_i2c_write(mtc_backview_dev.i2c_client, 0x40u, 12, car_struct.car_status.u_value);
 	T132B_i2c_write(mtc_backview_dev.i2c_client, 0x40u, 10, car_struct.car_status.v_value);
@@ -417,6 +417,12 @@ twdDelay(unsigned int delay)
 {
 	msleep(delay >> 1);
 }
+
+/* TODO (naming_report2 3d): T132B_CVBS_Auto не определена в дереве — тело декомпилировано
+ * (src_all/decompiled_T132B_CVBS_Auto.c, ~55 строк > порога 40 — auto-порт не применён).
+ * PAL/NTSC-автоопределение T132B; флаг CVBS-auto (backview+0x7E = MEMORY[0xC168E462]) 0→1.
+ * extern-прототип до ручного порта. */
+extern int T132B_CVBS_Auto(struct i2c_client *client);
 
 /* decompiled */
 int

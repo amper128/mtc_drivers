@@ -1736,11 +1736,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					}
 					if (!strcmp(token_start, off_C08317EC)) // "hangup"
 					{
-						/* TODO (naming_report): car_status._gap6[0] — поля НЕТ в struct mtc_car_status (порог _gap5→_gap7),
-						 * позиция неразрешена (offset-tentative «неверифицируемо»; байт вероятно в зоне reserved_22[32] @101..132).
-						 * Pre-existing-расхождение (так было и до реноме): добавление байта изменило бы layout (запрещено) —
-						 * имя обращения сохранено как есть. */
-						if (car_struct->car_status._gap6[0] &&
+						/* binaRE CONFIRMED (naming_report2 T1): 0xC168ACAD = car_status+41 = ch_mode (mtc-car.h:61) */
+						if (car_struct->car_status.ch_mode &&
 						    car_struct->car_status.power_refcnt == 1) {
 							backlight_off();
 						}

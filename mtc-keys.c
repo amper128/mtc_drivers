@@ -44,6 +44,15 @@ static unsigned int mtc_keycodes[] = {
 
 static struct early_suspend mtc_keys_early_suspend;
 
+/* reconstructed from code usage; layout TBD (порядок = первое использование:
+ * wheel_wq :159, volkey_work :162, modemute_work :163; binaRE: keys_ws @keys_data+0x10,
+ * wheel_wq@ws+0, volkey_work.func@ws+0x10 — decompiled_keys_probe) */
+struct mtc_keys_work_struct {
+	struct workqueue_struct *wheel_wq;
+	struct work_struct volkey_work;
+	struct work_struct modemute_work;
+};
+
 struct mtc_keys_data {
 	struct workqueue_struct *process_wq;
 	char no_adc_ch1;
@@ -72,7 +81,7 @@ struct mtc_keys_input_dev {
 	char _gap1[12];
 	struct timer_list ir_timer;
 	struct timer_list mcu_timer;
-	char _gap4[16];
+	char wheel_adc_init[16];   /* was _gap4[16]: [0]=SET_CONST 1023 (10-bit ADC max) до setup timer/hrtimer — ADC-ветки dev_type 4/5 (naming_report2, semantic-only) */
 	struct adc_client *wheel_adc_client;
 	struct adc_client *wheel_adc_client_ch2;
 	char _gap5[4];
@@ -204,7 +213,7 @@ keys_probe(struct platform_device *pdev)
 		}
 
 		if (keys_ids[cur_dev].dev_type == 4) {
-			*&keys_dev->keys_input[cur_dev]._gap4[0] = 1023;
+			*&keys_dev->keys_input[cur_dev].wheel_adc_init[0] = 1023;
 			setup_timer(&keys_dev->keys_input[cur_dev].mcu_timer, adc_mcu_timer,
 				    &keys_dev->keys_input[cur_dev].callback_param);
 			mod_timer(&keys_dev->keys_input[cur_dev].mcu_timer,
@@ -246,7 +255,7 @@ keys_probe(struct platform_device *pdev)
 				}
 			}
 
-			*&keys_dev->keys_input[cur_dev]._gap4[0] = 1023;
+			*&keys_dev->keys_input[cur_dev].wheel_adc_init[0] = 1023;
 			hrtimer_init(&keys_dev->keys_input[cur_dev].adc_wheel_hrtimer,
 				     HRTIMER_MODE_REL,
 				     2000000); // ?
