@@ -49,7 +49,10 @@ struct mtc_audio_struct {
 	char eq4;
 	char balance1;
 	char balance2;
-	char gap6[7];
+	/* binaRE B9: audio_active flag @+117 (dec audio_active/audio_deactive; asm audio_work LDRB +0x75) */
+	char audio_active;
+	/* binaRE B9: gap6 @+118..123 (total sizeof = 124 = __memzero 0x7C в бинаре) */
+	char gap6[6];
 };
 
 static unsigned char ChannelSel[12] = {0x80, 0x81, 0x82, 0x83, 0x8A, 0x82,
@@ -67,8 +70,6 @@ static unsigned char SoundEffectTable[32] = {
 
 // unknown table
 static unsigned char ch_data[12] = {0xE, 0, 0xC, 0xA, 0x14, 0xA, 6, 0, 0xE, 0, 0, 0};
-
-void audio_add_dwork(int data, unsigned int delay, int a3, struct mtc_car_status *c_status);
 
 /* dirty code */
 int
@@ -103,8 +104,8 @@ mtcGetSetVolume(int volume)
 			v6 = v2 >> 2;
 		}
 	}
-	return ((((0x431BDE83LL * v6 * car_struct.car_status._gap12[0]) >> 32) >> 18) -
-		(v6 * car_struct.car_status._gap12[0] >> 31));
+	return ((((0x431BDE83LL * v6 * car_struct.car_status.cfg_maxvolume) >> 32) >> 18) -
+		(v6 * car_struct.car_status.cfg_maxvolume >> 31));
 }
 
 /* decompiled */
@@ -116,52 +117,52 @@ inPhoneMode()
 EXPORT_SYMBOL_GPL(inPhoneMode)
 
 /* decompiled */
-void
+int
 Func_set_balance(unsigned char *balance_val)
 {
-	arm_send_multi(MTC_CMD_SET_BALANCE, 4, balance_val);
+	return arm_send_multi(MTC_CMD_SET_BALANCE, 4, balance_val);
 }
 EXPORT_SYMBOL_GPL(Func_set_balance)
 
 /* decompiled */
-void
+int
 Func_set_balance_v151(unsigned char *balance)
 {
 	/* for old MCU */
-	arm_send_multi(MTC_CMD_SET_BALANCE, 2, balance);
+	return arm_send_multi(MTC_CMD_SET_BALANCE, 2, balance);
 }
 EXPORT_SYMBOL_GPL(Func_set_balance_v151)
 
 /* decompiled */
-void
+int
 Func_set_equalizer(unsigned char *eq_val)
 {
-	arm_send_multi(MTC_CMD_SET_EQUALIZER, 3, eq_val);
+	return arm_send_multi(MTC_CMD_SET_EQUALIZER, 3, eq_val);
 }
 EXPORT_SYMBOL_GPL(Func_set_equalizer)
 
 /* decompiled */
-void
+int
 Func_set_equalizer_v151(unsigned char *eq_val)
 {
 	/* for old MCU */
-	arm_send_multi(MTC_CMD_SET_EQUALIZER, 4, eq_val);
+	return arm_send_multi(MTC_CMD_SET_EQUALIZER, 4, eq_val);
 }
 EXPORT_SYMBOL_GPL(Func_set_equalizer_v151)
 
 /* decompiled */
-void
+int
 Func_set_channel(unsigned char *ch_val)
 {
-	arm_send_multi(MTC_CMD_SET_CHANNEL, 2, ch_val);
+	return arm_send_multi(MTC_CMD_SET_CHANNEL, 2, ch_val);
 }
 EXPORT_SYMBOL_GPL(Func_set_channel)
 
 /* decompiled */
-void
+int
 Func_set_volume(unsigned char *volume)
 {
-	arm_send_multi(MTC_CMD_SET_VOLUME, 2, volume);
+	return arm_send_multi(MTC_CMD_SET_VOLUME, 2, volume);
 }
 EXPORT_SYMBOL_GPL(Func_set_volume)
 
@@ -186,36 +187,111 @@ isAudioMute()
 EXPORT_SYMBOL_GPL(isAudioMute)
 
 /* decompiled */
-void
+int
 btMicControl()
 {
 	if (car_struct.car_status.ch_mode != 3 || car_struct.config_data.cfg_bt == 6 ||
 	    car_struct.config_data.cfg_bt == 7) {
-		gpio_direction_output(gpio_CODEC_PWR, 0);
+		return gpio_direction_output(gpio_CODEC_PWR, 0);
 	} else {
-		gpio_direction_output(gpio_CODEC_PWR, 1);
+		return gpio_direction_output(gpio_CODEC_PWR, 1);
 	}
 }
 EXPORT_SYMBOL_GPL(btMicControl)
 
 /* decompiled */
-void
+int
 SetbtMicControl(int val)
 {
-	gpio_direction_output(gpio_CODEC_PWR, val);
+	return gpio_direction_output(gpio_CODEC_PWR, val);
 }
 EXPORT_SYMBOL_GPL(SetbtMicControl)
 
+/* реконструкция (binaRE 0xc0833ad4; машинный код — analyzer/notes/06_batch6.md):
+ * char18 <= 3 — signed-сравнение; хвост decompiled-файла `*(+24)==3` — артефакт IDA */
+int
+isAudioEnable()
+{
+	struct mtc_audio_struct *audio = car_struct.audio;
+	struct mtc_car_status *cs = &car_struct.car_status;
+	int bt;
+
+	if (audio->mute == 1) { /* +15 */
+		return 0;
+	}
+
+	if (cs->_gap9[4] || cs->ch_status) { /* +92 / +97 */
+		return audio->gap1[1] ? 1 : 0; /* +10 */
+	}
+
+	if (cs->ch_mode) { /* +41 */
+		if (audio->gap1[2]) { /* +11 */
+			return 1;
+		}
+		return audio->char18 <= 3; /* +24: binaRE — signed char18 <= 3 */
+	}
+
+	if (audio->audio_ch == 1) { /* +8: MTC_AV_CHANNEL_SYS */
+		if (audio->gap1[1]) { /* +10 */
+			return audio->char18 <= 3;
+		}
+		return 0;
+	}
+
+	if (audio->audio_ch != 0) { /* ch > 1 */
+		if (audio->gap1[1]) { /* +10 */
+			return 1;
+		}
+		return audio->char18 <= 3;
+	}
+
+	bt = car_struct.config_data.cfg_bt; /* config+5 */
+	if (bt == 2 || bt == 6 || bt == 7) { /* CMP-цепочка, без store */
+		if (audio->gap1[1]) { /* +10 */
+			return audio->char18 <= 3;
+		}
+		return 0;
+	}
+
+	if (audio->gap1[1]) { /* +10 */
+		return 1;
+	}
+
+	return audio->char18 <= 3; /* +24: signed <= */
+}
+EXPORT_SYMBOL_GPL(isAudioEnable)
+
+/* реконструкция (binaRE 0xc0833bb8; dec и asm совпали) */
+int
+Audio_SetMutePin(int pin)
+{
+	struct mtc_audio_struct *audio = car_struct.audio;
+
+	if (audio->mute_all == pin) { /* +16 */
+		return 0;
+	}
+
+	audio->mute_all = pin;
+	if (pin == 1) {
+		arm_send_multi(MTC_CMD_MUTE_ALL, 0, 0); /* 0x9007 */
+		return pin;
+	}
+
+	arm_send_multi(MTC_CMD_UNMUTE_ALL, 0, 0); /* 0x9008 */
+	return 1;
+}
+EXPORT_SYMBOL_GPL(Audio_SetMutePin)
+
 /* decompiled */
-void
+int
 Audio_SoftMute()
 {
-	arm_send_multi(MTC_CMD_SOFT_MUTE, 0, 0);
+	return arm_send_multi(MTC_CMD_SOFT_MUTE, 0, 0);
 }
 EXPORT_SYMBOL_GPL(Audio_SoftMute)
 
 /* dirty code */
-void
+int
 Audio_SetVolume(unsigned int volume)
 {
 	int v1;		   // r12@2
@@ -235,11 +311,11 @@ Audio_SetVolume(unsigned int volume)
 	char v15;	  // [sp+6h] [bp-1Ah]@11
 	char v16;	  // [sp+7h] [bp-19h]@8
 
-	if (car_struct.audio->gap6[2] != 4 || (v1 = car_struct.audio->gap1[3], v1 == 255)) {
+	if (car_struct.audio->gap6[2] != 4 || (v1 = car_struct.audio->audio_ch2, v1 == 255)) {
 		v1 = car_struct.audio->audio_ch;
 	}
 	if (volume > 60) {
-		return;
+		return 1; /* binaRE: `if (result > 0x3C) return 1;` */
 	}
 	v2 = car_struct.car_status._gap9[4];
 	if (car_struct.car_status._gap9[4]) {
@@ -247,7 +323,7 @@ Audio_SetVolume(unsigned int volume)
 		v3 = 60 * (car_struct.audio->gap1[1] + 1) / 0x64 & 0xFF;
 		goto LABEL_6;
 	}
-	if (!car_struct.car_status._gap6[0]) {
+	if (!car_struct.car_status.ch_mode) {
 		v2 = car_struct.car_status.ch_status;
 		if (!car_struct.car_status.ch_status) {
 			if (v1 == 1) {
@@ -288,9 +364,9 @@ Audio_SetVolume(unsigned int volume)
 			}
 		}
 		v10 = car_struct.audio->gap1[1];
-		v11 = car_struct.audio->gap1[5];
+		v11 = car_struct.audio->gap11[1];
 		v12 = 60 * (v10 + 1) / 0x64u & 0xFF;
-		if (v11 == 1 || car_struct.audio->gap1[4] == 1 ||
+		if (v11 == 1 || car_struct.audio->gap11[0] == 1 ||
 		    (v3 = car_struct.audio->gap5[2]) != 0) {
 			v3 = 0;
 		} else if (car_struct.car_status.av_gps_monitor) {
@@ -313,7 +389,7 @@ Audio_SetVolume(unsigned int volume)
 		if (car_struct.car_status.ch_status) {
 			if (v11 == 1) {
 				v3 = 0;
-			} else if (car_struct.audio->gap1[4] == 1) {
+			} else if (car_struct.audio->gap11[0] == 1) {
 				v3 = 0;
 			} else {
 				v3 = 60 * (v10 + 1) / 0x64u & 0xFF;
@@ -357,11 +433,11 @@ Audio_SetVolume(unsigned int volume)
 		v3 = 60 * (car_struct.audio->gap1[2] + 1) / 0x64 & 0xFF;
 		goto LABEL_6;
 	}
-	if (car_struct.car_status._gap6[0] == 1) {
+	if (car_struct.car_status.ch_mode == 1) {
 		v3 = car_struct.car_status._gap9[4];
 	} else {
 		v3 = 60 * (car_struct.audio->gap1[2] + 1) / 0x64 & 0xFF;
-		if ((car_struct.car_status._gap6[0] - 2) <= 1u) {
+		if ((car_struct.car_status.ch_mode - 2) <= 1u) {
 			goto LABEL_6;
 		}
 	}
@@ -401,23 +477,26 @@ LABEL_8:
 			v14 = v6;
 			if (!volume) {
 				Func_set_volume(&v14);
-				return;
+
+				return volume; /* binaRE: return volume (dec @0xc0833c18) */
 			}
 		}
 		v15 = -1;
 		Func_set_volume(&v14);
 	}
+
+	return volume; /* binaRE: return volume (dec @0xc0833c18) — источник M1 */
 }
 
 /* decompiled */
-void
+int
 Audio_FadeIn()
 {
 	int volume;
 
 	if (isAudioEnable()) {
 		if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_AM) {
-			Audio_SetVolume(0);
+			return Audio_SetVolume(0); /* binaRE: return Audio_SetVolume(0) */
 		} else {
 			volume = 60;
 			do {
@@ -426,29 +505,38 @@ Audio_FadeIn()
 
 				msleep(15u);
 			} while (volume != -5);
+
+			return 0; /* binaRE: r0 = msleep (void → 0) */
 		}
 	}
+
+	return 0; /* binaRE: r0 at function exit */
 }
 EXPORT_SYMBOL_GPL(Audio_FadeIn)
 
 /* decompiled */
-void
+int
 Audio_FadeOut()
 {
 	unsigned char volume;
 
 	if (car_struct.audio->mute_all != 1) {
 		if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_AM) {
-			Audio_SetVolume(60u);
+			return Audio_SetVolume(60u); /* binaRE: return Audio_SetVolume(0x3C) */
 		} else {
-			volume = 0;
-			do {
-				Audio_SetVolume(volume);
-				volume += 5;
+			for (volume = 0; volume != 65; volume += 5) {
+				if (Audio_SetVolume(volume)) {
+					/* binaRE: break on non-zero return (SDK-behavior) */
+					break;
+				}
 				msleep(15u);
-			} while (volume != 65);
+			}
+
+			return 0; /* binaRE: r0 = msleep (void → 0) */
 		}
 	}
+
+	return 0; /* binaRE: r0 at function exit (no arguments) */
 }
 EXPORT_SYMBOL_GPL(Audio_FadeOut)
 
@@ -476,7 +564,7 @@ Audio_Channel(int ch)
 EXPORT_SYMBOL_GPL(Audio_Channel)
 
 /* decompiled */
-void
+int
 Audio_Mute(signed int mute)
 {
 	struct mtc_audio_struct *audio = car_struct.audio;
@@ -486,14 +574,16 @@ Audio_Mute(signed int mute)
 			Audio_FadeOut();
 			audio->mute = mute;
 			arm_send_multi(MTC_CMD_SET_MUTE, mute, &audio->mute);
-			vs_send(2, 0x96u, &audio->mute, mute);
+			return vs_send(2, 0x96u, &audio->mute, mute);
 		} else {
 			audio->mute = 0;
 			arm_send_multi(MTC_CMD_SET_MUTE, 1, &audio->mute);
 			vs_send(2, 0x96u, &audio->mute, 1);
-			Audio_FadeIn();
+			return Audio_FadeIn();
 		}
 	}
+
+	return mute; /* binaRE: return аргумента (r0) */
 }
 EXPORT_SYMBOL_GPL(Audio_Mute)
 
@@ -532,8 +622,8 @@ Audio_Balance()
 
 	if (strcmp(car_struct.car_status.mcuver2, "V1.51") < 0) // "V1.51"
 	{
-		/* тут происходит адская числовая магия, которую я так и не понял, но результат тупо
-		 * (x+1)/2. */
+		/* тут происходит адская числовая магия (в машинном коде — magic 0x92492493,
+		 * SMULL/RSB-ASR#4): результат = целочисленное деление /6, x = 14*(o+1) — binaRE */
 		ob1 = car_struct.audio->balance1;
 		ob2 = car_struct.audio->balance2;
 		v3 = ChannelSel[-ob1 + 72];
@@ -744,19 +834,23 @@ Audio_PhoneChannel(unsigned int mode)
 	}
 
 	if (mode) {
+		/* binaRE M3: v2 = car_struct.car_status._gap9[4] — зафиксировано до ветки
+		 * (decompiled_Audio_PhoneChannel.c @0xc0834650; asm C0834730/734/764-770/784-8C) */
+		int v2 = car_struct.car_status._gap9[4];
+
 		Audio_SetVolume(60u);
 		msleep(20u);
-		audio->gap11[1] = 0;
-		audio->mute = 0;
+		audio->gap11[1] = v2; /* binaRE: *(+14) = v2 (не 0) */
+		audio->mute = v2;     /* binaRE: *(+15) = v2 (не 0) */
 		arm_send_multi(0x9024u, 1, &audio->mute);
 		vs_send(2, 0x96u, &audio->mute, 1);
 		Audio_Channel(8);
 		car_struct.car_status.ch_mode = mode;
 		btMicControl();
-		arm_send_multi(0x9020u, 0, 0);
+		arm_send_multi(0x9020u, v2, v2); /* binaRE: arm(0x9020, v2, v2) */
 		msleep(20u);
 		msleep(1500u);
-		Audio_SetVolume(0);
+		return Audio_SetVolume(v2); /* binaRE: return Audio_SetVolume(v2) */
 	} else {
 		int channel;
 
@@ -967,7 +1061,7 @@ Audio_EnterChannel(int set_ch, int mode)
 	}
 
 	bt = car_struct.config_data.cfg_bt;
-	if (bt == 2 || bt = 6 || bt == 7) {
+	if (bt == 2 || bt == 6 || bt == 7) {
 		if (set_ch == MTC_AV_CHANNEL_SYS) {
 			if (audio_ch) {
 				goto LABEL_11;
@@ -1058,11 +1152,11 @@ LABEL_17:
 	}
 
 	if (!v14 & v13) {
-		audio->gap1[5] = v16;
-		audio->gap1[4] = v16;
+		audio->gap11[1] = v16;
+		audio->gap11[0] = v16;
 	} else {
-		audio->gap1[5] = v11;
-		audio->gap1[4] = v11;
+		audio->gap11[1] = v11;
+		audio->gap11[0] = v11;
 	}
 
 	if (!audio->mute) {
@@ -1144,7 +1238,7 @@ audio_active()
 		p_mtc_audio->gap5[1] = 0;
 		p_mtc_audio->mute_all = 1;
 		p_mtc_audio->mute = 0;
-		p_mtc_audio->gap1[4] = 0;
+		p_mtc_audio->gap11[0] = 0;
 		ch_data[0] = v2;
 		ch_data[1] = v5;
 		ch_data[3] = v3;
@@ -1198,7 +1292,7 @@ audio_deactive()
 {
 	if (car_struct.audio->audio_active) {
 		car_struct.audio->audio_active = 0;
-		car_struct.car_status._gap6[0] = 0;
+		car_struct.car_status.ch_mode = 0;
 		btMicControl();
 		arm_send_multi(0x9006u, 0, 0);
 		car_struct.audio->mute_all = 1;
@@ -1277,8 +1371,8 @@ audio_work(struct work_struct *work)
 		v33 = mtcGetSetVolume(v27);
 		arm_send_multi(0x9023u, 1, &v33);
 		if (car_struct.audio->audio_active) {
-			v26 = car_struct.car_status._gap6[0];
-			if (!car_struct.car_status._gap6[0]) {
+			v26 = car_struct.car_status.ch_mode;
+			if (!car_struct.car_status.ch_mode) {
 				if (car_struct.audio->mute != 1) {
 					goto LABEL_22;
 				}
@@ -1291,7 +1385,7 @@ audio_work(struct work_struct *work)
 		car_struct.audio->gap1[2] = v25;
 		v33 = mtcGetSetVolume(v25);
 		arm_send_multi(0x9022u, 1, &v33);
-		if (car_struct.car_status._gap6[0]) {
+		if (car_struct.car_status.ch_mode) {
 			if (car_struct.audio->mute == 1) {
 				v26 = 0;
 			LABEL_57:
@@ -1358,31 +1452,31 @@ audio_work(struct work_struct *work)
 		goto free_work;
 	case 0xD:
 		v4 = container_of(work, mtc_work, dwork)->cmd2;
-		v5 = car_struct.car_status._gap6[0];
-		if (v4 == car_struct.car_status._gap6[0]) {
+		v5 = car_struct.car_status.ch_mode;
+		if (v4 == car_struct.car_status.ch_mode) {
 			goto free_work;
 		}
 		if (v4) {
 			switch (v4) {
 			case 1:
 				printk("Phone In\n");
-				v5 = car_struct.car_status._gap6[0];
+				v5 = car_struct.car_status.ch_mode;
 				v4 = container_of(work, mtc_work, dwork)->cmd2;
 				break;
 			case 2:
 				printk("Phone Out\n");
-				v5 = car_struct.car_status._gap6[0];
+				v5 = car_struct.car_status.ch_mode;
 				v4 = container_of(work, mtc_work, dwork)->cmd2;
 				break;
 			case 3:
 				printk("Phone Answer\n");
-				v5 = car_struct.car_status._gap6[0];
+				v5 = car_struct.car_status.ch_mode;
 				v4 = container_of(work, mtc_work, dwork)->cmd2;
 				break;
 			}
 		} else {
 			printk("Phone Hangup\n");
-			v5 = car_struct.car_status._gap6[0];
+			v5 = car_struct.car_status.ch_mode;
 			v4 = container_of(work, mtc_work, dwork)->cmd2;
 		}
 		if (v5) {
@@ -1394,7 +1488,7 @@ audio_work(struct work_struct *work)
 		} else {
 			if (!v4) {
 			LABEL_13:
-				car_struct.car_status._gap6[0] = v4;
+				car_struct.car_status.ch_mode = v4;
 				Audio_SetVolume(0);
 				btMicControl();
 				goto free_work;
@@ -1453,7 +1547,7 @@ audio_work(struct work_struct *work)
 	case 0x12:
 		p_mtc_audio = car_struct.audio;
 		v16 = container_of(work, mtc_work, dwork)->cmd2;
-		if (v16 == car_struct.audio->gap1[5]) {
+		if (v16 == car_struct.audio->gap11[1]) {
 			goto free_work;
 		}
 		goto LABEL_27;
@@ -1463,13 +1557,13 @@ audio_work(struct work_struct *work)
 			goto free_work;
 		}
 		v16 = container_of(work, mtc_work, dwork)->cmd2;
-		if (v16 == car_struct.audio->gap1[5]) {
+		if (v16 == car_struct.audio->gap11[1]) {
 			goto free_work;
 		}
 	LABEL_27:
 		v17 = p_mtc_audio->mute;
 		v18 = v16 != 0;
-		p_mtc_audio->gap1[5] = v18;
+		p_mtc_audio->gap11[1] = v18;
 		if (v17 || !p_mtc_audio->audio_active) {
 			goto free_work;
 		}
@@ -1486,7 +1580,7 @@ audio_work(struct work_struct *work)
 		goto free_work;
 	case 0x16:
 		if (!car_struct.car_status._gap9[4]) {
-			car_add_work(29, car_struct.car_status._gap9[4], 1);
+			car_add_work(29, car_struct.car_status._gap9[4], 1); /* binaRE: car_add_work(29, 0, 1) — в ветке _gap9[4]==0 */
 			Audio_AJXChannel(1);
 		}
 		goto free_work;
@@ -1508,10 +1602,10 @@ audio_work(struct work_struct *work)
 		goto free_work;
 	case 0x1A:
 		p_mtc_audio = car_struct.audio;
-		if (car_struct.audio->gap1[4]) {
+		if (car_struct.audio->gap11[0]) {
 			v17 = car_struct.audio->mute;
-			car_struct.audio->gap1[4] = 0;
-			p_mtc_audio->gap1[5] = 0;
+			car_struct.audio->gap11[0] = 0;
+			p_mtc_audio->gap11[1] = 0;
 			if (!v17) {
 				if (p_mtc_audio->audio_active) {
 				LABEL_42:
@@ -1530,7 +1624,7 @@ audio_work(struct work_struct *work)
 		if (v19 != 4) {
 			v3 = 0;
 		}
-		p_mtc_audio->gap1[3] = -1;
+		p_mtc_audio->audio_ch2 = -1;
 		SetbtMicControl(v3);
 		goto free_work;
 	}
@@ -1565,8 +1659,8 @@ audio_add_work_delay(int data, unsigned int delay, int a3)
 }
 EXPORT_SYMBOL_GPL(audio_add_work_delay)
 
-/* contains unknown fields */
-void
+/* binaRE E3: символа НЕТ в kallsyms — тело инлайнено в audio_add_work_delay (0xc0835684); static */
+static void
 audio_add_dwork(int data, unsigned int delay, int a3, struct mtc_car_status *c_status)
 {
 	if (c_status->_gap2[1]) {
@@ -1579,13 +1673,11 @@ audio_add_dwork(int data, unsigned int delay, int a3, struct mtc_car_status *c_s
 				   msecs_to_jiffies(delay));
 	}
 }
-EXPORT_SYMBOL_GPL(audio_add_dwork)
-
 /* contains unknown fields */
 void
 audio_channel_switch_unmute()
 {
-	if (car_struct.audio->gap1[4] == 1) {
+	if (car_struct.audio->gap11[0] == 1) {
 		int audio_ch = car_struct.audio->audio_ch;
 		if (audio_ch == MTC_AV_CHANNEL_DVD) {
 			audio_add_work_delay(26, 3000u, 1);
@@ -1630,6 +1722,6 @@ audio_init()
 	audio->balance1 = 14;
 	audio->balance2 = 14;
 	audio->gap1[1] = 0; // ?
-	audio->gap6[2] = 0; // ?
+	audio->gap6[1] = 0; // ? binaRE: +119 (asm audio_init C0835838) — единственное gap6-совпадение
 }
 EXPORT_SYMBOL_GPL(audio_init)

@@ -5,6 +5,20 @@
 #ifndef _MTC_CAR_H
 #define _MTC_CAR_H
 
+/* binaRE (RK3188, verification_report.md §2 E4): значения подтверждены машинным кодом:
+ * AM=8 (dec Audio_FadeIn/FadeOut: mtc_customer==8), JY=6 (audio_active/audio_deactive),
+ * KLD=4 (audio_active: iomux_set(0x1A51));
+ * YZ_RM_ZT=1, HMF=2, MX=9 — значения подтверждены binaRE (customer_values.md):
+ * tef6606_i2c_probe/decorder_power */
+enum MTC_CUSTOMER {
+	MTC_CUSTOMER_YZ_RM_ZT = 1,
+	MTC_CUSTOMER_HMF = 2,
+	MTC_CUSTOMER_KLD = 4,
+	MTC_CUSTOMER_JY = 6,
+	MTC_CUSTOMER_AM = 8,
+	MTC_CUSTOMER_MX = 9,
+};
+
 struct mtc_car_comm {
 	unsigned int mcu_din_gpio;
 	struct workqueue_struct *mcc_rev_wq;

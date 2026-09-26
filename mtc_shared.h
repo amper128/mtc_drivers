@@ -59,10 +59,19 @@ enum MTC_CMD {
 	MTC_CMD_SET_EQUALIZER = 0x9002,
 	MTC_CMD_SOFT_MUTE = 0x9003,
 	MTC_CMD_SET_CHANNEL = 0x9004,
+	MTC_CMD_AUDIO_ACTIVE_INIT = 0x9005, /* tentative: имя по контексту использования (B8) — audio_active */
+	MTC_CMD_AUDIO_DEACTIVE = 0x9006, /* tentative: имя по контексту использования (B8) — audio_deactive */
 	MTC_CMD_MUTE_ALL = 0x9007,
 	MTC_CMD_UNMUTE_ALL = 0x9008,
 	MTC_CMD_VIDEO_CHANNEL = 0x900A,
+	MTC_CMD_SET_BALANCE_OLD = 0x9010, /* tentative: имя по контексту использования (B8) — старая ветка Audio_Balance */
+	MTC_CMD_PHONE_BT_IN = 0x9020, /* tentative: имя по контексту использования (B8) — Audio_PhoneChannel вход BT */
+	MTC_CMD_PHONE_BT_OUT = 0x9021, /* tentative: имя по контексту использования (B8) — Audio_PhoneChannel выход BT */
+	MTC_CMD_VOLUME_AUX = 0x9022, /* tentative: имя по контексту использования (B8); не встречено в audio */
+	MTC_CMD_VOLUME_MAIN = 0x9023, /* tentative: имя по контексту использования (B8) — audio_active */
 	MTC_CMD_SET_MUTE = 0x9024,
+	MTC_CMD_AJX_IN = 0x9030, /* tentative: имя по контексту использования (B8) — Audio_AJXChannel mode!=0 */
+	MTC_CMD_AJX_OUT = 0x9031, /* tentative: имя по контексту использования (B8) — Audio_AJXChannel mode==0 */
 	MTC_CMD_AUDIO_DVD_ON = 0x9100,
 	MTC_CMD_AUDIO_DVD_OFF = 0x9101,
 	MTC_CMD_FM_STEREO_ON = 0x9201,
@@ -104,6 +113,12 @@ enum MTC_CMD {
 	MTC_CMD_RESET2 = 0xA124, // send when reboot to recovery
 
 	MTC_CMD_CANBUS_RSP = 0xC000,
+};
+
+/* tentative: имена по контексту использования (B8) — vs_send(channel, cmd, buf, len) */
+enum MTC_VS_CMD {
+	MTC_VS_CMD_PIN_MUTE = 150,  /* 0x96: pin-mute vs_send(2, 150, &mute, ...) */
+	MTC_VS_CMD_TA_CHECK = 155, /* 0x9B: ta_check_start/back vs_send(2, 155, buf, 1) */
 };
 
 enum RPT_KEY_MODE {
@@ -221,6 +236,10 @@ struct mtc_work {
 
 /* mtc_car functions */
 void arm_parrot_boot(int mode);
+
+/* реализация: радиомодуль, binaRE 0xc08366cc/0xc0836708 (decompiled_ta_check_*.c) */
+void ta_check_start(void);
+void ta_check_back(void);
 extern void arm_send(unsigned int cmd);
 int arm_send_multi(unsigned int cmd, int count, unsigned char *buf);
 extern int car_comm_init(void);
