@@ -388,7 +388,7 @@ keys_probe(struct platform_device *pdev)
 		device_init_wakeup(&pdev->dev, wakeup);
 		register_early_suspend(&mtc_keys_early_suspend);
 		keys_data->p_input_dev = gpio_keys_input0;
-		car_struct.car_status._gap2[0] = 1;
+		car_struct.car_status.input_ready = 1;
 
 		return register_result;
 	}

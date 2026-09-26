@@ -688,14 +688,14 @@ car_work(struct work_struct *work)
 
 	mutex_lock(&mtc_car_struct.car_cmd_lock);
 
-	while (!car_status->_gap0[0]) {
+	while (!car_status->car_ready) {
 		msleep(10u);
 	}
 
 	switch (car_work_data->cmd1) {
 
 	case 29:
-		if (++car_status->_gap0[1]) {
+		if (++car_status->power_refcnt) {
 			audio_active(v3, v4, v5);
 			backlight_on();
 			break;
@@ -705,16 +705,16 @@ car_work(struct work_struct *work)
 		break;
 
 	case 30:
-		if (!car_status->_gap0[1]) {
+		if (!car_status->power_refcnt) {
 			break;
 		}
 
-		if (--car_status->_gap0[1]) {
+		if (--car_status->power_refcnt) {
 			break;
 		}
 
 		audio_deactive();
-		if (car_status->_gap5[0]) {
+		if (car_status->cam_state) {
 			break;
 		}
 
@@ -747,15 +747,15 @@ car_work(struct work_struct *work)
 
 	case 37:
 		arm_send(0x202u);
-		car_status->_gap1[0] = 1;
-		if (car_status->_gap0[1]) {
+		car_status->call_active = 1;
+		if (car_status->power_refcnt) {
 			vs_send(2, 0xF2u, 0, 0);
 			audio_add_work(0x14u, 0, 0, 0);
 		}
 		if (car_status->wipe_flag & 0x10) {
 			vs_send(2, 0x88u, 0, 0);
 		}
-		if (car_status->_gap9[3]) {
+		if (car_status->video_src_ready) {
 			vs_send(2, 0x9Fu, 0, 0);
 		}
 		capture_add_work(0x3Au, 2000, 0, 0);
@@ -763,18 +763,18 @@ car_work(struct work_struct *work)
 		break;
 
 	case 38:
-		if (car_status->_gap9[3]) {
+		if (car_status->video_src_ready) {
 			audio_add_work(0x16u, 0, 0, 0);
 		}
 		break;
 
 	case 42:
 		printk("--mtc on %d\n", car_work_data->cmd2);
-		if (car_status->_gap1[0]) {
+		if (car_status->call_active) {
 			vs_send(2, 0xF1, 0, 0);
 
-			car_status->_gap0[1] = 1;
-			car_status->_gap9[0] = 1;
+			car_status->power_refcnt = 1;
+			car_status->power_on = 1;
 
 			audio_add_work(20, 0, 0, 0);
 			capture_add_work(46, 1, 0, 0);
@@ -783,8 +783,8 @@ car_work(struct work_struct *work)
 				backlight_on();
 			}
 		} else {
-			car_status->_gap0[1] = 1;
-			car_status->_gap9[0] = 1;
+			car_status->power_refcnt = 1;
+			car_status->power_on = 1;
 			capture_add_work(47, 0, 0, 0);
 			backlight_on();
 		}
@@ -796,11 +796,11 @@ car_work(struct work_struct *work)
 
 	case 43:
 		printk("--mtc off\n");
-		car_status->_gap0[1] = 0;
-		if (car_status->_gap5[3]) {
+		car_status->power_refcnt = 0;
+		if (car_status->cam_signal) {
 			capture_add_work(0x37u, 0, 0, 1);
 		}
-		if (car_status->_gap1[0]) {
+		if (car_status->call_active) {
 			car_status->rpt_power = 1;
 			t = 40;
 			vs_send(2, 0xF0u, 0, 0);
@@ -828,13 +828,13 @@ car_work(struct work_struct *work)
 
 	case 45:
 		vs_send(2, 0x8Au, 0, 0);
-		if (car_status->_gap5[0]) {
+		if (car_status->cam_state) {
 			capture_add_work(0x3Bu, 0, 0, 1);
-		} else if (car_status->_gap5[3]) {
+		} else if (car_status->cam_signal) {
 			capture_add_work(0x37u, 0, 0, 1);
 		}
-		if (car_status->_gap0[1]) {
-			car_status->_gap0[1] = 0;
+		if (car_status->power_refcnt) {
+			car_status->power_refcnt = 0;
 			car_status->rpt_power = 1;
 
 			vs_send(2, 0xF0u, 0, 0);
@@ -973,12 +973,12 @@ car_work(struct work_struct *work)
 		}
 		_cmd2_32 = (cmd2 - 32);
 		if (_cmd2_32 == 0x40) {
-			car_status->_gap9[3] = 1;
+			car_status->video_src_ready = 1;
 			key_beep();
 			if (car_status->rpt_boot_android) {
 				audio_add_work(0x16u, 0, 0, 0);
 			}
-			if (car_status->_gap1[0]) {
+			if (car_status->call_active) {
 				vs_send(2, 0x9Fu, 0, 0);
 			}
 		} else {
@@ -988,17 +988,17 @@ car_work(struct work_struct *work)
 				}
 				goto LABEL_93;
 			}
-			car_status->_gap9[3] = 0;
+			car_status->video_src_ready = 0;
 			key_beep();
 			if (car_status->rpt_boot_android) {
-				if (car_status->_gap9[4]) {
-					if (car_status->_gap0[1] == 1) {
+				if (car_status->ajx_active) {
+					if (car_status->power_refcnt == 1) {
 						backlight_off();
 					}
 				}
 				audio_add_work(0x17u, 0, 0, 0);
 			}
-			if (car_status->_gap1[0]) {
+			if (car_status->call_active) {
 				vs_send(2, 0xA0u, 0, 0);
 			}
 		}
@@ -1736,8 +1736,12 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					}
 					if (!strcmp(token_start, off_C08317EC)) // "hangup"
 					{
+						/* TODO (naming_report): car_status._gap6[0] — поля НЕТ в struct mtc_car_status (порог _gap5→_gap7),
+						 * позиция неразрешена (offset-tentative «неверифицируемо»; байт вероятно в зоне reserved_22[32] @101..132).
+						 * Pre-existing-расхождение (так было и до реноме): добавление байта изменило бы layout (запрещено) —
+						 * имя обращения сохранено как есть. */
 						if (car_struct->car_status._gap6[0] &&
-						    car_struct->car_status._gap0[1] == 1) {
+						    car_struct->car_status.power_refcnt == 1) {
 							backlight_off();
 						}
 						audio_add_work(AUDIO_WORK_PHONE, 0, 0, 0);
@@ -1904,8 +1908,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1, off_C08317C4)) // "ctl_uv_cal"
 			{
-				if (car_struct->car_status._gap9[21] ||
-				    car_struct->car_status._gap8[3] != 1) {
+				if (car_struct->car_status.reserved_22[8] ||
+				    car_struct->car_status.decoder_state != 1) {
 					car_struct->car_status.uv_cal = 0;
 				} else {
 					v178 = strcmp(token_start, off_C083189C); // "start"
@@ -2234,7 +2238,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									arm_send_multi(0x9529u, 0,
 										       0);
 									car_struct->car_status
-									    ._gap14[0] = 1;
+									    .power2_flag = 1;
 									goto LABEL_62;
 								}
 								if (!strcmp(
@@ -2335,7 +2339,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}				      // ctl_radar
 			if (!strcmp(token_start, str_true_0)) // "true"
 			{
-				capture_add_work(64, 0, *&car_struct->car_status._gap8[5], 0);
+				capture_add_work(64, 0, *&car_struct->car_status.radar_val, 0);
 				goto LABEL_62;
 			}
 			if (!strcmp(token_start, str_false_0)) // "false"
@@ -2374,7 +2378,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				if (wifi_pwr >= 0) {
 					car_struct->config_data.wifi_pwr = wifi_pwr;
 					arm_send_multi(MTC_CMD_WIFI_PWR, 1, p_wifi_pwr);
-					if (car_struct->_gap4[0]) {
+					if (car_struct->wifi_capable) {
 						v174 = *off_C0831890;
 						if (v174 != 255) {
 							rk29sdk_wifi_power(v174);
@@ -2470,10 +2474,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						v157 = v60;
 						v158 = &p_config_data_4->cfg_logo2[8];
 						do {
-							v156->_gap7[0] = *v157 >> 8;
+							v156->reserved_206 = *v157 >> 8;
 							v159 = *v157;
 							v157 += 2;
-							v156->_gap7[1] = v159;
+							v156->reserved_206[1] = v159;
 							v156 = (v156 + 2);
 						} while (v156 != v158);
 						kfree(v60);
@@ -2691,21 +2695,21 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C083174C)) // "sta_ipod"
 					{
-						v55 = (car_struct->car_status._gap3[0] & 0x20) == 0;
-						if (car_struct->car_status._gap3[0] & 0x20) {
+						v55 = (car_struct->car_status.sta_bits & 0x20) == 0;
+						if (car_struct->car_status.sta_bits & 0x20) {
 							v56 = &car_struct->ioctl_buf1[3060];
 							v54 = str_false_0; // "false"
 						} else {
 							v56 = str_true_0; // "true"
 						}
-						if (car_struct->car_status._gap3[0] & 0x20) {
+						if (car_struct->car_status.sta_bits & 0x20) {
 							v57 = *v54;
 							v58 = *(v54 + 1);
 						} else {
 							v57 = *v56;
 							v58 = *(v56 + 1);
 						}
-						if (car_struct->car_status._gap3[0] & 0x20) {
+						if (car_struct->car_status.sta_bits & 0x20) {
 							*&car_struct->buffer2[0] = v57;
 						} else {
 							*&car_struct->buffer2[0] = v57;
@@ -2720,7 +2724,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C08318EC)) //  "sta_driving"
 					{
-						v192 = car_struct->car_status._gap3[0];
+						v192 = car_struct->car_status.sta_bits;
 						res = 0;
 						v193 = (v192 & 0x10) == 0;
 						if (v192 & 0x10) {
@@ -2745,21 +2749,21 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					{
 						res = 0;
 						car_struct = p_mtc_car_struct_14;
-						if (car_struct->car_status._gap3[0] & 8) {
+						if (car_struct->car_status.sta_bits & 8) {
 							v202 =
 							    &p_mtc_car_struct_14->ioctl_buf1[3060];
 							v200 = str_false_0;
 						} else {
 							v202 = str_true_0;
 						}
-						if (car_struct->car_status._gap3[0] & 8) {
+						if (car_struct->car_status.sta_bits & 8) {
 							v203 = *v200;
 							v204 = *(v200 + 1);
 						} else {
 							v203 = *v202;
 							v204 = *(v202 + 1);
 						}
-						if (car_struct->car_status._gap3[0] & 8) {
+						if (car_struct->car_status.sta_bits & 8) {
 							*&p_mtc_car_struct_14->buffer2[0] = v203;
 							*(v202 + 8) = v204;
 						} else {
@@ -2862,7 +2866,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								if (v217) {
 									car_struct->car_dev = v218;
 									*&car_struct->car_status
-									      ._gap0[0] = v219;
+									      .car_ready = v219;
 								} else {
 									*v216 = v218;
 									*(v216 + 1) = v219;
@@ -3739,7 +3743,7 @@ car_avm(void)
 		buf[5] = 0x01;
 		buf[6] = 0x34;
 
-		if (mtc_car_struct->car_status._gap5[0]) { // ?
+		if (mtc_car_struct->car_status.cam_state) { // ?
 			printk("mBackView\n");
 			arm_send_multi(0xC000u, 7, buf);
 		} else {
@@ -3755,7 +3759,7 @@ car_avm(void)
 		buf[4] = 0x01;
 		buf[5] = 0x36;
 
-		if (mtc_car_struct->car_status._gap5[0]) { // ?
+		if (mtc_car_struct->car_status.cam_state) { // ?
 			printk("mBackView\n");
 			arm_send_multi(0xC000u, 6, buf);
 		} else {
@@ -3904,7 +3908,7 @@ car_probe(struct platform_device *pdev)
 	car_status->wipe_flag = 0;
 	arm_send(0xF02u);
 	car_status->backview_vol = 11;
-	car_status->_gap3[0] = 0;
+	car_status->sta_bits = 0;
 
 	rk_fb_show_logo();
 
@@ -4008,14 +4012,14 @@ car_probe(struct platform_device *pdev)
 	}
 
 	if (car_status->mtc_customer == 4) {
-		mtc_car_struct._gap4[0] = 1;
+		mtc_car_struct.wifi_capable = 1;
 	}
 
 	if (car_status->wipe_flag & 1) {
 		v16 = 1;
 	}
-	car_status->_gap0[1] = v16;
-	car_status->_gap9[0] = v16;
+	car_status->power_refcnt = v16;
+	car_status->power_on = v16;
 
 	if (car_status->wipe_flag & 8) {
 		if (car_status->wipe_flag & 2) {
@@ -4024,17 +4028,17 @@ car_probe(struct platform_device *pdev)
 			v17 = 6;
 		}
 
-		car_status->_gap14[1] = v17;
-		car_status->_gap8[0] = 0xFF;
+		car_status->mcu_cmd_state = v17;
+		car_status->video_mode = 0xFF;
 		capture_add_work(0x38u, 1, 0, 1);
-	} else if (car_status->_gap0[1]) {
+	} else if (car_status->power_refcnt) {
 		if (car_status->mtc_customer == 8) {
 			msleep(1000u);
 		}
 		backlight_on();
 	}
 
-	car_status->_gap0[0] = 1;
+	car_status->car_ready = 1;
 
 	printk("car_probe end \n");
 	if (config_data->d.cfg_bt == 3) {

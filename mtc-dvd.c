@@ -691,7 +691,7 @@ dvd_power(int pwr)
 		dvd_flag1 = 0;
 		dvd_dev->dvd_power_on = 1;
 		dvd_dev->dvd_command_byte2 = 0;
-		car_struct.car_status._gap81[0] = 0;
+		car_struct.car_status.decoder_state = 0;
 		dvd_cmd_bit_count = 24;
 
 		gpio_direction_input(gpio_DVD_DATA);

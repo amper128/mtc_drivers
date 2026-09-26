@@ -318,7 +318,7 @@ vs_send_raw(int port_num, unsigned char *data, int count)
 
 	vs_port = vs_portlist.vss_dev[port_num];
 
-	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
+	if (vs_uart_init && car_status.call_active && vs_port->vs_rx) {
 		mutex_lock(&vs_port->lock);
 
 		printk("vs_send raw ");
@@ -388,7 +388,7 @@ vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count)
 
 	_port_num = port_num;
 	vs_port = vs_portlist.vss_dev[port_num];
-	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
+	if (vs_uart_init && car_status.call_active && vs_port->vs_rx) {
 		size = count + 4;
 		mutex_lock(&vs_port->lock);
 		data = _kmalloc(size, __GFP_ZERO | __GFP_FS | __GFP_IO | __GFP_WAIT);

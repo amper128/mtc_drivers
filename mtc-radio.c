@@ -261,8 +261,8 @@ Radio_Set_Frequency_com(signed int freq, int a2)
 	arm_send_multi(cmd, count, v6);
 	rds_send_sta_empty();
 
-	car_status._gap9[1] = 0;
-	car_status._gap9[2] = 0;
+	car_status.radio_rds_flag = 0;
+	car_status.reserved_18 = 0;
 }
 
 /* decompiled */

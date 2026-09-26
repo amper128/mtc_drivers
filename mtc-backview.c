@@ -363,13 +363,13 @@ T132B_i2c_write(struct i2c_client *client, unsigned int dev_addr, u8 reg, u8 dat
 static void
 T132B_UV_Set()
 {
-	car_struct.car_status.u_value = car_struct.config_data._gap11[0] + 112;
-	car_struct.car_status.v_value = car_struct.config_data._gap11[1] - 124;
+	car_struct.car_status.u_value = car_struct.config_data.reserved_490 + 112; /* OOB-расхождение #6: бинарный T132B_UV_Set читает @493 = uv_off_u */
+	car_struct.car_status.v_value = car_struct.config_data.reserved_490[1] - 124; /* OOB @491; бинарный источник: @494 = uv_off_v (расхождение #6) */
 
 	T132B_i2c_write(mtc_backview_dev.i2c_client, 0x40u, 12, car_struct.car_status.u_value);
 	T132B_i2c_write(mtc_backview_dev.i2c_client, 0x40u, 10, car_struct.car_status.v_value);
 
-	printk("UV set %02x,%02x\n", car_struct.car_status.u_value, car_structcar_status.v_value);
+	printk("UV set %02x,%02x\n", car_struct.car_status.u_value, car_struct.car_status.v_value);
 }
 
 /* decompiled */

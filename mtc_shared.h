@@ -144,14 +144,17 @@ union mtc_config_data {
 		char cfg_led_type;
 		char cfg_key0;
 		char cfg_language_selection[2];
-		char _gap1[7];
+		char ch_attr[7];	   /* @13..19 was _gap1[7]: атрибуты каналов для Audio_ChInit (pack в 12B ch-команду) */
 		char cfg_rds;
-		char _gap[2];
+		char reserved_21[2];  /* @21..22 was _gap[2]: unused */
 		char cfg_frontview;
 		char cfg_logo_type;
-		char _gap3[2];
+		char default_ajx_ch;  /* @25 was _gap3[0]: канал после AJX-unmute (код, mtc-audio.c:745). РАСХОЖДЕНИЕ: бинарный
+		 * Audio_AJXChannel читает @28 (reserved_28) — layout-shift, naming_report §6.5; чинить здесь нельзя */
+		char reserved_26;	   /* @26 was _gap3[1]: unused */
 		char cfg_rudder;
-		char _gap4[1];
+		char reserved_28;	   /* @28 was _gap4[1]: бинар — Audio_AJXChannel читает AJX-канал по умолчанию СЮДА (кандидат
+		 * на default_ajx_ch); в ручном коде не используется */
 		char cfg_dvr;
 		char cfg_appdisable;
 		char cfg_ill;
@@ -161,28 +164,32 @@ union mtc_config_data {
 		char cfg_password[16];
 		char cfg_logo1[16];
 		char cfg_logo2[16];
-		char _gap5[75];
+		char reserved_128[75]; /* @128..202 was _gap5[75]: unused (возможная IR-область — см. ir_assign_tab) */
 		char cfg_wheelstudy_type;
-		char _gap6[1];
+		char reserved_204;	   /* @204 was _gap6[1]: binaRE-доступен (ADV7181D_Init), роль ? */
 		char canbus_cfg;
-		char _gap7[1];
+		char reserved_206;	   /* @206 was _gap7[1]: РАСХОЖДЕНИЕ #5 — cfg_ir_assign пишет IR-таблицу отсюда
+		 * (mtc-car.c:2468-2479), layout блоба в бинаре другой */
 		char cfg_atvmode;
-		char _gap8[120];
+		char ir_assign_tab[120]; /* @208..327 was _gap8[120]: ГИПОТЕЗА — таблица IR-привязок 60×16-бит (naming_report §4, low;
+		 * байты @288..295 бинарно доступны car_ioctl/key_beep/rk29sdk_wifi_power) */
 		char steer_data[150];
-		char _gap9[2];
+		char reserved_478[2]; /* @478..479 was _gap9[2]: unused */
 		char cfg_color[2];
 		char cfg_powerdelay;
 		char cfg_backlight;
 		char ctl_beep;
 		char cfg_led[3];
-		char _gap10[1];
+		char reserved_488;	   /* @488 was _gap10[1]: unused */
 		char wifi_pwr;
-		char _gap11[1];
+		char reserved_490;	   /* @490 was _gap11[0]: РАСХОЖДЕНИЕ #6 — код OOB-читает [0]/[1] здесь как u/v-cfg
+		 * (mtc-backview.c:366-367); реальные u/v в бинаре @493/494 = uv_off_u/v */
 		char cfg_mirror;
 		char cfg_led_multi;
-		char _gap12[2];
+		char uv_off_u;	     /* @493 was _gap12[0]: источник u_value (binaRE 0x2AD ✓ T132B_UV_Set) */
+		char uv_off_v;	     /* @494 was _gap12[1]: источник v_value (binaRE 0x2AE ✓) */
 		char cfg_blmode;
-		char _gap13[16];
+		char reserved_496[16]; /* @496..511 was _gap13[16]: хвост блоба, unused */
 	} d;
 	u8 u8[512];
 };
