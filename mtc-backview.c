@@ -1,4 +1,5 @@
 #include <asm/io.h>
+#include <linux/bitops.h>		/* binaRE: clear_bit (capture_work '=') */
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
@@ -7,6 +8,8 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/time.h>		/* binaRE: do_gettimeofday (T132B_CVBS_Auto) */
+#include <linux/timer.h>		/* binaRE: del_timer_sync (capture_work '=') */
 #include <mach/io.h>
 
 #include "mtc-car.h"
@@ -33,14 +36,16 @@ struct mtc_backview_drv {
 	struct i2c_client *i2c_client;
 	struct delayed_work capture_dwork;
 	struct work_struct mirror_work;
-	char dtv_type;
-	char _gap0[2];
-	char decoder_type;
-	char mirror_image;
-	char _gap1[2];
-	char camera_working;
-	char _gap2[8];
-	char _gap3[8];
+	char dtv_type;	     /* @0xC168E45C */
+	char _gap0[1];	     /* @E45D */
+	char decoder_type;	     /* @E45E: 1=YUV/4=RGB/0=CVBS */
+	char mirror_image;	     /* @E45F */
+	char _gap1[2];	     /* @E460-61 */
+	char cvbs_auto;	     /* @E462: T132B_CVBS_Auto PAL-флаг (binaRE 0xC168E462) */
+	char _gap1b[1];	     /* @E463: гейт capture_check_work (binaRE 0xC168E463) */
+	char camera_working;	 /* @E464 (binaRE 0xC168E464) */
+	char _gap2[8];	     /* @E465-46C; [3]=E468 camera-on (capture_work) */
+	char _gap3[7];	     /* @E46D-473: sizeof struct = 192 (бинарно: след. BSS-объект @0xC168E474) */
 };
 
 static struct mtc_backview_drv mtc_backview_dev;
@@ -418,11 +423,146 @@ twdDelay(unsigned int delay)
 	msleep(delay >> 1);
 }
 
-/* TODO (naming_report2 3d): T132B_CVBS_Auto не определена в дереве — тело декомпилировано
- * (src_all/decompiled_T132B_CVBS_Auto.c, ~55 строк > порога 40 — auto-порт не применён).
- * PAL/NTSC-автоопределение T132B; флаг CVBS-auto (backview+0x7E = MEMORY[0xC168E462]) 0→1.
- * extern-прототип до ручного порта. */
-extern int T132B_CVBS_Auto(struct i2c_client *client);
+/* binaRE round3: 32-битное чтение car_status.reserved_9 (A:0xC168AC84+0x24 = 0xC168ACA8) —
+ * бинар LDR с маской 0xFF00FF00 (покрывает байты reserved_9/cam_signal/reserved_11 @36..39). */
+static inline u32 backview_status_u32(void)
+{
+	return *(u32 *)&car_struct.car_status.reserved_9;
+}
+
+/* binaRE round3 externs. vs_send/audio_add_work — под ТИПЫ БИНАРЯ (R0 используется
+ * вызывающим) — расхождение с void-определениями дерева задокументировано (mtc-keys.c L146-153);
+ * check_np/check_np_adv7181d/camera_start/stop/video_Channel/rk_get_fb/rk_direct_fb_* —
+ * определений в дереве нет. */
+extern int vs_send(int port_num, unsigned char cmd, char *cmd_data, int count); /* дерево mtc-vs.c:368: void — расхождение */
+extern int audio_add_work(unsigned int cmd1, int cmd2, int cmd3, int val1);     /* дерево mtc-audio.c:1644: void — расхождение */
+extern void backlight_on(void);  /* определения нет в дереве; бинар: арг не нужен (IDA — stale R0) */
+extern void backlight_off(void); /* то же */
+extern int check_np(struct i2c_client *client, int sig);                                   /* binaRE @0xc08392a0 */
+extern int check_np_adv7181d(struct i2c_client *client, int a2, int *changed, int cam_state); /* binaRE @0xc0839464 (4 арг по бинару) */
+extern void camera_start(void); /* binaRE: K&R — в бинаре смешанное кол-во арг (stale-регистрам) → void() */
+extern void camera_stop(void);  /* то же */
+extern void video_Channel(void);
+extern void *rk_get_fb(int a);
+extern int rk_direct_fb_open(void *fb, int a);
+extern void rk_direct_fb_show(void *fb);
+
+void capture_work(struct work_struct *work); /* binaRE @0xc083a580 — определение ниже (перед backview_probe) */
+
+/* binaRE T132B_Page_Write @0xc0838ed0 (IDA 9.3 decompiled) */
+int
+T132B_Page_Write(struct i2c_client *client, unsigned int dev_addr, int count, const u8 *data,
+			 const u8 *mask)
+{
+	int i;
+	int result;
+
+	/* binaRE: IDA `result` init = a1 (R0); если ни один i2c_write не выполнен — бинар возвращает a1 как есть
+	 * (артефакт; call-sites T132B_Init/T132B_CVBS_Auto return не используют). */
+	result = 0;
+
+	for (i = 0; i < count; i++) {
+		if (car_struct.car_status.cam_state) { /* binaRE A:0xC168ACA6 = +34 */
+			if (mask[i])
+				result = T132B_i2c_write(client, dev_addr, i, data[i]);
+			continue; /* binaRE LABEL_26 */
+		}
+		if ((((backview_status_u32() & 0xFF00FF00) == 0) ? (dev_addr == 68) : 0) &&
+		    car_struct.car_status.av_channel_flag1 && T132B_P2_S_MASK[i]) { /* binaRE A:0xC168ACA8 mask; A:0xC168ACB2 = +46 */
+			switch (car_struct.car_status.av_channel_flag1) {
+			case 5: /* cvbs_auto ? P2_S_PAL : P2_S_PALM */
+				result = T132B_i2c_write(client, 0x44, i,
+							  mtc_backview_dev.cvbs_auto ? T132B_P2_S_PAL[i] : T132B_P2_S_PALM[i]);
+				break;
+			case 6: /* cvbs_auto ? P2_S_PALN : P2_S_NTSC */
+				result = T132B_i2c_write(client, 0x44, i,
+							  mtc_backview_dev.cvbs_auto ? T132B_P2_S_PALN[i] : T132B_P2_S_NTSC[i]);
+				break;
+			case 7:
+			case 8: /* cvbs_auto ? P2_S_SECAM : P2_S_NTSC */
+				result = T132B_i2c_write(client, 0x44, i,
+							  mtc_backview_dev.cvbs_auto ? T132B_P2_S_SECAM[i] : T132B_P2_S_NTSC[i]);
+				break;
+			default: /* cvbs_auto ? P2_S_PAL : P2_S_NTSC */
+				result = T132B_i2c_write(client, 0x44, i,
+							  mtc_backview_dev.cvbs_auto ? T132B_P2_S_PAL[i] : T132B_P2_S_NTSC[i]);
+				break;
+			}
+		} else {
+			if (mask[i])
+				result = T132B_i2c_write(client, dev_addr, i, data[i]);
+		}
+	}
+
+	return result;
+}
+
+/* binaRE T132B_CVBS_Auto @0xc0839080 (IDA 9.3 decompiled; структура цикла верифицирована
+ * по disasm C0839080-C083928C: ДВА НЕЗАВИСИМЫХ счётчика sig_cnt/pal_cnt — в decompiled
+ * IDA-артефакт "LOBYTE(v4) = v8&4" в else-ветке (бинар: MOV R4,R3, R3 = v8&4 = 0)) */
+int
+T132B_CVBS_Auto(struct i2c_client *client)
+{
+	struct timeval tv;
+	unsigned int start_usec;
+	unsigned int cur_usec;
+	int sig_cnt = 0; /* binaRE R8: счётчик (v7&7)==1 */
+	int pal_cnt = 0; /* binaRE R4: счётчик (v8&4) */
+	char v7, v8;
+
+	mtc_backview_dev.cvbs_auto = 0; /* binaRE 0xC168E462 (dev+0xAE) */
+	if (car_struct.car_status.mtc_customer == MTC_CUSTOMER_YZ_RM_ZT) { /* binaRE A:0xC168AD16 = car_status+146 */
+		T132B_Page_Write(client, 0x40, 240, T132B_P0_NTSC_YZ, T132B_P0_MASK);
+		T132B_Page_Write(client, 0x44, 112, T132B_P2_NTSC_YZ, T132B_P2_MASK);
+	} else {
+		T132B_Page_Write(client, 0x40, 240, T132B_P0_NTSC, T132B_P0_MASK);
+		T132B_Page_Write(client, 0x44, 112, T132B_P2_NTSC, T132B_P2_MASK);
+	}
+
+	T132B_i2c_write(client, 0x44, 129, 11);
+	T132B_i2c_write(client, 0x44, 63, 1);
+	T132B_i2c_write(client, 0x44, 63, 0);
+	msleep(100);
+
+	do_gettimeofday(&tv);
+	start_usec = tv.tv_usec;
+	while (1) {
+		do_gettimeofday(&tv);
+		cur_usec = tv.tv_usec;
+		if (start_usec > cur_usec)
+			cur_usec += 1000000; /* binaRE: usec wrap (ADDHI #0xF4240) */
+		if (cur_usec - start_usec > 199999) /* binaRE C0839154: RSB R3,R5,R3 = (start - cur') mod 2^32 > 0x30D3F → return 1.
+		 * IDA decompiled показывает операнды местами ((cur'-start) > 0x30D3F — «здравые» семантики).
+		 * Бинар по факту: при cur' > start результат ≥ 2^32-1e6 → ВСЕГДА > 199999 → бинар возвращает 1
+		 * на первой итерации (опрос сигнала/PAL ниже — dead code в бинаре). Сохранён очевидный намеренный
+		 * таймаут 200 мс; сверено capstone по kernel.elf (file-offset = vaddr - 0xC0400000). */
+			return 1;
+		T132B_i2c_read(client, 0x44, 58, &v7);
+		T132B_i2c_read(client, 0x44, 60, &v8);
+		if ((v7 & 7) == 1) {
+			sig_cnt = (unsigned char)(sig_cnt + 1);
+			if (sig_cnt == 5)
+				return v7 & 7;
+		} else {
+			sig_cnt = 0; /* binaRE MOVNE R8,#0 */
+		}
+		if (v8 & 4) {
+			pal_cnt = (unsigned char)(pal_cnt + 1); /* binaRE C08391B4: ADD R4,R4,#1 */
+			if (pal_cnt == 4) {
+				mtc_backview_dev.cvbs_auto = 1;
+				T132B_Page_Write(client, 0x40, 240, T132B_P0_PAL, T132B_P0_MASK);
+				T132B_Page_Write(client, 0x44, 112, T132B_P2_PAL, T132B_P2_MASK);
+				T132B_i2c_write(client, 0x44, 63, 1);
+				T132B_i2c_write(client, 0x44, 63, 0);
+				msleep(200);
+				return 2;
+			}
+		} else {
+			pal_cnt = 0; /* binaRE C08391D0: MOV R4,R3 (R3 = v8&4 = 0) */
+		}
+		msleep(10);
+	}
+}
 
 /* decompiled */
 int
@@ -568,6 +708,599 @@ capture_add_work(unsigned int cmd1, int cmd2, unsigned int delay, int flush)
 	if (flush) {
 		flush_workqueue(mtc_backview_dev.cap_wq);
 	}
+}
+
+/* binaRE capture_check_work @0xc0839528 (IDA 9.3 decompiled) */
+static void
+capture_check_work(struct work_struct *work)
+{
+	int changed = 0; /* binaRE v9: changed-флаг check_np_adv7181d */
+	char buf2[2];    /* binaRE v10/v11: {sig1, v11} */
+	int sig1;
+	int v11;
+	int r;
+
+	(void)work; /* binaRE: IDA потеряла аргументы; workqueue-контракт — (struct work_struct *) */
+
+	if (mtc_backview_dev._gap1b[0]) { /* @0xC168E463: бинар читает БАЙТ значения; [1]-массив без индекса decay-ится на адрес (гейт всегда true — gcc -Waddress) */
+		if (mtc_backview_dev.decoder_type == 4) { /* @0xC168E45E */
+			buf2[0] = 1;
+			buf2[1] = 1;
+			vs_send(2, 158, buf2, 2);
+			if (changed)
+				mtc_backview_dev.camera_working = 1; /* binaRE LABEL_15: здесь changed == всегда 0 */
+			goto tail;
+		}
+
+		if (car_struct.car_status.reserved_19) { /* binaRE A:0xC168ACE1 = +93 */
+			if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+				if (car_struct.car_status.video_mode != 3 &&
+				    car_struct.car_status.video_mode != 5 &&
+				    car_struct.car_status.video_mode != 7)
+					goto tail; /* binaRE LABEL_17: tail без vs_send */
+			}
+			r = car_struct.car_status.sta_video_signal;
+			if (r != 4) {
+				r = check_np_adv7181d(mtc_backview_dev.i2c_client, 1, &changed,
+						      car_struct.car_status.cam_state);
+				car_struct.car_status.sta_video_signal = r;
+			}
+			sig1 = (r != 0) ? 1 : 0; /* binaRE v10 = v7 != 0 */
+			if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+				if (car_struct.car_status.video_mode == 3) {
+					v11 = 2;
+					goto send;
+				}
+				if (car_struct.car_status.video_mode == 5) {
+					v11 = 3;
+				} else {
+					v11 = car_struct.car_status.cam_state; /* binaRE v0 (re-read после check_np) */
+					if (car_struct.car_status.video_mode == 7)
+						v11 = 4;
+				}
+				goto send;
+			}
+		} else {
+			if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+				if (car_struct.car_status.video_mode != 3 &&
+				    car_struct.car_status.video_mode != 5 &&
+				    car_struct.car_status.video_mode != 7)
+					goto tail; /* binaRE LABEL_17 */
+			}
+			r = check_np(mtc_backview_dev.i2c_client, car_struct.car_status.sta_video_signal);
+			car_struct.car_status.sta_video_signal = r;
+			sig1 = r ? 1 : r; /* binaRE v3 = v2; if (v2) v3 = 1 */
+			if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+				if (car_struct.car_status.video_mode == 3) {
+					v11 = 2;
+					goto send;
+				}
+				v11 = car_struct.car_status.cam_state; /* binaRE LOBYTE(v0)=0 → здесь cam_state == 0 */
+				if (car_struct.car_status.video_mode == 5) {
+					v11 = 3;
+				} else if (car_struct.car_status.video_mode == 7) {
+					v11 = 4;
+				}
+				goto send;
+			}
+		}
+
+		v11 = 1; /* binaRE: v11 = 1 на входе обеих gate-веток (fallback) */
+send:
+		buf2[0] = (char)sig1;
+		buf2[1] = (char)v11;
+		vs_send(2, 158, buf2, 2);
+		if (changed)
+			mtc_backview_dev.camera_working = 1; /* binaRE LABEL_15 */
+tail:
+		queue_delayed_work(mtc_backview_dev.cap_wq, &mtc_backview_dev.capture_dwork,
+				   msecs_to_jiffies(200)); /* binaRE: -1050090464 = &capture_dwork */
+		return;
+	}
+}
+
+/* binaRE ADV7181D_Init @0xc083972c (IDA 9.3 decompiled) */
+int
+ADV7181D_Init(struct i2c_client *client, int type)
+{
+	char v4;
+
+	if (type == 2) {
+		T132B_Write(client, &ADV7181D_YUV_BACK);
+		mtc_backview_dev.decoder_type = 1; /* binaRE A:0xC168E45E */
+		msleep(100);
+		return 4;
+	} else if (type == 3) {
+		T132B_Write(client, &ADV7181D_RGB_HACT); /* binaRE: -1063213492 = 0xC0A0A64C */
+		mtc_backview_dev.decoder_type = 4;
+		msleep(100);
+		return 4;
+	} else if (type) {
+		if (car_struct.car_status.decoder_state) { /* binaRE A:0xC168ACB6 = +50 */
+			T132B_Write(client, &ADV7181D_YUV); /* binaRE: -1063213140 = 0xC0A0A7AC */
+			mtc_backview_dev.decoder_type = 1;
+		} else {
+			T132B_Write(client, &ADV7181D_RGB); /* binaRE: -1063213316 = 0xC0A0A6FC */
+			mtc_backview_dev.decoder_type = 0;
+		}
+		msleep(100);
+		return 4;
+	} else {
+		T132B_Write(client, &ADV7181D_CVBS); /* binaRE: -1063213040 = 0xC0A0A810 */
+		v4 = car_struct.car_status.cam_state
+			 ? car_struct.config_data.d.reserved_204 /* binaRE A:0xC168AE0C = cfg+204 */
+			 : car_struct.car_status.cam_state;
+		T132B_i2c_write(client, 0x42, 10, v4);
+		msleep(450);
+		return check_np_adv7181d(client, 0, 0, 0); /* binaRE: 4-й арг = IDA-garbage (неиниц. R3) → 0 */
+	}
+}
+
+/* binaRE capture_work @0xc083a580 (IDA 9.3 decompiled, 603L — полная транскрипция без сокращений;
+ * ширины строров и vs_send-литералы верифицированы по disasm:
+ * case 'B' C083A6C8-F4, '<' C083AB74-BD0, '8' C083AC78-AD40, '9'/':'/';' C083ACxx/B1xx) */
+void
+capture_work(struct work_struct *work)
+{
+	struct mtc_work *c_work = (struct mtc_work *)((char *)work - 20); /* binaRE: a1-20 (dwork @+20, mtc_shared.h; container_of-идиом — cf. mtc-audio.c:1349) */
+	void *fb; /* binaRE: IDA «int» — 32-bit-артефакт (int == pointer на ARM); rk_get_fb→void*, rk_direct_fb_open(void*,int) */
+	int cmd2;
+
+	mutex_lock(&mtc_backview_dev.back_cmd_lock); /* binaRE: -1050090572 = &mtc_backview_dev.back_cmd_lock */
+
+	switch (c_work->cmd1) {
+	case '.': /* 46 */
+		mtc_backview_dev._gap2[3] = 1; /* binaRE A:0xC168E468 — camera-on флаг */
+		if (car_struct.car_status.video_mode) { /* A:0xC168ACB3 = +47 */
+			if (car_struct.car_status.reserved_13) { /* A:0xC168ACB4 = +48 */
+				car_struct.car_status.reserved_13 = 0;
+				if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+					fb = rk_get_fb(1);
+					rk_direct_fb_open(fb, 0);
+					camera_stop(); /* binaRE: K&R — stale-арга (v21, v22, v23) */
+				}
+			}
+		}
+		cmd2 = c_work->cmd2;
+		if (cmd2 != 2 && cmd2 != 5 && cmd2 != 3 && cmd2 != 7 && cmd2 != 0xFF) {
+			car_struct.car_status.video_mode = 0;
+			goto LABEL_36;
+		}
+		car_struct.car_status.video_mode = cmd2;
+		video_Channel();
+		goto LABEL_13;
+
+	case '/': /* 47 */
+		if (mtc_backview_dev._gap2[3])
+			goto LABEL_36;
+		goto LABEL_13;
+LABEL_36:
+		video_Channel();
+		goto LABEL_13;
+
+	case '0': /* 48 */
+		if (car_struct.car_status.video_mode == c_work->cmd2 && !car_struct.car_status.reserved_13) {
+			car_struct.car_status.reserved_13 = 1;
+			if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+				camera_start(); /* binaRE: K&R — stale-арга (v3, video_mode, 0) */
+				fb = rk_get_fb(1);
+				rk_direct_fb_open(fb, 1);
+			}
+		}
+		goto LABEL_13;
+
+	case '1': /* 49 */
+		if (car_struct.car_status.video_mode == c_work->cmd2) {
+			if (car_struct.car_status.reserved_13) {
+				car_struct.car_status.reserved_13 = 0;
+				if (!car_struct.car_status.cam_state && !(backview_status_u32() & 0xFF00FF00)) {
+					fb = rk_get_fb(1);
+					rk_direct_fb_open(fb, 0);
+					camera_stop(); /* binaRE: K&R — stale-арга */
+				}
+			}
+		}
+		goto LABEL_13;
+
+	case '2': { /* 50: T132B UV-калибровка */
+	int scan_u, pos_u, best_u, u_final;
+	int scan_v, pos_v, best_v, v_final;
+	int sync_to;
+
+	if (car_struct.car_status.video_mode != 2 || car_struct.car_status.reserved_19 ||
+	    car_struct.car_status.decoder_state != 1) { /* A:0xC168ACE1 = +93; A:0xC168ACB6 = +50 */
+		goto LABEL_13;
+	}
+	cmd2 = c_work->cmd2;
+	if (cmd2) {
+		if (cmd2 == 1) {
+			car_struct.config_data.d.uv_off_u = car_struct.car_status.u_value - 112; /* A:0xC168AF2D = cfg+493 */
+			car_struct.config_data.d.uv_off_v = car_struct.car_status.v_value + 124; /* A:0xC168AF2E = cfg+494 */
+			arm_send_multi(38153, 2, (unsigned char *)&car_struct.config_data.d.uv_off_u); /* binaRE: -1050104019 = 0xC168AF2D = &cfg.uv_off_u */
+		} else if (cmd2 == 2) {
+			T132B_UV_Set(); /* binaRE: stale-арг v3 */
+		}
+	} else {
+		/* binaRE: CAL — автокалибровка UV (регистрам 64/66; схождение |value-2048|) */
+		printk("CAL Start\n");
+		twdDelay(100); /* msleep(delay>>1) */
+		IC_WritByte(64, 38, 132);
+		IC_WritByte(66, 202, 3);
+		IC_WritByte(66, 203, 0);
+		IC_WritByte(66, 204, 240);
+		IC_WritByte(66, 206, 16);
+		IC_WritByte(64, 10, 96);
+		IC_WritByte(64, 12, 96);
+		IC_WritByte(64, 6, 0);
+		IC_WritByte(66, 192, 224);
+		IC_WritByte(66, 192, 225);
+
+		/* поиск U: binaRE v104=scan(96..144 step 4), v105=pos, v106=best-значение (0x7FFF init),
+		 * v107=timeout синка (24 × twdDelay(50)); u_final = v58 (в этой ветке cmd2==0 → 0) */
+		scan_u = 96;
+		pos_u = 96;
+		best_u = 0x7FFF;
+		sync_to = 24;
+		u_final = 0; /* binaRE: IDA v58 здесь == cmd2 == 0 */
+		while (1) {
+		int byte_lo, byte_hi, dev, val, cur_dev;
+
+		while (IC_ReadByte(66, 192) != 227) {
+			twdDelay(50);
+			if (!--sync_to)
+				goto LABEL_138; /* binaRE: timeout синка */
+		}
+		byte_lo = IC_ReadByte(66, 198);
+		byte_hi = IC_ReadByte(66, 199);
+		dev = best_u - 2048;
+		if (dev < 0)
+			dev = 2048 - best_u;
+		val = byte_lo | (byte_hi << 8);
+		cur_dev = val - 2048;
+		if (cur_dev < 0)
+			cur_dev = 2048 - val;
+		if (cur_dev < dev) {
+			u_final = pos_u;
+			best_u = val;
+			pos_u += 4;
+			printk("C1\n", 12); /* binaRE: extra stale-арг */
+			IC_WritByte(64, 12, (unsigned char)pos_u);
+		} else {
+			pos_u += 4;
+			IC_WritByte(64, 12, (unsigned char)pos_u);
+		}
+		scan_u += 4;
+		sync_to = 24;
+		if (scan_u == 144)
+			break;
+		IC_WritByte(66, 192, 224);
+		IC_WritByte(66, 192, 225);
+		}
+		IC_WritByte(66, 192, 224);
+
+		/* поиск V (та же схема: регистрам 66/200-201, запись reg 64/10, "C2\n") */
+		scan_v = 96;
+		v_final = 0; /* binaRE v116 — явный init 0 */
+		IC_WritByte(66, 192, 225);
+		pos_v = 96;
+		best_v = 0x7FFF;
+		while (1) {
+		int byte_lo, byte_hi, dev, val, cur_dev;
+
+		while (IC_ReadByte(66, 192) != 227) {
+			twdDelay(50);
+			if (!--sync_to)
+				goto LABEL_138;
+		}
+		byte_lo = IC_ReadByte(66, 200);
+		byte_hi = IC_ReadByte(66, 201);
+		dev = best_v - 2048;
+		if (dev < 0)
+			dev = 2048 - best_v;
+		val = byte_lo | (byte_hi << 8);
+		cur_dev = val - 2048;
+		if (cur_dev < 0)
+			cur_dev = 2048 - val;
+		if (cur_dev < dev) {
+			v_final = pos_v;
+			best_v = val;
+			pos_v += 4;
+			printk("C2\n", 10); /* binaRE: extra stale-арг */
+			IC_WritByte(64, 10, (unsigned char)pos_v);
+		} else {
+			pos_v += 4;
+			IC_WritByte(64, 10, (unsigned char)pos_v);
+		}
+		scan_v += 4;
+		sync_to = 24;
+		if (scan_v == 144)
+			break;
+		IC_WritByte(66, 192, 224);
+		IC_WritByte(66, 192, 225);
+		}
+
+		printk("UV cal %02x %02x\n", u_final, v_final);
+		car_struct.car_status.u_value = u_final; /* A:0xC168ACE6 = +98 */
+		car_struct.car_status.v_value = v_final; /* A:0xC168ACE7 = +99 */
+		IC_WritByte(64, 12, (unsigned char)u_final);
+		IC_WritByte(64, 10, (unsigned char)v_final);
+		IC_WritByte(64, 38, 4);
+		car_struct.car_status.uv_cal = 3; /* A:0xC168ACE8 = +100 */
+	}
+	goto LABEL_13;
+	}
+
+	case '3': /* 51 */
+		if (car_struct.car_status.reserved_19 == 1)
+			T132B_i2c_write(mtc_backview_dev.i2c_client, 0x42, 10, (unsigned char)c_work->cmd2); /* A:0xC168E41C = i2c_client */
+		goto LABEL_13;
+
+	case '4': /* 52 */
+		if (car_struct.car_status.reserved_11) { /* A:0xC168ACAB = +39 */
+			if (!car_struct.car_status.cam_state) {
+			int cam_sig = car_struct.car_status.cam_signal; /* binaRE v32; A:0xC168ACA9 = +37 */
+			if (!car_struct.car_status.cam_signal && car_struct.car_status.sta_view != c_work->cmd2) { /* A:0xC168ACAC = +40 */
+				car_struct.car_status.sta_view = c_work->cmd2;
+				msleep(10);
+LABEL_50:
+				fb = rk_get_fb(1);
+				rk_direct_fb_open(fb, cam_sig);
+				camera_stop(); /* binaRE: K&R — stale-арга */
+				goto LABEL_51;
+			}
+		}
+		} else {
+		car_struct.car_status.reserved_11 = 1;
+		car_struct.car_status.sta_view = c_work->cmd2;
+		if (!car_struct.car_status.cam_state) {
+		int cam_sig = car_struct.car_status.cam_signal;
+		if (!cam_sig) {
+			if (car_struct.car_status.reserved_13)
+				goto LABEL_50;
+LABEL_51:
+			video_Channel();
+LABEL_52:
+			msleep(20);
+			camera_start(); /* binaRE: K&R — stale-арга (v37, v38, v39) */
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, 1);
+		}
+		}
+		}
+		goto LABEL_13;
+
+	case '5': /* 53 */
+		if (!car_struct.car_status.reserved_11)
+			goto LABEL_13;
+		car_struct.car_status.reserved_11 = 0;
+		if (car_struct.car_status.cam_state || car_struct.car_status.cam_signal)
+			goto LABEL_13;
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 0);
+		camera_stop(); /* binaRE: K&R — stale-арга */
+		video_Channel();
+		goto LABEL_57;
+
+	case '6': /* 54 */
+		if (!car_struct.car_status.cam_state && !car_struct.car_status.cam_signal) {
+			car_struct.car_status.cam_signal = 1; /* A:0xC168ACA9 */
+			if (car_struct.car_status.reserved_11 || car_struct.car_status.reserved_13) {
+				fb = rk_get_fb(1);
+				rk_direct_fb_open(fb, 0);
+				camera_stop(); /* binaRE: K&R — stale-арга */
+			}
+			video_Channel();
+			msleep(20);
+			camera_start(); /* binaRE: K&R — stale-арга */
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, 1);
+			fb = rk_get_fb(0);
+			rk_direct_fb_open(fb, 0);
+		}
+		goto LABEL_13;
+
+	case '7': { /* 55 */
+	int cam_state_old = car_struct.car_status.cam_state; /* binaRE v26 */
+	if (car_struct.car_status.cam_state || !car_struct.car_status.cam_signal)
+		goto LABEL_13;
+	car_struct.car_status.cam_signal = car_struct.car_status.cam_state; /* A:0xC168ACA9 */
+	fb = rk_get_fb(cam_state_old);
+	rk_direct_fb_open(fb, 1);
+	fb = rk_get_fb(1);
+	rk_direct_fb_open(fb, cam_state_old);
+	camera_stop(); /* binaRE: K&R — stale-арга */
+	video_Channel();
+	if (car_struct.car_status.reserved_11)
+		goto LABEL_52;
+	}
+LABEL_57:
+	if (car_struct.car_status.video_mode && car_struct.car_status.reserved_13)
+		goto LABEL_52;
+	goto LABEL_13;
+
+	case '8': /* 56 */
+	if (car_struct.car_status.cam_state &&
+	    (!car_struct.car_status.reserved_8 || car_struct.car_status.reserved_9 != 1)) { /* binaRE: byte LDRB/STRB по disasm (C083AD50-68 / C083AC9C) */
+		goto LABEL_13;
+	}
+	{
+	int was_off = (car_struct.car_status.cam_state == 0);
+	int v;
+
+	car_struct.car_status.reserved_9 = 0; /* binaRE: STRB [base+0x24] — byte-store (disasm C083AC9C), НЕ u32 */
+	car_struct.car_status.cam_state = 1;   /* A:0xC168ACA6 */
+	car_struct.car_status.cam_signal = 0;  /* A:0xC168ACA9 */
+	v = car_struct.car_status.call_active ? was_off : 0; /* A:0xC168AC87 = +3 */
+	car_struct.car_status.radar_val = c_work->cmd2; /* A:0xC168ACB8 = +52 */
+	if (v) {
+		vs_send(2, (car_struct.car_status.mcu_cmd_state == 5) ? 0x8C : 0xA6, NULL, 0); /* binaRE: IDA -116/-90 → u8 0x8C/0xA6; A:0xC168AD20 = +156 */
+		car_struct.car_status.reserved_10 = 1; /* binaRE A:0xC168ACAA = +38 (НЕ key_mode: key_mode @42 = 0xC168ACAE — записей в key_mode в capture_work НЕТ) */
+		printk("--mtc MSG_BACKVIEW_START\n");
+	}
+	if (car_struct.car_status.reserved_11 || car_struct.car_status.reserved_13) {
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 0);
+		camera_stop(); /* binaRE: K&R — stale-арга */
+		car_struct.car_status.reserved_8 = 0; /* A:0xC168ACA7 */
+		video_Channel();
+		msleep(20);
+		camera_start(); /* binaRE: K&R — stale-арга */
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 1);
+		if (!was_off)
+			goto LABEL_13;
+	} else {
+		if (!was_off) {
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, 0); /* binaRE: R6 = was_off (в этой ветке == 0) */
+			camera_stop(); /* binaRE: K&R — stale-арга */
+			car_struct.car_status.reserved_8 = 0; /* binaRE: STRB [base+0x23] R7 (=was_off=0) */
+			video_Channel();
+			goto LABEL_52;
+		}
+		car_struct.car_status.reserved_8 = 0;
+		video_Channel();
+		msleep(20);
+		camera_start(); /* binaRE: K&R — stale-арга */
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 1);
+	}
+	if (!car_struct.car_status.call_active || car_struct.car_status.radar_val) {
+		fb = rk_get_fb(0);
+		rk_direct_fb_open(fb, 0);
+	}
+	backlight_on(); /* binaRE: stale-арг v90 */
+	}
+	goto LABEL_92;
+
+	case '9': /* 57 */
+		if (!car_struct.car_status.cam_state)
+			goto LABEL_13;
+		if (car_struct.car_status.call_active) { /* A:0xC168AC87 */
+			vs_send(2, (car_struct.car_status.mcu_cmd_state == 5) ? 0x8C : 0xA6, NULL, 0); /* binaRE: IDA -116/-90 → u8 0x8C/0xA6 */
+			car_struct.car_status.reserved_10 = 1; /* binaRE A:0xC168ACAA = +38 (НЕ key_mode) */
+			printk("--mtc MSG_BACKVIEW_START\n");
+		}
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 0);
+		camera_stop(); /* binaRE: K&R — stale-арга */
+		goto LABEL_51;
+
+	case ':': /* 58 */
+		if (car_struct.car_status.cam_state) {
+			car_struct.car_status.radar_val = c_work->cmd2; /* A:0xC168ACB8 */
+			vs_send(2, 0x8C, NULL, 0); /* binaRE: 140 (IDA уже расшифровала) */
+			car_struct.car_status.reserved_10 = 1; /* binaRE A:0xC168ACAA = +38 (НЕ key_mode) */
+		}
+		goto LABEL_13;
+
+	case ';': /* 59 */
+		if (!car_struct.car_status.cam_state)
+			goto LABEL_13;
+		car_struct.car_status.reserved_8 = 0; /* A:0xC168ACA7 */
+		if (!car_struct.car_status.power_refcnt) { /* A:0xC168AC85 = +1 */
+			backlight_off(); /* binaRE: stale-арг v3 */
+		}
+		car_struct.car_status.cam_state = 0; /* A:0xC168ACA6 */
+		if (car_struct.car_status.call_active) {
+			printk("--mtc MSG_BACKVIEW_STOP\n");
+			vs_send(2, 0x8D, NULL, 0); /* binaRE: 141 */
+			car_struct.car_status.reserved_10 = 0; /* binaRE A:0xC168ACAA = +38 (НЕ key_mode) */
+		}
+		fb = rk_get_fb(0);
+		rk_direct_fb_open(fb, 1);
+		fb = rk_get_fb(1);
+		rk_direct_fb_open(fb, 0);
+		camera_stop(); /* binaRE: K&R — stale-арга */
+		video_Channel();
+		if (car_struct.car_status.reserved_11 ||
+		    (car_struct.car_status.video_mode && car_struct.car_status.reserved_13)) {
+			msleep(20);
+			camera_start(); /* binaRE: K&R — stale-арга */
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, 1);
+		}
+		goto LABEL_92;
+
+	case '<': /* 60 */
+		if (car_struct.car_status.cam_state) {
+		int was8 = car_struct.car_status.reserved_8; /* binaRE v69; A:0xC168ACA7 */
+		if (!was8) {
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, was8);
+			camera_stop(); /* binaRE: K&R — stale-арга */
+			car_struct.car_status.reserved_9 = 1; /* binaRE: STRB [base+0x24] (disasm C083ABA8) — byte-store */
+			car_struct.car_status.reserved_8 = 1;
+			video_Channel();
+			msleep(20);
+			camera_start(); /* binaRE: K&R — stale-арга */
+			fb = rk_get_fb(1);
+			rk_direct_fb_open(fb, 1);
+		}
+		}
+		goto LABEL_13;
+
+	case '=': /* 61 */
+		if (car_struct.car_status.reserved_13 && !car_struct.car_status.cam_state &&
+		    !(backview_status_u32() & 0xFF00FF00)) {
+			if ((car_struct.car_status.video_mode == 5 || car_struct.car_status.video_mode == 3 ||
+			     car_struct.car_status.video_mode == 7) && !car_struct.car_status.reserved_19) {
+				if (del_timer_sync(&mtc_backview_dev.capture_dwork.timer)) /* binaRE: -1050090448 = &capture_dwork.timer */
+					clear_bit(0, (unsigned long *)&mtc_backview_dev.capture_dwork); /* binaRE: -1050090464 = &capture_dwork (бинар передаёт delayed_work* — тип не совпадает с прототипом clear_bit; каст) */
+				check_np(mtc_backview_dev.i2c_client, 0);
+				queue_delayed_work(mtc_backview_dev.cap_wq, &mtc_backview_dev.capture_dwork,
+						   msecs_to_jiffies(200));
+			}
+		}
+		goto LABEL_13;
+
+	case '@': /* 64 */
+		if (car_struct.car_status.cam_state) {
+			car_struct.car_status.radar_val = 0; /* A:0xC168ACB8 */
+			fb = rk_get_fb(0);
+			rk_direct_fb_open(fb, 1);
+			rk_direct_fb_show(rk_get_fb(0));
+		}
+		goto LABEL_13;
+
+	case 'B': /* 66 */
+		if (car_struct.car_status.cam_state) {
+		int was, v11;
+
+		backlight_off(); /* binaRE: stale-арг v3 */
+		msleep(10);
+		was = (car_struct.car_status.reserved_9 != 0); /* binaRE: LDRB [base+0x24] */
+		car_struct.car_status.reserved_9 = (car_struct.car_status.reserved_9 == 0); /* toggle; binaRE: RSBS/MOVCC-идиом, STRB */
+		v11 = car_struct.car_status.reserved_9;
+		if (car_struct.car_status.reserved_9)
+			v11 = 0; /* binaRE: SUBS/MOVNE-идиом → count в vs_send всегда 0 (disasm C083A6D4-D8) */
+		vs_send(2, was ? 0x8C : 0x9D, NULL, v11); /* binaRE: IDA -116/-99 → u8 0x8C/0x9D */
+		car_struct.car_status.reserved_10 = 1; /* binaRE A:0xC168ACAA = +38 (НЕ key_mode) */
+		camera_stop(); /* binaRE: K&R — stale-арга (v13..v15) */
+		video_Channel();
+		msleep(20);
+		camera_start(); /* binaRE: K&R — stale-арга */
+		backlight_on(); /* binaRE: stale-арг v19 */
+		}
+		goto LABEL_13;
+
+	default:
+		goto LABEL_13;
+	}
+
+LABEL_138: /* binaRE: CAL sync timeout (24 × twdDelay(50), reg 66/192 так и не стал 0xE3) */
+	car_struct.car_status.uv_cal = 2; /* A:0xC168ACE8 */
+	T132B_UV_Set(); /* binaRE: stale-арг v108 */
+	goto LABEL_13;
+
+LABEL_92:
+	audio_add_work(17, 0, 0, 0);
+	goto LABEL_13;
+
+LABEL_13: /* binaRE common exit: kzfree(c_work); return mutex_unlock(&back_cmd_lock) */
+	kfree(c_work); /* binaRE "kzfree" (IDA) = kfree */
+	mutex_unlock(&mtc_backview_dev.back_cmd_lock); /* binaRE: return mutex_unlock(-1050090572) */
+	return;
 }
 
 static int

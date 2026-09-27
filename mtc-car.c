@@ -17,6 +17,48 @@
 
 #include "mtc-car.h"
 
+/* binaRE recon round3: локальные объявления (определения — блок "binaRE recon round3"
+ * перед car_ioctl). Адреса — 3188_kallsyms (tr -d '\r'), не из decompiled-заголовков. */
+
+/* binaRE: состояние колёса (adc_wheel_callback, R2; контекст регистрации 0xC09BCF38) —
+ * поля по оффсетам из disassembly. */
+struct mtc_wheel_state {
+	u32 pad0;		/* @0 */
+	u32 key_repeat_cnt;	/* @4 — дебаунс/повтор (ставится 40) */
+	u8 pad1[84];	/* @5..87 */
+	u32 *adc_ref_up;	/* @88 — указатель на обученное "up"-значение ADC */
+	u32 *adc_ref_dn;	/* @92 — указатель на обученное "down"-значение ADC */
+	u8 wheel_state;	/* @96 — старший ниббл: текущее направление, младший: предыдущее */
+	u8 wheel_last_key;	/* @97 — 0x40 / 0x41('A') / 0x42('B') */
+	u8 pad2[158];	/* @98..255 */
+	u32 adc_up_val;	/* @256 */
+	u32 adc_dn_val;	/* @260 */
+};
+
+/* binaRE 0xC083B8A0 (add_wheel_work.constprop.9, 116B) — вне списка 17 функций этого раунда;
+ * прототип для вызовов из adc_wheel_callback. */
+extern int add_wheel_work(int key, struct mtc_wheel_state *ws);
+
+static void power_soft_off(void);
+static int check_customer(const char *name);
+static int get_token_int(char **pos);
+static int process_mcu_command(unsigned int cmd);
+static int mtcWipeCheck(void);
+static char *mtc_get_pin_map(int pin_id);
+static int mtc_init_test_io(void);
+static int mtc_test_port2(unsigned char *pa, unsigned char *pb);
+static int mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc);
+static char *mtc_test_port(void);
+static void mtc_clear_screen(int color);
+static char *mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color);
+static char *mtc_debug_put_string(const char *s, int len, int x0, int y,
+				  int fg_color, int bg_color);
+static int adc_wheel_callback(const u32 *adc_cur, struct mtc_wheel_state *ws,
+			      int adc_val);
+static void stw_range_check(void);
+static int iomux_set(unsigned int mode);
+static int mtc_get_screen_width(void);
+
 static struct mtc_car_struct mtc_car_struct;
 
 static struct mtc_car_status *car_status = &mtc_car_struct.car_status;
@@ -1045,6 +1087,1212 @@ car_work(struct work_struct *work)
 	mutex_unlock(&mtc_car_struct.car_cmd_lock);
 }
 
+
+/* ============================================================
+ * binaRE recon round3: 17 car-misc-функций mtc-модуля.
+ * Адреса — 3188_kallsyms (tr -d '\r'); код — src_all/decompiled_*,
+ * уточнения — disassembly_full.txt (точечные окна).
+ * ============================================================ */
+
+/* --- статические глобалы (честные плейсхолдеры; константы — по binaRE) --- */
+
+/* binaRE 0xC0A06F48 (kernel.elf, file offset 0x606F48): шрифт 8x16, 80 глифов;
+ * байты извлечены из kernel.elf. */
+static const unsigned char font_8x16[1280] = {
+  0xAC, 0x05, 0x00, 0x00, 0x47, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x4C, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x4D, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x4E, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x49, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x4A, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x4B, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x52, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x53, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x54, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x39, 0x02, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x3A, 0x02, 0x00, 0x00, 0x14, 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x3B, 0x02, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x0A, 0x03, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xAC, 0x05, 0x00, 0x00, 0x0B, 0x03, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x0D, 0x05, 0x00, 0x00, 0x01, 0x32, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x20, 0x10, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x6A, 0x04, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x6A, 0x04, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xF2, 0x04, 0x00, 0x00, 0x18, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xF2, 0x04, 0x00, 0x00, 0x23, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xB4, 0x04, 0x00, 0x00, 0x61, 0xDE, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xB4, 0x04, 0x00, 0x00, 0x64, 0xDE, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xB4, 0x04, 0x00, 0x00, 0xA1, 0xBC, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0xB4, 0x04, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x79, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x79, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x06, 0x20, 0x00, 0x00, 0x18, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x18, 0x05, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x16, 0x0C, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x16, 0x0C, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x16, 0x0C, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x7D, 0x04, 0x00, 0x00, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x26, 0x09, 0x00, 0x00, 0x33, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x58, 0x04, 0x00, 0x00, 0x87, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+  0x41, 0x12, 0x00, 0x00, 0x67, 0xF7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD8, 0x00, 0xD5,
+  0xAF, 0x9C, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD4,
+  0xAE, 0xA7, 0x98, 0xA1, 0x70, 0x00, 0x00, 0x00, 0x9A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB7, 0xB8, 0xB9,
+  0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xC1, 0xC2, 0x00, 0x00, 0x00, 0x00, 0xAF, 0x01, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x13, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x0C, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x17, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x01, 0xC1, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x04, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x14, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x1F, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x0A, 0xC3, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x12, 0xC5, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x15, 0xC2, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x94, 0xC2, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x0A, 0xC2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x11, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x19, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x83, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x86, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x95, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x03, 0xCA, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x99, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x9B, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x98, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x9C, 0xC2, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x93, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x18, 0xC2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+  0x87, 0xC2, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
+};
+
+/* binaRE .bss: экран/фреймбуфер (mtc_get_screen_width / mtc_debug_putc / mtc_clear_screen) */
+static unsigned int mtc_fb_width;	/* 0xC0D1DE28 — ширина экрана (800/1024) */
+static u32 *mtc_fb_buf;			/* 0xC0D1DE30 — framebuffer (ARGB u32) */
+
+/* binaRE 0xC0BC9B20: указатель на pin-таблицу (16B-записи: [0]=pin id, 0=терминатор;
+ * [4]=gpio; [8]=iomux-режим; [14]=флаг "проверено"). Начальное значение из .data =
+ * 0xC09BC034 — НЕ декодируется как таблица (kernel.elf); runtime-значение выставляется
+ * в другом месте — честный плейсхолдер NULL. binaRE NULL не проверяет (нет call-sites). */
+static unsigned char *pin_map_tbl = NULL;
+
+/* binaRE 0xC0BCB25C..0xC0BCB26C (.data): screen-info слова [0xC0B0462C, 1082, 536, 0x10550].
+ * Роль не определена из бинара в этом раунде — честные плейсхолдеры с начальными
+ * константами из kernel.elf. */
+static u32 screen_info_1 = 1082;	/* 0xC0BCB260 */
+static u32 screen_info_2 = 536;		/* 0xC0BCB264 */
+
+/* binaRE 0xC0BC9F54: таблица test-последовательности (mtc_test_port): записи 3B
+ * {a, b, c}, a == 0 — терминатор. Байты извлечены из kernel.elf (реальные). */
+static const unsigned char test_seq_tbl[] = {
+1, 74, 107, 3, 7, 0, 5, 9, 0, 123, 131, 0, 125, 127, 0, 133, 141, 0, 139, 143, 0, 147, 153, 0, 149, 155, 0, 76, 80, 0, 78, 82, 0, 84, 88, 0, 86, 90, 0, 92, 106, 0, 102, 108, 0, 112, 118, 0, 116, 120, 0, 122, 130, 0, 126, 132, 0, 134, 138, 0, 136, 140, 0, 144, 150, 0, 148, 152, 0, 154, 160, 0, 158, 164, 0, 166, 170, 0, 168, 172, 0, 174, 178, 0, 176, 180, 0, 0
+};
+
+/* binaRE 0xC168E474: состояние wheel/steer-study (поля по оффсетам из disassembly) */
+struct mtc_wheel_study {
+	u32 pad0;	/* @0 */
+	u32 adc_enabled;	/* @4 (0xC168E478) — гейт ветки "study" в adc_wheel_callback */
+	u8 pad1[7];	/* @5..11 */
+	u8 adc_type;	/* @12 (0xC168E480) — вариант ADC-порогов (==1 — альтернативные) */
+	u8 dir_inv;	/* @13 (0xC168E481) — инверсия направления */
+	u8 pad2[99];	/* @14..112 */
+	u8 stw_min_a;	/* @113 (0xC168E4E5) — мин. разность stw-таблицы A (stw_range_check) */
+	u8 stw_min_b;	/* @114 (0xC168E4E6) — мин. разность stw-таблицы C */
+};
+static struct mtc_wheel_study wheel_study;
+
+/* --- 1. power_soft_off --- */
+/* binaRE 0xC082D1F0 (power_soft_off, 120B) */
+static void
+power_soft_off(void)
+{
+	car_status->ch_status = 0;		/* binaRE 0xC168ACE5 */
+	car_status->power_refcnt = 0;		/* binaRE 0xC168AC85 */
+	car_status->power_on = 0;			/* binaRE 0xC168ACDC */
+	if (car_status->call_active) {		/* binaRE 0xC168AC87 */
+		capture_add_work(46, 255);
+		audio_add_work(21);
+	} else {
+		capture_add_work(47);
+	}
+	backlight_off();
+}
+
+/* --- 2. check_customer --- */
+/* binaRE 0xC082E734 (check_customer, 200B): сравнение строки customer
+ * (car_status+72, binaRE 0xC168ACCC — поле в раунде 2 названо mcuver1) с name:
+ * полное совпадение или префикс с допуском на 1 лишний символ, если он цифра.
+ * Специальный кейс: "KLD" совпадает с "KLDY". */
+static int
+check_customer(const char *name)
+{
+	const char *cs = car_status->mcuver1;
+	int cs_len = strlen(cs);
+	int n_len = strlen(name);
+
+	if (cs_len < n_len)
+		return 0;
+	if (cs_len == n_len)
+		return strcmp(cs, name) == 0;
+	if (cs_len != n_len + 1)
+		return 0;
+	if (!strcmp("KLD", name) && !strcmp("KLDY", cs))
+		return 1;
+	if (strncmp(cs, name, n_len))
+		return 0;
+	if (cs[n_len] > '/')
+		return cs[n_len] <= '9';
+	return 0;	/* binaRE: return result (strncmp == 0) */
+}
+
+/* --- 3. get_token_int --- */
+/* binaRE 0xC0830680 (get_token_int, 148B): разбор десятичного числа из токена,
+ * *pos продвигается; -1 при ошибке; ',' и '\0' завершают число (для ',' — pos
+ * продвинут за запятую). */
+static int
+get_token_int(char **pos)
+{
+	char *p = *pos;
+	int c = *p;
+	int next;
+	int val = 0;
+
+	if (!c)
+		return -1;
+	if (c == ',') {
+		(*pos)++;
+		return 0;
+	}
+	if ((unsigned char)(c - '0') > 9u)
+		return -1;
+	while (1) {
+		next = *++p;
+		*pos = p;
+		val = val * 10 + (c - '0');
+		if (!next)
+			return val;
+		if (next == ',') {
+			(*pos)++;
+			return val;
+		}
+		if ((unsigned char)(next - '0') > 9u)
+			return -1;
+		c = next;
+	}
+}
+
+/* --- 4. process_mcu_command --- */
+/* binaRE 0xC082E958 (process_mcu_command, 2672B) — процессор команд MCU (обратный
+ * канал). ПОЛНАЯ транскрипция диспетчеризации (все кейсы, без сокращений);
+ * LABEL_x — метки binaRE. */
+static int
+process_mcu_command(unsigned int cmd)
+{
+	u8 buf[8];	/* binaRE: стек-область sp+0x10.. (v14..); кейс 0xF00C читает 8 байт */
+	int r;
+
+	if ((cmd & 0x7000u) < 0x1000u) {
+		if (cmd <= 0x602u) {
+			if (cmd > 0x600u)
+				return arm_rev_ack();
+			if (cmd == 259u) {				/* 0x103 */
+				vs_send(2, 134, NULL, 0);
+				return arm_rev_ack();
+			}
+			if (cmd <= 259u) {
+				if (cmd == 257u) {			/* 0x101 */
+					vs_send(2, 132, NULL, 0);
+					return arm_rev_ack();
+				}
+				if (cmd == 258u) {			/* 0x102 */
+					vs_send(2, 133, NULL, 0);
+					return arm_rev_ack();
+				}
+			} else {
+				switch (cmd) {
+				case 0x402u:
+					vs_send(2, 241, NULL, 0);	/* binaRE LABEL_28 */
+					return arm_rev_ack();
+				case 0x408u:
+					vs_send(2, 135, NULL, 0);
+					return arm_rev_ack();
+				case 0x401u:
+					vs_send(2, 241, NULL, 0);
+					return arm_rev_ack();
+				}
+			}
+			printk("~ mtc rev err cmd %04x\n", cmd);	/* binaRE LABEL_21 */
+			return arm_rev_ack();
+		}
+		if (cmd > 0x705u) {
+			switch (cmd) {
+			case 0x801u:
+				vs_send(2, 136, NULL, 0);
+				return arm_rev_ack();
+			case 0x802u:
+				car_status->power2_flag = 1;		/* binaRE 0xC168AD1F */
+				return arm_rev_ack();
+			case 0x755u:
+				printk("MCU_SHUTDOWN\n");
+				car_add_work(73, 0, 0);
+				return arm_rev_ack();
+			}
+			printk("~ mtc rev err cmd %04x\n", cmd);
+			return arm_rev_ack();
+		}
+		if (cmd >= 0x704u)
+			return arm_rev_ack();
+		if (cmd != 1794u) {				/* 0x702 */
+			if (cmd <= 0x702u) {
+				if (cmd != 1793u) {			/* 0x701 */
+					printk("~ mtc rev err cmd %04x\n", cmd);
+					return arm_rev_ack();
+				}
+				car_add_work(35, 0, 0);		/* binaRE LABEL_41 */
+				return arm_rev_ack();
+			}
+			if (!car_status->cam_signal) {		/* binaRE 0xC168ACA5 */
+				car_add_work(35, 0, 0);		/* binaRE LABEL_41 */
+				return arm_rev_ack();
+			}
+		}
+		car_add_work(36, 0, 0);
+		return arm_rev_ack();
+	}
+
+	if ((cmd & 0xF000u) == 0xD000u) {
+		u8 n = cmd & 0xFFu;
+
+		r = arm_rev_bytes(buf + 1, n);	/* binaRE: v13 = (u8)cmd — только store в стек, дальше не читается */
+		if (r) {
+			if (((cmd & 0xF00u) == 0x100u) && !buf[1])
+				config_data->d.cfg_radio = buf[2];	/* binaRE 0xC168AD46 (config+6) */
+			return arm_rev_ack();
+		}
+		return r;
+	}
+
+	if (cmd == 61458u) {				/* 0xF012 */
+		if (!arm_rev_bytes(buf, 2))
+			return 0;
+		vs_send(0, 18, (char *)buf, 2);
+		goto tail_ack;
+	}
+
+	if (cmd <= 0xF012u) {
+		if (cmd == 61447u) {				/* 0xF007 */
+			if (arm_rev_bytes(buf, 5)) {
+				arm_rev_ack();
+				rds_input(buf[3] |
+					  ((buf[2] | ((buf[1] | (buf[0] << 8)) << 8)) << 8),
+					  buf[4]);
+				return 1;
+			}
+			return 0;
+		}
+		if (cmd > 0xF007u) {
+			if (cmd == 61451u) {			/* 0xF00B */
+				if (arm_rev_bytes(buf, 2)) {
+					arm_rev_ack();
+					rds_input3A(buf);
+					return 1;
+				}
+				return 0;
+			}
+			if (cmd <= 0xF00Bu) {
+				if (cmd == 61449u) {		/* 0xF009 */
+					r = arm_rev_bytes(buf, 5);
+					if (!r)
+						return 0;
+					Hit_radio_sta(buf[0], buf[1], buf[2],
+						       buf[3], buf[4]);
+					goto tail_ack;
+				}
+				if (cmd > 0xF009u) {		/* 0xF00A */
+					if (arm_rev_bytes(buf, 3)) {
+						arm_rev_ack();
+						rds_input2(buf[2] | ((buf[1] | (buf[0] << 8)) << 8));
+						return 1;
+					}
+					return 0;
+				}
+				r = arm_rev_bytes(buf, 4);	/* cmd <= 0xF008 */
+				if (!r)
+					return 0;
+				Hit_radio_sta(buf[0], buf[1], buf[2], 0, buf[3]);
+				goto tail_ack;
+			}
+			if (cmd == 61456u) {			/* 0xF010 */
+				r = arm_rev_bytes(buf, 1);
+				if (!r)
+					return 0;
+				vs_send(0, 16, (char *)buf, 1);
+				goto tail_ack;
+			}
+			if (cmd > 0xF010u) {			/* 0xF011 */
+				r = arm_rev_bytes(buf, 5);
+				if (!r)
+					return 0;
+				vs_send(0, 17, (char *)buf, 5);
+				goto tail_ack;
+			}
+			if (cmd == 61452u) {			/* 0xF00C */
+				if (arm_rev_bytes(buf, 8)) {
+					arm_rev_ack();
+					rds_input3(buf);
+					return 1;
+				}
+				return 0;
+			}
+			goto err_ret0;			/* 0xF00D..0xF00F */
+		}
+		if (cmd == 61443u) {				/* 0xF003 */
+			r = arm_rev_bytes(buf, 2);
+			if (!r)
+				return 0;
+			{
+				int v = 2275 * (buf[1] | (buf[0] << 8));
+
+				car_status->intval3 = v >> 10;	/* binaRE 0xC168AC98 (+24) */
+				buf[0] = (u8)(v >> 18);
+				buf[1] = (u8)(v >> 10);
+				vs_send(2, 146, (char *)buf, 2);
+			}
+			goto tail_ack;
+		}
+		if (cmd > 0xF003u) {
+			if (cmd == 61445u) {			/* 0xF005 */
+				r = arm_rev_bytes(buf, 2);
+				if (r) {
+					car_status->intval4 = buf[1] | (buf[0] << 8);	/* binaRE 0xC168AC9C (+28) */
+					if (!car_status->intval4)
+						car_status->intval4 = 1;
+					goto tail_ack;
+				}
+			} else if (cmd > 0xF005u) {		/* 0xF006 */
+				r = arm_rev_bytes(buf, 2);
+				if (r) {
+					car_status->wipe_flag = buf[1] | (buf[0] << 8);	/* binaRE 0xC168ACA0 (+32) */
+					if (!car_status->wipe_flag)
+						car_status->wipe_flag = 1;
+					goto tail_ack;
+				}
+			} else {				/* 0xF004 */
+				r = arm_rev_bytes(buf, 1);
+				if (r) {
+					u8 nv = buf[0];
+					u8 dv;
+
+					dv = nv ^ car_status->sta_bits;	/* binaRE 0xC168AC8C (+8) */
+					if (dv & 0x10u) {
+						u8 b = (nv & 0x10u) != 0;
+
+						vs_send(2, 144, (char *)&b, 1);
+					}
+					dv = nv ^ car_status->sta_bits;
+					if (dv & 0x20u) {
+						u8 b = (nv & 0x20u) == 0;
+
+						vs_send(2, 145, (char *)&b, 1);
+					}
+					dv = car_status->sta_bits ^ nv;
+					if (dv & 0x48u) {
+						if (dv & 8u) {
+							u8 b = (nv & 8u) == 0;
+
+							vs_send(2, 147, (char *)&b, 1);
+						}
+						car_status->sta_bits = nv;
+						backlight_update();
+					}
+					car_status->sta_bits = nv;
+					goto tail_ack;
+				}
+			}
+		} else {				/* cmd <= 0xF003 */
+			switch (cmd) {
+			case 0xF000u:
+				r = arm_rev_bytes(buf, 2);
+				if (r) {
+					car_status->intval1 = (buf[1] | (buf[0] << 8)) / 3u;	/* binaRE 0xC168AC90 (+12) */
+					if (!car_status->intval1)
+						car_status->intval1 = 1;
+					goto tail_ack;
+				}
+				break;
+			case 0xF001u:
+				r = arm_rev_bytes(buf, 2);
+				if (r) {
+					car_status->intval2 = (buf[1] | (buf[0] << 8)) / 3u;	/* binaRE 0xC168AC94 (+16) */
+					if (!car_status->intval2)
+						car_status->intval2 = 1;
+					goto tail_ack;
+				}
+				break;
+			case 0xE000u: {
+				u8 mmsg[256];	/* binaRE: IDA-область помечена 4B (v14) + соседние vars;
+							 * оригинал пишет buf[len] и читает len <= 255 — честный буфер 256B */
+				if (arm_rev_bytes(mmsg, 1)) {
+					mmsg[mmsg[0]] = 0;
+					r = arm_rev_bytes(mmsg, mmsg[0]);
+					if (!r)
+						return 0;
+					printk("--mtc mmsg %s\n", (const char *)mmsg);
+					goto tail_ack;
+				}
+				break;
+			}
+			default:
+				goto err_ret0;
+			}
+		}
+	} else {
+		if (cmd == 61953u) {				/* 0xF201 */
+			if (!arm_rev_bytes(buf, 1))
+				return 0;
+			if (!buf[0])
+				car_status->mcu_cmd_state = 5;	/* binaRE 0xC168AD20 (+156) */
+			r = buf[0];
+			car_add_work(42, r, 0);
+			goto tail_ack;
+		}
+		if (cmd > 0xF201u) {
+			if (cmd == 61957u) {			/* 0xF205 */
+				car_add_work(34, 0, 0);
+				return arm_rev_ack();
+			}
+			if (cmd <= 0xF205u) {
+				if (cmd == 61955u) {		/* 0xF203 */
+					car_add_work(44, 0, 0);
+				} else if (cmd > 0xF203u) {	/* 0xF204 */
+					if (!car_status->reserved_10 ||
+					    car_status->mcu_cmd_state == 5) {	/* binaRE 0xC168ACA6 (+38) */
+						car_status->mcu_cmd_state = 5;
+						car_add_work(31, 0, 0);
+					} else {
+						car_status->mcu_cmd_state = 5;
+						car_add_work(32, 0, 0);
+					}
+				} else {				/* 0xF202 */
+					car_add_work(45, 0, 0);
+				}
+				return arm_rev_ack();
+			}
+			if (cmd == 61959u) {			/* 0xF207 */
+				if (!car_status->reserved_10 ||
+				    car_status->mcu_cmd_state == 6) {	/* binaRE 0xC168ACA6 (+38) */
+					car_status->mcu_cmd_state = 6;
+					car_add_work(31, 0, 0);
+				} else {
+					car_status->mcu_cmd_state = 6;
+					car_add_work(32, 0, 0);
+				}
+				return arm_rev_ack();
+			}
+			if (cmd < 0xF207u) {			/* 0xF206 */
+				car_add_work(33, 0, 0);
+				return arm_rev_ack();
+			}
+			if (cmd == 61968u) {			/* 0xF210 */
+				if (!arm_rev_bytes(buf, 1))
+					return 0;
+				car_status->mcu_cmd_state = 6;
+				car_add_work(42, 0, 0);
+				r = 1;
+				goto tail_ack;
+			}
+			goto err_ret0;			/* > 0xF210 */
+		}
+		if (cmd == 61462u) {				/* 0xF016 */
+			if (!arm_rev_bytes(buf, 1))
+				return 0;
+			printk("--mtc hold %d\n", buf[0]);
+			car_add_work(70, buf[0], 0);
+			r = 1;
+			goto tail_ack;
+		}
+		if (cmd <= 0xF016u) {
+			if (cmd == 61460u) {			/* 0xF014 */
+				if (!arm_rev_bytes(buf, 1))
+					return 0;
+				printk("--mtc press %d\n", buf[0]);
+				car_add_work(69, buf[0], 0);
+			} else if (cmd > 0xF014u) {		/* 0xF015 */
+				r = arm_rev_bytes(buf, 1);
+				goto tail_ack;
+			} else {				/* 0xF013 */
+				r = arm_rev_bytes(buf, 2);
+				if (!r)
+					return 0;
+				vs_send(0, 19, (char *)buf, 2);
+			}
+			goto tail_ack;
+		}
+		if (cmd != 61473u) {				/* 0xF021 */
+			if (cmd == 61952u) {			/* 0xF200 */
+				if (!arm_rev_bytes(buf, 1))
+					return 0;
+				car_add_work(43, buf[0], 0);
+				r = 1;
+				goto tail_ack;
+			}
+			if (cmd == 61472u) {			/* 0xF020 */
+				u8 len;
+
+				if (!arm_rev_bytes(&len, 1))
+					goto ret_tail;		/* binaRE LABEL_87 */
+				if (!arm_rev_bytes(buf, len))
+					return 0;
+				vs_send_raw(0, (char *)buf, len);
+				r = 1;
+				goto tail_ack;
+			}
+			goto err_ret0;			/* binaRE LABEL_36 */
+		}
+		{
+			u8 mmsg32[32];
+
+			r = arm_rev_bytes(mmsg32, 32);
+			if (r) {
+				u8 *dst = (u8 *)car_status + 100;	/* binaRE 0xC168ACE8: запись в [+1 .. +32] */
+				int k;
+
+				for (k = 0; k < 32; k++)
+					dst[1 + k] = mmsg32[k];
+				goto tail_ack;
+			}
+		}
+	}
+
+ret_tail:				/* binaRE LABEL_87 */
+	return ((int)cmd < 0) ? 0 : ((int)cmd & 0x8000);
+tail_ack:				/* binaRE LABEL_13 */
+	if (r)
+		return arm_rev_ack();
+	return 0;
+err_ret0:				/* binaRE LABEL_36 */
+	printk("~ mtc rev err cmd %04x\n", cmd);
+	return 0;
+}
+
+/* --- 5. mtcWipeCheck --- */
+/* binaRE 0xC0830648 (mtcWipeCheck, 52B): счётчик "wipe"-запросов (car_status+147,
+ * binaRE 0xC168AD17; поле в раунде 2 названо boot_flags). Ранние возвраты в
+ * binaRE R0 не устанавливают (BX LR) — здесь 0/счётчик; >3 — tail-call car_add_work(72). */
+static int
+mtcWipeCheck(void)
+{
+	if (!car_status->boot_flags)
+		return 0;
+	car_status->boot_flags = (u8)(car_status->boot_flags + 1);
+	if (car_status->boot_flags <= 3)
+		return car_status->boot_flags;
+	car_add_work(72, 0, 0);	/* binaRE: tail-call — R0 = R0 car_add_work */
+	return 0;		/* мtc_shared.h:253 объявляет car_add_work void */
+}
+
+/* --- 6. mtc_get_pin_map --- */
+/* binaRE 0xC082D5C0 (mtc_get_pin_map, 88B): поиск pin id в pin-таблице (записи 16B,
+ * id — первый байт записи, 0 — терминатор). Возврат — указатель на запись или NULL.
+ * binaRE: таблица через указатель 0xC0BC9B20 (см. pin_map_tbl), первая запись [P+0x74]. */
+static char *
+mtc_get_pin_map(int pin_id)
+{
+	unsigned char *rec = pin_map_tbl + 0x74;
+
+	if (!rec[0])
+		return NULL;
+	if (rec[0] == pin_id)
+		return rec;
+	rec += 16;
+	for (;;) {
+		if (!rec[0])
+			return NULL;
+		if (rec[0] == pin_id)
+			return rec;
+		rec += 16;
+	}
+}
+
+/* --- 7. mtc_init_test_io --- */
+/* binaRE 0xC082D61C (mtc_init_test_io, 160B): настройка test-GPIO pin-таблицы:
+ * iomux_set([+8]), gpio_request([+4]), pull-updown=0, direction=input; флаг [+14] = 0. */
+static int
+mtc_init_test_io(void)
+{
+	unsigned char *rec = pin_map_tbl + 0x74;
+	char name[16];	/* binaRE: 14B-область стека */
+	int idx = 0;
+	int ret = 0;
+
+	while (rec[0]) {
+		u32 gpio = *(u32 *)(rec + 4);
+		u32 iomux = *(u32 *)(rec + 8);
+
+		if (iomux)
+			iomux_set(iomux);
+		sprintf(name, "tp%d", idx++);
+		gpio_request(gpio, name);
+		gpio_pull_updown(gpio, 0);
+		ret = gpio_direction_input(gpio);
+		rec[14] = 0;
+		rec += 16;
+	}
+	return ret;	/* binaRE: значение последнего gpio_direction_input */
+}
+
+/* --- 8. mtc_test_port2 --- */
+/* binaRE 0xC082D6C4 (mtc_test_port2, 288B): тест пары пинов (3 попытки, оба направления).
+ * Флаг "проверено" [+14]: 1 = нет контакта, 0 = OK. */
+static int
+mtc_test_port2(unsigned char *pa, unsigned char *pb)
+{
+	int i;
+	u32 ga = *(u32 *)(pa + 4);
+	u32 gb = *(u32 *)(pb + 4);
+	int ret;
+
+	for (i = 3; i > 0; i--) {
+		gpio_direction_input(gb);
+		gpio_direction_output(ga, 1);
+		_gpio_set_value(ga, 1);
+		_const_udelay(1073740);
+		if (!_gpio_get_value(gb))
+			goto ok;
+		_gpio_set_value(ga, 0);
+		_const_udelay(1073740);
+		if (_gpio_get_value(gb) == 1)
+			goto ok;
+		gpio_direction_input(ga);
+		gpio_direction_output(gb, 1);
+		_gpio_set_value(gb, 1);
+		_const_udelay(1073740);
+		if (!_gpio_get_value(ga))
+			goto ok;
+		_gpio_set_value(gb, 0);
+		_const_udelay(1073740);
+		if (_gpio_get_value(ga) == 1)
+			goto ok;
+	}
+	gpio_direction_input(ga);
+	ret = gpio_direction_input(gb);
+	pa[14] = 1;
+	pb[14] = 1;
+	return ret;
+ok:
+	gpio_direction_input(ga);
+	ret = gpio_direction_input(gb);
+	pa[14] = 0;
+	pb[14] = 0;
+	return ret;
+}
+
+/* --- 9. mtc_test_port3 --- */
+/* binaRE 0xC082D7E4 (mtc_test_port3, 636B): тест тройки пинов (3 раунда, битовая
+ * маска 1/2/4 за раунд). Финал: [+14] = (маска != ожидаемая) — 1 = дефект. */
+static int
+mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc)
+{
+	int i;
+	u32 ga = *(u32 *)(pa + 4);
+	u32 gb = *(u32 *)(pb + 4);
+	u32 gc = *(u32 *)(pc + 4);
+	int ret;
+
+	pa[14] = 0;
+	pb[14] = 0;
+	pc[14] = 0;
+	for (i = 3; i > 0; i--) {
+		/* раунд: драйв A */
+		gpio_direction_input(gb);
+		gpio_direction_input(gc);
+		gpio_direction_output(ga, 1);
+		_gpio_set_value(ga, 1);
+		_const_udelay(1073740);
+		if (!_gpio_get_value(gb))
+			pb[14] |= 1;
+		if (!_gpio_get_value(gc))
+			pc[14] |= 1;
+		_gpio_set_value(ga, 0);
+		_const_udelay(1073740);
+		if (_gpio_get_value(gb) == 1)
+			pb[14] |= 1;
+		if (_gpio_get_value(gc) == 1)
+			pc[14] |= 1;
+		gpio_direction_input(gc);
+		gpio_direction_input(ga);
+		/* драйв B */
+		gpio_direction_output(gb, 1);
+		_gpio_set_value(gb, 1);
+		_const_udelay(1073740);
+		if (!_gpio_get_value(gc))
+			pc[14] |= 2;
+		if (!_gpio_get_value(ga))
+			pa[14] |= 2;
+		_gpio_set_value(gb, 0);
+		_const_udelay(1073740);
+		if (_gpio_get_value(gc) == 1)
+			pc[14] |= 2;
+		if (_gpio_get_value(ga) == 1)
+			pa[14] |= 2;
+		gpio_direction_input(ga);
+		gpio_direction_input(gb);
+		/* драйв C */
+		gpio_direction_output(gc, 1);
+		_gpio_set_value(gc, 1);
+		_const_udelay(1073740);
+		if (!_gpio_get_value(ga))
+			pa[14] |= 4;
+		if (!_gpio_get_value(gb))
+			pb[14] |= 4;
+		_gpio_set_value(gc, 0);
+		_const_udelay(1073740);
+		if (_gpio_get_value(ga) == 1)
+			pa[14] |= 4;
+		if (_gpio_get_value(gb) == 1)
+			pb[14] |= 4;
+	}
+	gpio_direction_input(ga);
+	gpio_direction_input(gb);
+	ret = gpio_direction_input(gc);
+	pa[14] = pa[14] != 6;
+	pb[14] = pb[14] != 5;
+	pc[14] = pc[14] != 3;
+	return ret;	/* binaRE: значение последнего gpio_direction_input */
+}
+
+/* --- 10. mtc_test_port --- */
+/* binaRE 0xC082DCF4 (mtc_test_port, 488B): прогон test-последовательности
+ * (test_seq_tbl: записи {a, b, c}): a==1 — первый pin (запись 0), иначе поиск по id;
+ * c==1 — третья запись 0; c==0/не найден — тест пары (mtc_test_port2), иначе тройки
+ * (mtc_test_port3). В конце — вывод результатов на debug-экран. */
+static char *
+mtc_test_port(void)
+{
+	const unsigned char *seq = test_seq_tbl;
+	char *ret = 0;
+
+	while (seq[0]) {
+		unsigned char a = seq[0], b = seq[1], c = seq[2];
+		unsigned char *pa, *pb, *pc;
+		int fa, fb;
+
+		if (a == 1) {
+			pa = pin_map_tbl + 0x74;	/* первая запись */
+			fa = 0;
+		} else {
+			pa = (unsigned char *)mtc_get_pin_map(a);
+			fa = (pa == NULL);
+		}
+		if (b == 1) {
+			pb = pin_map_tbl + 0x74;
+			fb = 0;
+		} else {
+			pb = (unsigned char *)mtc_get_pin_map(b);
+			fb = (pb == NULL);
+		}
+		if (c == 1) {
+			pc = pin_map_tbl + 0x74;
+		} else {
+			pc = (unsigned char *)mtc_get_pin_map(c);
+		}
+		if (!fa && !fb) {
+			if (pc)
+				mtc_test_port3(pa, pb, pc);
+			else
+				mtc_test_port2(pa, pb);	/* c == 0 или не найден */
+		}
+		seq += 3;
+	}
+	{
+		unsigned char *rec = pin_map_tbl + 0x74;
+
+		while (rec[0]) {
+			if (rec[14] == 0)
+				ret = mtc_debug_put_string("*", 1, rec[12], rec[13] - 1,
+							   0xFFFF0000u, 0xFF404040u);
+			else
+				ret = mtc_debug_put_string("*", 1, rec[12], rec[13] - 1,
+							   0xFF00FF00u, 0xFF404040u);
+			rec += 16;
+		}
+	}
+	return ret;	/* binaRE: значение последнего mtc_debug_put_string */
+}
+
+/* --- 11. mtc_clear_screen --- */
+/* binaRE 0xC082DA60 (mtc_clear_screen, 388B): color без стартового байта —
+ * "test pattern" (480 строк); иначе — залита цветом. Ширина — is1024screen
+ * (binaRE 0xC168ACE2). */
+static void
+mtc_clear_screen(int color)
+{
+	u32 *fb = mtc_fb_buf;	/* binaRE 0xC0D1DE30 */
+	int width = car_status->is1024screen ? 1024 : 800;
+	int x, y;
+
+	if ((color & 0xFF000000u) == 0) {
+		for (y = 0; y < 480; y++) {
+			u32 *row = fb + y * width;
+
+			for (x = 0; x < width; x++) {
+				unsigned int c;
+
+				if ((unsigned int)(y - 16) > 0x1BFu ||
+				    (unsigned int)(x - 1) > 0x2FFu)
+					c = 0;
+				else if (y <= 279)
+					c = 0xFF404040u;	/* серый */
+				else if (y > 399) {
+					if ((unsigned int)(x - 1) > 255u) {
+						if ((unsigned int)(x - 1) > 511u)
+							c = 0xFF000000u | (((x - 1) & 0xFFu) << 16);
+						else
+							c = 0xFF000000u | (((x - 1) & 0xFFu) << 8);
+					} else {
+						c = 0xFF000000u | ((x - 1) & 0xFFu);
+					}
+				} else if (y > 339) {
+					int g = 255 - (x - 1) / 3;
+
+					c = 0xFF000000u | (g << 16) | (g << 8) | g;
+				} else {
+					c = 0;
+				}
+				row[x] = (u32)c;
+			}
+		}
+		return;
+	}
+	for (y = 0; y < 480; y++) {
+		u32 *row = fb + y * width;
+
+		for (x = 0; x < width; x++)
+			row[x] = (u32)color;
+	}
+}
+
+/* --- 12. mtc_debug_putc --- */
+/* binaRE 0xC082DBEC (mtc_debug_putc, 136B): вывод глифа font_8x16 в framebuffer:
+ * glyph — индекс (8x16), x — пиксельная колонка (блок 8 px), y — половинная строка
+ * (строка = 2*y), fg/bg — ARGB-цвета. */
+static char *
+mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color)
+{
+	const u8 *g = font_8x16 + 16 * glyph;
+	int width = car_status->is1024screen ? 1024 : 800;	/* binaRE 0xC168ACE2 */
+	int stride = car_status->is1024screen ? 4096 : 3200;
+	u32 *p = mtc_fb_buf + 8 * (x + width * 2 * y);	/* binaRE: fb + 32*(a2 + w*2*a3) байт */
+	int row, bit;
+
+	for (row = 0; row < 16; row++) {
+		u8 px = g[row];
+		u32 *dst = p;
+
+		for (bit = 0; bit < 8; bit++) {
+			*dst++ = (px & 0x80u) ? (u32)fg_color : (u32)bg_color;
+			px <<= 1;
+		}
+		p += stride / 4;
+	}
+	return (char *)g;
+}
+
+/* --- 13. mtc_debug_put_string --- */
+/* binaRE 0xC082DC80 (mtc_debug_put_string, 116B): вывод строки (до len символов;
+ * хвост — пробелы). */
+static char *
+mtc_debug_put_string(const char *s, int len, int x0, int y, int fg_color, int bg_color)
+{
+	int slen = strlen(s);
+	int i;
+
+	for (i = 0; i < len; i++) {
+		int c = 32;
+
+		if (slen > i)
+			c = s[i];
+		mtc_debug_putc(c, x0 + i, y, fg_color, bg_color);
+	}
+	return (char *)s;
+}
+
+/* --- 14. adc_wheel_callback --- */
+/* binaRE 0xC083BA24 (adc_wheel_callback, 780B): ADC-колбэк рулевого колёса
+ * (регистрация adc_register(ch, adc_wheel_callback, &wheel_state), контекст
+ * 0xC09BCF38). r0 — указатель на текущее значение ADC канала; r1 — состояние
+ * колёса; r2 — прочитанное значение ADC. Транскрипция 1-в-1 (управляющие потоки —
+ * из decompiled; LABEL_25/27/28 — метки binaRE). */
+static int
+adc_wheel_callback(const u32 *adc_cur, struct mtc_wheel_state *ws, int adc_val)
+{
+	int ret;
+
+	if (wheel_study.adc_enabled) {			/* binaRE 0xC168E478 — режим "study" */
+		int cur = *adc_cur;
+		int up, dn, dir;
+
+		if (cur == *ws->adc_ref_up)
+			ws->adc_up_val = adc_val;
+		else if (cur == *ws->adc_ref_dn)
+			ws->adc_dn_val = adc_val;
+
+		up = ws->adc_up_val;
+		if (up < 0)
+			return 0;
+		dn = ws->adc_dn_val;
+		if (dn < 0)
+			return 0;
+
+		ret = ws->key_repeat_cnt;
+		if (ret > 0)
+			ws->key_repeat_cnt = --ret;
+
+		if (up > 199) {
+			if (dn <= 199)
+				dir = wheel_study.dir_inv ? 2 : 1;	/* binaRE 0xC168E481 */
+			else
+				dir = 4;
+		} else if (dn > 199) {
+			dir = wheel_study.dir_inv ? 1 : 2;
+		} else {
+			dir = 3;
+		}
+
+		{
+			unsigned char st = ws->wheel_state;
+			unsigned char hi = st >> 4;
+
+			if (hi != (unsigned char)dir) {
+				ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
+				return ret;
+			}
+			if (!ret) {				/* key_repeat_cnt == 0 */
+				if (st == 20) {			/* 0x14 */
+					unsigned char lk = ws->wheel_last_key;
+
+					if (lk != 'A') {
+						if (lk == '@')
+							ws->wheel_last_key = st;	/* binaRE LABEL_27 */
+						ws->key_repeat_cnt = 40;	/* binaRE LABEL_25 */
+						ret = add_wheel_work(ret, ws);
+					}
+				} else if (st == 36) {			/* 0x24 */
+					unsigned char lk = ws->wheel_last_key;
+
+					if (lk != 'B') {
+						if (lk == '@')
+							ws->wheel_last_key = st;	/* LABEL_27 */
+						ret = 1;
+						ws->key_repeat_cnt = 40;	/* LABEL_25 */
+						ret = add_wheel_work(ret, ws);
+					}
+				}
+			}
+			if ((st & 0xF) == hi) {			/* binaRE LABEL_28 */
+				ws->wheel_state = (unsigned char)dir | ((unsigned char)dir << 4);
+				return ret;
+			}
+			ws->wheel_last_key = st;		/* binaRE LABEL_27 */
+			ws->wheel_state = (unsigned char)dir | ((unsigned char)dir << 4);
+			return ret;				/* LABEL_28 */
+		}
+	}
+
+	ret = ws->key_repeat_cnt;
+	if (ret > 0)
+		ws->key_repeat_cnt = ret - 1;
+
+	if (!config_data->d.adc_wheel_gate) {		/* binaRE 0xC168AD59 (config+25) — обычный режим */
+		int dir = 0;
+		unsigned char st, hi;
+
+		if (wheel_study.adc_type == 1) {		/* binaRE 0xC168E480 */
+			if ((unsigned int)(adc_val - 488) <= 0x30u)
+				dir = 1;
+			else if ((unsigned int)(adc_val - 658) <= 0x30u)
+				dir = 2;
+			else if ((unsigned int)(adc_val - 385) <= 0x30u)
+				dir = 3;
+			else if (adc_val > 1000)
+				dir = 4;
+		} else {
+			if ((unsigned int)(adc_val - 437) <= 0x30u)
+				dir = 1;
+			else if ((unsigned int)(adc_val - 590) <= 0x30u)
+				dir = 2;
+			else if ((unsigned int)(adc_val - 330) <= 0x30u)
+				dir = 3;
+			else if (adc_val > 1000)
+				dir = 4;
+		}
+
+		st = ws->wheel_state;
+		hi = st >> 4;
+		if (hi != (unsigned char)dir) {
+			ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
+			return ret;
+		}
+		if (dir) {
+			if (ret) {				/* binaRE: goto LABEL_28 */
+				ws->wheel_state = hi | (hi << 4);
+				return ret;
+			}
+			if (st != 20 && st != 35) {
+				if (st != 36) {
+					if (st != 19) {
+						ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+						return ret;
+					}
+					ret = 1;			/* binaRE LABEL_47 */
+					ws->key_repeat_cnt = 40;
+					ret = add_wheel_work(ret, ws);
+					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+					return ret;
+				}
+				ws->key_repeat_cnt = 40;	/* binaRE LABEL_80 */
+				ret = add_wheel_work(1, ws);
+				ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+				return ret;
+			}
+			return ret;
+		}
+		return ret;
+	}
+
+	{					/* adc_wheel_gate — режим "steering" */
+		int dir;
+
+		if ((unsigned int)(adc_val - 316) > 0x3Au) {
+			if ((unsigned int)(adc_val - 483) > 0x3Au) {
+				if ((unsigned int)(adc_val - 585) > 0x3Au)
+					dir = 0;
+				else
+					dir = 3;
+			} else {
+				dir = 2;
+			}
+		} else {
+			dir = 1;
+		}
+
+		{
+			unsigned char st = ws->wheel_state;
+			unsigned char hi = st >> 4;
+
+			if (hi != (unsigned char)dir) {
+				ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
+				return ret;
+			}
+			if (dir) {
+				if (ret) {			/* binaRE: goto LABEL_28 */
+					ws->wheel_state = hi | (hi << 4);
+					return ret;
+				}
+				if (st == 33 || st == 50 || st == 19) {
+					ws->key_repeat_cnt = 40;	/* binaRE LABEL_80 */
+					ret = add_wheel_work(1, ws);
+					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+					return ret;
+				}
+				if (st != 49 && st != 18 && st != 35) {
+					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+					return ret;
+				}
+				ws->key_repeat_cnt = 40;	/* binaRE LABEL_47 */
+				ret = add_wheel_work(ret, ws);
+				ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
+				return ret;
+			}
+			return ret;
+		}
+	}
+}
+
+/* --- 15. stw_range_check --- */
+/* binaRE 0xC083BD50 (stw_range_check, 352B): минимальная разность значений в двух
+ * stw-таблицах — таблица A: config+329 (binaRE 0xC168AE89), таблица C: config+404
+ * (0xC168AED4): 24 × u16 LE, шаг 3 (область steer_data раунда 2). Результат делится
+ * на 2 и пишется в wheel_study.stw_min_a/b (0xC168E4E5/E6); стартовый потолок — 50.
+ * Внутренний цикл binaRE идёт до оффсета base+72 (включая байты за концом таблицы)
+ * — воспроизведено 1-в-1. */
+static void
+stw_range_check(void)
+{
+	const u8 *cfg = config_data->u8;	/* minfix: u8[512] — член union, не член d (mtc_shared.h) */
+	int i, off;
+	unsigned int min_a = 50, min_c = 50;
+	u16 u;
+
+	for (i = 0; i < 24; i++) {
+		u = cfg[329 + 3 * i] | ((u16)cfg[330 + 3 * i] << 8);
+		for (off = 3 + 3 * i; off <= 72; off += 3) {
+			u16 v = cfg[329 + off] | ((u16)cfg[330 + off] << 8);
+			int d = (u > v) ? u - v : v - u;
+
+			if (min_a >= (unsigned int)d)
+				min_a = (unsigned int)d;
+		}
+	}
+	for (i = 0; i < 24; i++) {
+		u = cfg[404 + 3 * i] | ((u16)cfg[405 + 3 * i] << 8);
+		for (off = 3 + 3 * i; off <= 72; off += 3) {
+			u16 v = cfg[404 + off] | ((u16)cfg[405 + off] << 8);
+			int d = (u > v) ? u - v : v - u;
+
+			if (min_c >= (unsigned int)d)
+				min_c = (unsigned int)d;
+		}
+	}
+	wheel_study.stw_min_a = (u8)(min_a >> 1);	/* binaRE 0xC168E4E5 */
+	wheel_study.stw_min_b = (u8)(min_c >> 1);	/* binaRE 0xC168E4E6 */
+}
+
+/* --- 16. iomux_set --- */
+/* binaRE 0xC04AE134 (iomux_set, 100B) — board-level pinmux-helper (вызовы:
+ * mtc-audio.c:1263, mtc-car.c:3977). mode: [3:0]=значение режима, [7:4]=n,
+ * [11:8]=pin в банке, [15:12]=банк (<=3). Адрес регистра — по disassembly
+ * (literal pool 0xC04AE184): *(u32*)( (0x7FB4200E + bank*4 + pin) << 2 ). */
+static int
+iomux_set(unsigned int mode)
+{
+	unsigned int bank, n, pin, val;
+
+	if (mode == 0xFFFFFFFFu)
+		return printk("<6><%s> mode(0x%x) is invalid\n", "iomux_set", mode);
+	bank = (mode >> 12) & 0xFu;
+	if (bank > 3u)
+		return printk("<6><%s> mode(0x%x) is invalid\n", "iomux_set", mode);
+	n = (mode >> 4) & 0xFu;
+	pin = (mode >> 8) & 0xFu;
+	val = ((mode & 0xFu) << (2 * n)) + (3u << (2 * (n + 8)));
+	*(volatile u32 *)(unsigned long)((0x7FB4200Eu + bank * 4u + pin) << 2) = val;
+	return 2 * (n + 8);
+}
+
+/* --- 17. mtc_get_screen_width --- */
+/* binaRE 0xC06A172C (mtc_get_screen_width, 16B) */
+static int
+mtc_get_screen_width(void)
+{
+	return (int)mtc_fb_width;	/* binaRE 0xC0D1DE28 */
+}
+
 // very dirty code
 static int
 car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -1328,6 +2576,12 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	char *token_pos;		       // [sp+Ch] [bp-94h]@12 MAPDST
 	unsigned __int8 dtv_ir[4];	     // [sp+10h] [bp-90h]@556
 	char can_buf[100];		       // [sp+14h] [bp-8Ch]@94
+
+	if (cmd == 119) {
+		/* binaRE: case 119 (0xC082E96A) */
+		*(int *)arg = 0;
+		return 0;
+	}
 
 	mutex_lock(&mtc_car_struct.car_io_lock);
 
