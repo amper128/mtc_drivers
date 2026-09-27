@@ -1,2 +1,0 @@
-all:
-	mtc-codec.o
