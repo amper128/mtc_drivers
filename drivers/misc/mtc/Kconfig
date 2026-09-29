@@ -1,0 +1,10 @@
+# MTC vehicle media drivers (built-in) for RK3188 head unit "Trk3188" (binaRE).
+# All objects are built-in (obj-y style via CONFIG_MTC_DRIVERS) — the reference
+# binary has these as vmlinux symbols, not loadable modules (no bf0* entries).
+config MTC_DRIVERS
+	bool "MTC vehicle media drivers (car/keys/lcd/tv/dvd/vs/backview/radio)"
+	default y
+	help
+	  Built-in binaRE drivers of the MTC head-unit SoC interface:
+	  car (ARM IPC core + miscdevice), backview, tm/tv, dvd, vs, keys (adc),
+	  lcd, tef6606 FM radio (i2c) and mtc-common codec helpers.

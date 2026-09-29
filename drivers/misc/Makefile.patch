@@ -1,0 +1,7 @@
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -68,3 +68,4 @@
+ obj-$(CONFIG_AC_USB_SWITCH) += ac_usb_switch.o
+ obj-$(CONFIG_SCALER_DEVICE)		+= scaler/
+ obj-$(CONFIG_USB4604) += usb4604.o
++obj-$(CONFIG_MTC_DRIVERS)	+= mtc/

@@ -1,0 +1,12 @@
+# T4: build board-mtc.o for CONFIG_MACH_RK3188_MTC.
+# Base: SDK rk3188_rk3066_r-box_android4.4.2 kernel/arch/arm/mach-rk3188/Makefile
+# Apply with: patch -p1 < arch/arm/mach-rk3188/Makefile.patch  (from kernel root)
+--- a/arch/arm/mach-rk3188/Makefile
++++ b/arch/arm/mach-rk3188/Makefile
+@@ -37,5 +37,7 @@
+ board-$(CONFIG_MACH_RK3188_AC)  += board-rk3188-ac.o
+ #$_rbox_$_modify_$_begin
+ board-$(CONFIG_MACH_RK3188_BOX) += board-rk3188-box.o
++# T4 binaRE: mtc board (machine "Trk3188")
++board-$(CONFIG_MACH_RK3188_MTC) += board-mtc.o
+ #$_rbox_$_modify_$_end

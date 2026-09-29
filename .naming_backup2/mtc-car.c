@@ -1,6 +1,7 @@
 // CONFIG_HZ = 100
 // xloops = 107374
 
+#include <asm-generic/gpio.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/gpio.h>
@@ -12,305 +13,14 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/workqueue.h>
-#include <linux/uaccess.h> /* T5 r20: copy_from/to_user */
 #include <stdbool.h>
-#include <linux/sched.h>
-#include <linux/reboot.h>
 
-#include "car.h"
+#include "mtc-car.h"
 
-/* T5 r20 (binaRE): p_car_lock = mutes, zashchischayushchij car_ioctl;
- * para s car_io_lock (mutex_lock(&car_struct.car_io_lock) @2826, mutex_init @5343) */
-#define p_car_lock (&car_struct.car_io_lock)
+static struct mtc_car_struct mtc_car_struct;
 
-/* ===== T5 smoke-green (executor): IDA-artifact mechanical block (TENTATIVE) ===== */
-#define __CFADD__(a, b) ((a) + (b)) /* IDA: overflow-checked addition */
-
-/* .rodata literals (значения — из usage-комментариев // "...") и бинарные плейсхолдеры */
-#define off_C08316FC "av_channel"
-#define off_C0831700 "av_gps_monitor"
-#define off_C0831704 "on"
-#define off_C0831710 "canbus_rsp"
-#define off_C0831714 "rpt_boot_complete"
-#define off_C0831718 "rpt_logo_complete"
-#define off_C083171C "rpt_boot_android"
-#define off_C0831720 "rpt_boot_appinit"
-#define off_C0831724 "sta_dvd"
-#define off_C0831728 "sta_dvd_folder"
-#define off_C083172C "sta_dvd_media"
-#define off_C0831730 "sta_dvd_folder_cnt"
-#define off_C0831734 "sta_dvd_media_cnt"
-#define off_C0831738 "sta_dvd_folder_idx"
-#define off_C083173C "sta_dvd_media_idx"
-#define off_C0831740 "sta_dvd_length"
-#define off_C0831744 "sta_dvd_position"
-#define off_C0831748 "sta_dvd_title"
-#define off_C083174C "sta_ipod"
-#define off_C0831750 "cfg_maxvolume"
-#define off_C0831754 "cfg_customer"
-#define off_C0831758 "cfg_sn"
-#define off_C083175C "cfg_model"
-#define off_C0831760 "cfg_password"
-#define off_C0831764 "cfg_logo1"
-#define off_C0831768 "cfg_logo2"
-#define off_C083176C "cfg_canbus"
-#define off_C0831770 "cfg_canbus_cfg"
-#define off_C0831774 "cfg_atvmode"
-#define off_C0831778 "cfg_dtv"
-#define off_C083177C "cfg_frontview"
-#define off_C0831780 "cfg_ipod"
-#define off_C0831784 "cfg_dvd"
-#define off_C0831788 "cfg_bt"
-#define off_C083178C "cfg_radio"
-#define off_C0831790 "cfg_rds"
-#define off_C0831794 "cfg_logo_type"
-#define off_C0831798 "cfg_radio_area"
-#define off_C083179C "cfg_launcher"
-#define off_C08317A0 "cfg_led_type"
-#define off_C08317A4 "cfg_rudder"
-#define off_C08317A8 "cfg_key0"
-#define off_C08317AC "cfg_appdisable"
-#define off_C08317B0 "cfg_language_selection"
-#define off_C08317B4 "cfg_color"
-#define off_C08317B8 "cfg_led_multi"
-#define off_C08317BC "cfg_wifi_pwr"
-#define off_C08317C0 "cfg_mirror"
-#define off_C08317C4 "ctl_uv_cal"
-#define off_C08317C8 "av_channel_enter"
-#define off_C08317CC "av_channel_exit"
-#define off_C08317D0 "av_volume"
-#define off_C08317D4 "av_phone_volume"
-#define off_C08317D8 "rpt_boot_recovery"
-#define off_C08317DC "av_gps_switch"
-#define off_C08317E0 "av_phone"
-#define off_C08317E4 "in"
-#define off_C08317E8 "out"
-#define off_C08317EC "hangup"
-#define off_C08317F0 "rpt_reboot"
-#define off_C08317F4 "0"
-#define off_C08317F8 "av_gps_gain"
-#define off_C08317FC "ctl_cvbs_brightness"
-#define off_C0831800 "ctl_lcd"
-#define off_C0831804 "ctl_camera"
-#define off_C0831808 "start_front"
-#define off_C083180C "av_speech"
-#define off_C0831818 "rpt_power"
-#define off_C083181C "rpt_key_mode"
-#define off_C0831820 "assign"
-#define off_C0831824 "normal"
-#define off_C0831828 "steering"
-#define off_C083182C ((char *)0) /* binaRE placeholder */
-#define off_C0831830 "cfg_backlight"
-#define off_C0831834 "cfg_blmode"
-#define off_C0831838 "cfg_powerdelay"
-#define off_C083183C "cfg_ill"
-#define off_C0831840 "cfg_beep"
-#define off_C0831844 "cfg_led"
-#define off_C0831848 "cfg_dvr"
-#define off_C083184C "cfg_wheelstudy_type"
-#define off_C0831850 "cfg_key_assign"
-#define off_C0831854 "cfg_ir_assign"
-#define off_C0831858 ((char *)0) /* binaRE placeholder */
-#define off_C0831864 ((char *)0) /* binaRE placeholder */
-#define off_C0831868 "cfg_steer_assign"
-#define off_C0831870 "cfg_config"
-#define off_C0831874 ((char *)0) /* binaRE placeholder */
-#define off_C083187C ((char *)0) /* binaRE placeholder */
-#define off_C0831880 ((char *)0) /* binaRE placeholder */
-#define off_C0831884 ((char *)0) /* binaRE placeholder */
-#define off_C0831888 ((char *)0) /* binaRE placeholder */
-#define off_C0831890 ((char *)0) /* binaRE placeholder */
-#define off_C0831898 "answer"
-#define off_C083189C "start"
-#define off_C08318A0 "cancel"
-#define off_C08318A4 ((char *)0) /* binaRE placeholder */
-#define off_C08318A8 ((char *)0) /* binaRE placeholder */
-#define off_C08318AC ((char *)0) /* binaRE placeholder */
-#define off_C08318B0 "--mtc exit %s\n"
-#define off_C08318B4 "--mtc enter %s\n"
-#define off_C08318B8 "gsm_bt"
-#define off_C08318BC "sys"
-#define off_C08318C0 "fm"
-#define off_C08318C4 "ipod"
-#define off_C08318CC "ctl_capture_on"
-#define off_C08318D0 "ctl_capture_off"
-#define off_C08318D4 "dvd"
-#define off_C08318D8 "line"
-#define off_C08318DC "dtv"
-#define off_C08318E0 "dvr"
-#define off_C08318E4 "ctl_radar"
-#define off_C08318E8 "ctl_beep"
-#define off_C08318EC "sta_driving"
-#define off_C08318F0 "fm"
-#define off_C08318F8 "sta_ill"
-#define off_C0831904 "ctl_dtv_ir"
-#define off_C0831908 "ctl_dvd_cmd"
-#define off_C083190C "ctl_dvd_door"
-#define off_C0831910 "open"
-#define off_C0831914 "close"
-#define off_C0831918 "eject"
-#define off_C0831920 "sta_dtv"
-#define off_C0831924 "sta_battery"
-#define off_C0831928 "sta_touch"
-#define off_C083192C "none"
-#define off_C0831930 "sta_touch_adc"
-#define off_C0831934 "sta_touch_cal"
-#define off_C0831938 ((char *)0) /* binaRE placeholder */
-#define off_C083193C "recovery"
-#define off_C0831940 "success"
-#define off_C0831948 "sta_video_signal"
-#define off_C083194C "ok"
-#define off_C0833864 "ctl_radio_ta"
-#define off_C0833878 "nosignal" /* T5 r20: TENTATIVE po IDA-kommentariyu (was binaRE placeholder) */
-#define off_C083387C "sta_radio_signal"
-#define off_C0833880 "sta_tv_status"
-#define off_C0833884 "sta_tv_signal"
-#define off_C0833888 "sta_radio_stereo"
-#define off_C0833890 "sta_mcu_version"
-#define off_C0833894 "sta_mcu_date"
-#define off_C0833898 "sta_mcu_time"
-#define off_C083389C "sta_uv_cal"
-#define off_C08338A0 "sta_view"
-#define off_C08338A4 "front"
-#define off_C08338A8 "back"
-#define off_C08338AC "ctl_radio_af"
-#define off_C08338B0 "sta_touch_info"
-#define off_C08338B4 "sta_wipe"
-#define off_C08338B8 "no"
-#define off_C08338C4 "ctl_radio_search"
-#define off_C08338C8 ((char *)0) /* binaRE placeholder */
-#define off_C08338CC "ctl_radio_frequency"
-#define off_C08338D0 "ctl_radio_sfrequency"
-#define off_C08338D4 "ctl_soft_mute"
-#define off_C08338D8 "stereo"
-#define off_C08338DC "secam" /* T5 r20: TENTATIVE po IDA-kommentariyu (was binaRE placeholder) */
-#define off_C08338E0 "mono" /* T5 r20: TENTATIVE po IDA-kommentariyu (was binaRE placeholder) */
-#define off_C08338E4 "ntsc" /* T5 r20: TENTATIVE po IDA-kommentariyu (was binaRE placeholder) */
-#define off_C08338E8 "ctl_radio_mute"
-#define off_C08338EC "ctl_radio_stereo"
-#define off_C08338F0 "cfg_config"
-#define off_C08338F8 "ctl_backview_vol"
-#define off_C08338FC "ctl_backview_mute"
-#define off_C0833900 "av_gps_ontop"
-#define off_C0833904 "ctl_tv_frequency"
-#define off_C0833908 "ctl_tv_demod"
-#define off_C083390C "ctl_key"
-#define off_C0833910 "power"
-#define off_C0833914 "power2"
-#define off_C0833918 "eject"
-#define off_C083391C "screenbrightness"
-#define off_C0833920 "parrot_updata"
-#define off_C0833924 "parrot_normal"
-#define off_C0833928 "av_lud"
-#define off_C0833934 "ctl_power"
-#define off_C0833938 "av_balance"
-#define off_C083393C "av_eq"
-#define off_C0833940 "av_gps_monitor"
-#define off_C0833944 "ctl_reset"
-#define off_C0833948 "0"
-#define off_C083394C "1"
-#define off_C0833950 "recovery"
-#define off_C0833954 "av_gps_switch"
-#define off_C0833958 "av_gps_gain"
-#define off_C083395C "av_active"
-
-static const char str_av_mute_[] = "av_mute";
-static const char str_diskin[] = "disk in"; /* TENTATIVE: по имени (binaRE) */
-static const char str_fail[] = "fail"; /* TENTATIVE: по имени (binaRE) */
-static const char str_false[] = "false";
-static const char str_false_0[] = "false";
-static const char str_fmt_d_3[] = "%d";
-static const char str_fmt_d_4[] = "%d";
-static const char str_nodisk[] = "nodisk"; /* TENTATIVE: по имени (binaRE) */
-static const char str_off[] = "off";
-static const char str_on[] = "on";
-static const char str_start_back[] = "start_back";
-static const char str_true[] = "true";
-static const char str_true_0[] = "true";
-static const char str_fmt_d_comma_2[] = "%d"; /* TENTATIVE: все usage — sprintf(dst,fmt,int) */
-static const char str_fmt_d_comma_3[] = "%d"; /* TENTATIVE: все usage — sprintf(dst,fmt,int) */
-
-static struct miscdevice mtc_car_miscdev; /* forward (def ниже) */
-static void car_avm(void); /* forward (def ниже) */
-static irqreturn_t mcu_isr_cb(int irq, void *dev_id)
-{ (void)irq; (void)dev_id; return IRQ_HANDLED; /* binaRE placeholder */ }
-static void WipeCheckClear_work(struct work_struct *work)
-{ (void)work; pr_warn("--mtc WipeCheckClear_work: binaRE placeholder\n"); }
-
-/* binaRE плейсхолдеры: локальные буферы декомпилятора */
-static char mtc_sta_buf[512];
-static char *buf_1 = mtc_sta_buf;
-static char *p_buf1 = mtc_sta_buf;
-static char *p_buf2 = mtc_sta_buf;
-static char *p_buf1_3060 = NULL; /* TENTATIVE: &car_struct.ioctl_buf1[3060] (ставится в car_ioctl) */
-static union mtc_config_data *p_config_data_4 = NULL; /* TENTATIVE: ставится в car_ioctl */
-
-
-
-/* T5 minfix: cross-TU прототипы (сигнатуры = определения в vs.c/audio_card_glue.c/backview.c) */
-int vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count); /* binary returns int (decompiled_vs_send.c) */
-void vs_send_raw(int port_num, unsigned char *data, int count);
-void capture_add_work(unsigned int cmd1, int cmd2, unsigned int delay, int flush);
-void audio_add_work(unsigned int cmd1, int cmd2, int cmd3, int val1);
-
-/* T5 minfix: decompiler-низкие имена -> SDK API (plat/gpio.h: gpio_set_value=__gpio_set_value;
- * asm-generic/delay.h: udelay(n)=__udelay(n), n в usec) */
-#define _gpio_set_value gpio_set_value
-#define _gpio_get_value gpio_get_value
-#define _const_udelay(n) __const_udelay(n)	/* SDK asm/delay.h: константный путь __const_udelay (arch/arm/lib/delay.S); udelay(const>2000) -> __bad_udelay (undefined) */
-
-/* T5 minfix: stubs — тела не реконструированы (binaRE: to-do); для полноты линковки. */
-void backlight_on(void) { }
-void backlight_off(void) { }
-void backlight_update(void) { }
-void Hit_radio_sta(int a1, int a2, int a3, int a4, int a5) { (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; }
-
-/* binaRE recon round3: локальные объявления (определения — блок "binaRE recon round3"
- * перед car_ioctl). Адреса — 3188_kallsyms (tr -d '\r'), не из decompiled-заголовков. */
-
-/* binaRE: состояние колёса (adc_wheel_callback, R2; контекст регистрации 0xC09BCF38) —
- * поля по оффсетам из disassembly. */
-struct mtc_wheel_state {
-	u32 pad0;		/* @0 */
-	u32 key_repeat_cnt;	/* @4 — дебаунс/повтор (ставится 40) */
-	u8 pad1[84];	/* @5..87 */
-	u32 *adc_ref_up;	/* @88 — указатель на обученное "up"-значение ADC */
-	u32 *adc_ref_dn;	/* @92 — указатель на обученное "down"-значение ADC */
-	u8 wheel_state;	/* @96 — старший ниббл: текущее направление, младший: предыдущее */
-	u8 wheel_last_key;	/* @97 — 0x40 / 0x41('A') / 0x42('B') */
-	u8 pad2[158];	/* @98..255 */
-	u32 adc_up_val;	/* @256 */
-	u32 adc_dn_val;	/* @260 */
-};
-
-/* binaRE 0xC083B8A0 (add_wheel_work.constprop.9, 116B) — вне списка 17 функций этого раунда;
- * прототип для вызовов из adc_wheel_callback. */
-extern int add_wheel_work(int key, struct mtc_wheel_state *ws);
-
-static void power_soft_off(void);
-static int check_customer(const char *name);
-static int get_token_int(char **pos);
-static int process_mcu_command(unsigned int cmd);
-static int mtcWipeCheck(void);
-static char *mtc_get_pin_map(int pin_id);
-static int mtc_init_test_io(void);
-static int mtc_test_port2(unsigned char *pa, unsigned char *pb);
-static int mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc);
-static char *mtc_test_port(void);
-static void mtc_clear_screen(int color);
-static char *mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color);
-static char *mtc_debug_put_string(const char *s, int len, int x0, int y,
-				  int fg_color, int bg_color);
-static int adc_wheel_callback(const u32 *adc_cur, struct mtc_wheel_state *ws,
-			      int adc_val);
-static void stw_range_check(void);
-int mtc_iomux_set(unsigned int mode);
-static int mtc_get_screen_width(void);
-
-struct mtc_car_struct car_struct;   /* T5 minfix: было static mtc_car_struct (дубль глобала); символ kallsyms = car_struct (car.h:142, якорь 0xC168AC80) */
-
-static struct mtc_car_status *car_status = &car_struct.car_status;
-static union mtc_config_data *config_data = &car_struct.config_data;
+static struct mtc_car_status *car_status = &mtc_car_struct.car_status;
+static union mtc_config_data *config_data = &mtc_car_struct.config_data;
 
 static int arm_rev(void);
 
@@ -409,6 +119,16 @@ car_write(struct file *filp, const char __user *buf, size_t count, loff_t *offp)
 	return 0;
 }
 
+static long
+car_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	// too many code
+	(void)filp;
+	(void)cmd;
+	(void)arg;
+
+	return 0;
+}
 
 /*
  * ==================================
@@ -445,7 +165,7 @@ arm_parrot_boot(int mode)
 	}
 }
 
-EXPORT_SYMBOL_GPL(arm_parrot_boot);
+EXPORT_SYMBOL_GPL(arm_parrot_boot)
 
 /* все это очень сильно смахивает на SPI, почему не использовали хардверную
  * шину?? */
@@ -489,8 +209,8 @@ arm_send_cmd(unsigned int cmd)
 	}
 
 	bit_pos = 0;
-	car_struct.rev_bytes_count = 0x10000;
-	car_struct.arm_rev_cmd = cmd;
+	mtc_car_struct->rev_bytes_count = 0x10000;
+	mtc_car_struct->arm_rev_cmd = cmd;
 
 	udelay(10);
 
@@ -624,8 +344,8 @@ LABEL_2:
 		}
 	} while (!CheckTimeOut(timeout));
 
-	printk("~ arm_rev_8bits err0 %x %x %d\n", car_struct.rev_bytes_count,
-	       car_struct.arm_rev_cmd, bit_n);
+	printk("~ arm_rev_8bits err0 %x %x %d\n", mtc_car_struct->rev_bytes_count,
+	       mtc_car_struct.arm_rev_cmd, bit_n);
 
 err_rev:
 	gpio_set_value(gpio_MCU_DOUT, 1);
@@ -643,7 +363,7 @@ arm_rev_bytes(unsigned char *buf, int count)
 	if (count) {
 		pos = 0;
 		while (1) {
-			car_struct.rev_bytes_count++;
+			mtc_car_struct->rev_bytes_count++;
 			result = arm_rev_8bits(&buf[pos++]);
 
 			if (!result) {
@@ -731,7 +451,7 @@ arm_rev()
 
 			gpio_direction_output(gpio_MCU_CLK, 1);
 			udelay(1);
-			car_struct.rev_bytes_count = 0x20000;
+			mtc_car_struct->rev_bytes_count = 0x20000;
 			gpio_direction_input(gpio_MCU_CLK);
 			arm_rev_cmd = 0;
 			bit_pos = 0;
@@ -763,7 +483,7 @@ arm_rev()
 						goto LABEL_8;
 					}
 
-					car_struct.arm_rev_cmd = arm_rev_cmd;
+					mtc_car_struct->arm_rev_cmd = arm_rev_cmd;
 
 					return process_mcu_command(arm_rev_cmd);
 				}
@@ -787,8 +507,8 @@ arm_send(unsigned int cmd)
 	int hi_byte;
 	unsigned char byteval = 0;
 
-	disable_irq(car_struct.car_comm->mcu_din_gpio);
-	mutex_lock(&car_struct.car_comm->car_lock);
+	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_lock(&mtc_car_struct->car_comm->car_lock);
 
 	if (arm_send_cmd(cmd)) {
 		hi_byte = cmd & 0xFF00;
@@ -802,10 +522,10 @@ arm_send(unsigned int cmd)
 		}
 	}
 
-	enable_irq(car_struct.car_comm->mcu_din_gpio);
-	mutex_unlock(&car_struct.car_comm->car_lock);
+	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 }
-EXPORT_SYMBOL_GPL(arm_send);
+EXPORT_SYMBOL_GPL(arm_send)
 
 /* fully decompiled */
 int
@@ -820,8 +540,8 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 	int res;
 	int bit_pos;
 
-	disable_irq(car_struct.car_comm->mcu_din_gpio);
-	mutex_lock(&car_struct.car_comm->car_lock);
+	disable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_lock(&mtc_car_struct->car_comm->car_lock);
 	recv = arm_send_cmd(cmd);
 
 	if (!recv) {
@@ -834,7 +554,7 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 		if (cmd & 0x8000) {
 			if (count) {
 				for (pos = 0; pos < count; pos++) {
-					car_struct.rev_bytes_count += 0x100;
+					mtc_car_struct->rev_bytes_count += 0x100;
 					byte = buf[pos];
 
 					for (bit_pos = 0; bit_pos < 7; bit_pos++) {
@@ -943,13 +663,13 @@ arm_send_multi(unsigned int cmd, int count, unsigned char *buf)
 	res = arm_send_ack();
 
 LABEL_19:
-	enable_irq(car_struct.car_comm->mcu_din_gpio);
-	mutex_unlock(&car_struct.car_comm->car_lock);
+	enable_irq(mtc_car_struct->car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct->car_comm->car_lock);
 
 	return res;
 }
 
-EXPORT_SYMBOL_GPL(arm_send_multi);
+EXPORT_SYMBOL_GPL(arm_send_multi)
 
 /*
  * ==================================
@@ -963,14 +683,10 @@ car_work(struct work_struct *work)
 {
 	struct mtc_work *car_work_data;
 	unsigned int t = 40;
-	int cmd2, cmd2_32; /* IDA: locals case 67/69 */
-	int _cmd2_32; /* IDA: case 69 */
-	struct timeval tv; /* IDA: case 69 */
-	long old_sec; /* IDA: case 69 */
 
-	car_work_data = container_of(work, struct mtc_work, dwork);
+	car_work_data = container_of(work, mtc_work, dwork);
 
-	mutex_lock(&car_struct.car_cmd_lock);
+	mutex_lock(&mtc_car_struct.car_cmd_lock);
 
 	while (!car_status->car_ready) {
 		msleep(10u);
@@ -980,7 +696,7 @@ car_work(struct work_struct *work)
 
 	case 29:
 		if (++car_status->power_refcnt) {
-			audio_active(); /* IDA: def audio_card_glue.c без аргументов */
+			audio_active(v3, v4, v5);
 			backlight_on();
 			break;
 		}
@@ -1141,7 +857,7 @@ car_work(struct work_struct *work)
 
 	case 67:
 		vs_send(2, 0xA4u, 0, 0);
-		cmd2 = car_work_data->cmd2; /* was CONTAINING_RECORD(work, struct mtc_work, dwork)->cmd2 */
+		cmd2 = CONTAINING_RECORD(work, mtc_work, dwork)->cmd2;
 		if (cmd2 <= 31) {
 			break;
 		}
@@ -1184,9 +900,9 @@ car_work(struct work_struct *work)
 		cmd2 = car_work_data->cmd2;
 		if (cmd2 <= 0x1F) {
 		LABEL_93:
-			old_sec = tv.tv_sec - car_struct.tv.tv_sec;
-			car_struct.tv = tv;
-			if (tv.tv_usec - car_struct.tv.tv_usec + 1000000 * old_sec <= 29999) {
+			old_sec = tv.tv_sec - mtc_car_struct.tv.tv_sec;
+			mtc_car_struct.tv = tv;
+			if (tv.tv_usec - mtc_car_struct.tv.tv_usec + 1000000 * old_sec <= 29999) {
 				break;
 			}
 			cmd2 = car_work_data->cmd2;
@@ -1253,9 +969,6 @@ car_work(struct work_struct *work)
 			case 21:
 				goto LABEL_97;
 			}
-	LABEL_96:	/* TENTATIVE: IDA-лейбл потерян (case 1); контекст case 7 */
-			send_ir_key(1);
-			break;
 			goto LABEL_97;
 		}
 		_cmd2_32 = (cmd2 - 32);
@@ -1329,1250 +1042,44 @@ car_work(struct work_struct *work)
 	}
 
 	kzfree(car_work_data);
-	mutex_unlock(&car_struct.car_cmd_lock);
-}
-
-
-/* ============================================================
- * binaRE recon round3: 17 car-misc-функций mtc-модуля.
- * Адреса — 3188_kallsyms (tr -d '\r'); код — src_all/decompiled_*,
- * уточнения — disassembly_full.txt (точечные окна).
- * ============================================================ */
-
-/* --- статические глобалы (честные плейсхолдеры; константы — по binaRE) --- */
-
-/* binaRE 0xC0A06F48 (kernel.elf, file offset 0x606F48): шрифт 8x16, 80 глифов;
- * байты извлечены из kernel.elf. */
-static const unsigned char font_8x16[1280] = {
-  0xAC, 0x05, 0x00, 0x00, 0x47, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x4C, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x4D, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x4E, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x49, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x4A, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x4B, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x52, 0x02, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x53, 0x02, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x54, 0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x39, 0x02, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x3A, 0x02, 0x00, 0x00, 0x14, 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x3B, 0x02, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x0A, 0x03, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xAC, 0x05, 0x00, 0x00, 0x0B, 0x03, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x0D, 0x05, 0x00, 0x00, 0x01, 0x32, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x20, 0x10, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x6A, 0x04, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x6A, 0x04, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xF2, 0x04, 0x00, 0x00, 0x18, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xF2, 0x04, 0x00, 0x00, 0x23, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xB4, 0x04, 0x00, 0x00, 0x61, 0xDE, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xB4, 0x04, 0x00, 0x00, 0x64, 0xDE, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xB4, 0x04, 0x00, 0x00, 0xA1, 0xBC, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0xB4, 0x04, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x79, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x79, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x06, 0x20, 0x00, 0x00, 0x18, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x18, 0x05, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x16, 0x0C, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x16, 0x0C, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x16, 0x0C, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x7D, 0x04, 0x00, 0x00, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x26, 0x09, 0x00, 0x00, 0x33, 0x33, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x58, 0x04, 0x00, 0x00, 0x87, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-  0x41, 0x12, 0x00, 0x00, 0x67, 0xF7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD8, 0x00, 0xD5,
-  0xAF, 0x9C, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD4,
-  0xAE, 0xA7, 0x98, 0xA1, 0x70, 0x00, 0x00, 0x00, 0x9A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xB7, 0xB8, 0xB9,
-  0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xC1, 0xC2, 0x00, 0x00, 0x00, 0x00, 0xAF, 0x01, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x13, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x0C, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x17, 0xC5, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x01, 0xC1, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x04, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x14, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x1F, 0xC7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x0A, 0xC3, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x12, 0xC5, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x15, 0xC2, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x94, 0xC2, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x0A, 0xC2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x11, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x19, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x83, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x86, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x95, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x03, 0xCA, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x99, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x9B, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x98, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x9C, 0xC2, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x93, 0xC2, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x18, 0xC2, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-  0x87, 0xC2, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x6D, 0x04, 0x00, 0x00,
-};
-
-/* binaRE .bss: экран/фреймбуфер (mtc_get_screen_width / mtc_debug_putc / mtc_clear_screen) */
-static unsigned int mtc_fb_width;	/* 0xC0D1DE28 — ширина экрана (800/1024) */
-static u32 *mtc_fb_buf;			/* 0xC0D1DE30 — framebuffer (ARGB u32) */
-
-/* binaRE 0xC0BC9B20: указатель на pin-таблицу (16B-записи: [0]=pin id, 0=терминатор;
- * [4]=gpio; [8]=iomux-режим; [14]=флаг "проверено"). Начальное значение из .data =
- * 0xC09BC034 — НЕ декодируется как таблица (kernel.elf); runtime-значение выставляется
- * в другом месте — честный плейсхолдер NULL. binaRE NULL не проверяет (нет call-sites). */
-static unsigned char *pin_map_tbl = NULL;
-
-/* binaRE 0xC0BCB25C..0xC0BCB26C (.data): screen-info слова [0xC0B0462C, 1082, 536, 0x10550].
- * Роль не определена из бинара в этом раунде — честные плейсхолдеры с начальными
- * константами из kernel.elf. */
-static u32 screen_info_1 = 1082;	/* 0xC0BCB260 */
-static u32 screen_info_2 = 536;		/* 0xC0BCB264 */
-
-/* binaRE 0xC0BC9F54: таблица test-последовательности (mtc_test_port): записи 3B
- * {a, b, c}, a == 0 — терминатор. Байты извлечены из kernel.elf (реальные). */
-static const unsigned char test_seq_tbl[] = {
-1, 74, 107, 3, 7, 0, 5, 9, 0, 123, 131, 0, 125, 127, 0, 133, 141, 0, 139, 143, 0, 147, 153, 0, 149, 155, 0, 76, 80, 0, 78, 82, 0, 84, 88, 0, 86, 90, 0, 92, 106, 0, 102, 108, 0, 112, 118, 0, 116, 120, 0, 122, 130, 0, 126, 132, 0, 134, 138, 0, 136, 140, 0, 144, 150, 0, 148, 152, 0, 154, 160, 0, 158, 164, 0, 166, 170, 0, 168, 172, 0, 174, 178, 0, 176, 180, 0, 0
-};
-
-/* binaRE 0xC168E474: состояние wheel/steer-study (поля по оффсетам из disassembly) */
-struct mtc_wheel_study {
-	u32 pad0;	/* @0 */
-	u32 adc_enabled;	/* @4 (0xC168E478) — гейт ветки "study" в adc_wheel_callback */
-	u8 pad1[7];	/* @5..11 */
-	u8 adc_type;	/* @12 (0xC168E480) — вариант ADC-порогов (==1 — альтернативные) */
-	u8 dir_inv;	/* @13 (0xC168E481) — инверсия направления */
-	u8 pad2[99];	/* @14..112 */
-	u8 stw_min_a;	/* @113 (0xC168E4E5) — мин. разность stw-таблицы A (stw_range_check) */
-	u8 stw_min_b;	/* @114 (0xC168E4E6) — мин. разность stw-таблицы C */
-};
-static struct mtc_wheel_study wheel_study;
-
-/* --- 1. power_soft_off --- */
-/* binaRE 0xC082D1F0 (power_soft_off, 120B) */
-static void
-power_soft_off(void)
-{
-	car_status->ch_status = 0;		/* binaRE 0xC168ACE5 */
-	car_status->power_refcnt = 0;		/* binaRE 0xC168AC85 */
-	car_status->power_on = 0;			/* binaRE 0xC168ACDC */
-	if (car_status->call_active) {		/* binaRE 0xC168AC87 */
-		capture_add_work(46, 255, 0, 0); /* args по прототипу */
-		audio_add_work(21, 0, 0, 0); /* args по прототипу */
-	} else {
-		capture_add_work(47, 0, 0, 0); /* args по прототипу */
-	}
-	backlight_off();
-}
-
-/* --- 2. check_customer --- */
-/* binaRE 0xC082E734 (check_customer, 200B): сравнение строки customer
- * (car_status+72, binaRE 0xC168ACCC — поле в раунде 2 названо mcuver1) с name:
- * полное совпадение или префикс с допуском на 1 лишний символ, если он цифра.
- * Специальный кейс: "KLD" совпадает с "KLDY". */
-static int
-check_customer(const char *name)
-{
-	const char *cs = car_status->mcuver1;
-	int cs_len = strlen(cs);
-	int n_len = strlen(name);
-
-	if (cs_len < n_len)
-		return 0;
-	if (cs_len == n_len)
-		return strcmp(cs, name) == 0;
-	if (cs_len != n_len + 1)
-		return 0;
-	if (!strcmp("KLD", name) && !strcmp("KLDY", cs))
-		return 1;
-	if (strncmp(cs, name, n_len))
-		return 0;
-	if (cs[n_len] > '/')
-		return cs[n_len] <= '9';
-	return 0;	/* binaRE: return result (strncmp == 0) */
-}
-
-/* --- 3. get_token_int --- */
-/* binaRE 0xC0830680 (get_token_int, 148B): разбор десятичного числа из токена,
- * *pos продвигается; -1 при ошибке; ',' и '\0' завершают число (для ',' — pos
- * продвинут за запятую). */
-static int
-get_token_int(char **pos)
-{
-	char *p = *pos;
-	int c = *p;
-	int next;
-	int val = 0;
-
-	if (!c)
-		return -1;
-	if (c == ',') {
-		(*pos)++;
-		return 0;
-	}
-	if ((unsigned char)(c - '0') > 9u)
-		return -1;
-	while (1) {
-		next = *++p;
-		*pos = p;
-		val = val * 10 + (c - '0');
-		if (!next)
-			return val;
-		if (next == ',') {
-			(*pos)++;
-			return val;
-		}
-		if ((unsigned char)(next - '0') > 9u)
-			return -1;
-		c = next;
-	}
-}
-
-/* --- 4. process_mcu_command --- */
-/* binaRE 0xC082E958 (process_mcu_command, 2672B) — процессор команд MCU (обратный
- * канал). ПОЛНАЯ транскрипция диспетчеризации (все кейсы, без сокращений);
- * LABEL_x — метки binaRE. */
-static int
-process_mcu_command(unsigned int cmd)
-{
-	u8 buf[8];	/* binaRE: стек-область sp+0x10.. (v14..); кейс 0xF00C читает 8 байт */
-	int r;
-
-	if ((cmd & 0x7000u) < 0x1000u) {
-		if (cmd <= 0x602u) {
-			if (cmd > 0x600u)
-				return arm_rev_ack();
-			if (cmd == 259u) {				/* 0x103 */
-				vs_send(2, 134, NULL, 0);
-				return arm_rev_ack();
-			}
-			if (cmd <= 259u) {
-				if (cmd == 257u) {			/* 0x101 */
-					vs_send(2, 132, NULL, 0);
-					return arm_rev_ack();
-				}
-				if (cmd == 258u) {			/* 0x102 */
-					vs_send(2, 133, NULL, 0);
-					return arm_rev_ack();
-				}
-			} else {
-				switch (cmd) {
-				case 0x402u:
-					vs_send(2, 241, NULL, 0);	/* binaRE LABEL_28 */
-					return arm_rev_ack();
-				case 0x408u:
-					vs_send(2, 135, NULL, 0);
-					return arm_rev_ack();
-				case 0x401u:
-					vs_send(2, 241, NULL, 0);
-					return arm_rev_ack();
-				}
-			}
-			printk("~ mtc rev err cmd %04x\n", cmd);	/* binaRE LABEL_21 */
-			return arm_rev_ack();
-		}
-		if (cmd > 0x705u) {
-			switch (cmd) {
-			case 0x801u:
-				vs_send(2, 136, NULL, 0);
-				return arm_rev_ack();
-			case 0x802u:
-				car_status->power2_flag = 1;		/* binaRE 0xC168AD1F */
-				return arm_rev_ack();
-			case 0x755u:
-				printk("MCU_SHUTDOWN\n");
-				car_add_work(73, 0, 0);
-				return arm_rev_ack();
-			}
-			printk("~ mtc rev err cmd %04x\n", cmd);
-			return arm_rev_ack();
-		}
-		if (cmd >= 0x704u)
-			return arm_rev_ack();
-		if (cmd != 1794u) {				/* 0x702 */
-			if (cmd <= 0x702u) {
-				if (cmd != 1793u) {			/* 0x701 */
-					printk("~ mtc rev err cmd %04x\n", cmd);
-					return arm_rev_ack();
-				}
-				car_add_work(35, 0, 0);		/* binaRE LABEL_41 */
-				return arm_rev_ack();
-			}
-			if (!car_status->cam_signal) {		/* binaRE 0xC168ACA5 */
-				car_add_work(35, 0, 0);		/* binaRE LABEL_41 */
-				return arm_rev_ack();
-			}
-		}
-		car_add_work(36, 0, 0);
-		return arm_rev_ack();
-	}
-
-	if ((cmd & 0xF000u) == 0xD000u) {
-		u8 n = cmd & 0xFFu;
-
-		r = arm_rev_bytes(buf + 1, n);	/* binaRE: v13 = (u8)cmd — только store в стек, дальше не читается */
-		if (r) {
-			if (((cmd & 0xF00u) == 0x100u) && !buf[1])
-				config_data->d.cfg_radio = buf[2];	/* binaRE 0xC168AD46 (config+6) */
-			return arm_rev_ack();
-		}
-		return r;
-	}
-
-	if (cmd == 61458u) {				/* 0xF012 */
-		if (!arm_rev_bytes(buf, 2))
-			return 0;
-		vs_send(0, 18, (char *)buf, 2);
-		goto tail_ack;
-	}
-
-	if (cmd <= 0xF012u) {
-		if (cmd == 61447u) {				/* 0xF007 */
-			if (arm_rev_bytes(buf, 5)) {
-				arm_rev_ack();
-				rds_input(buf[3] |
-					  ((buf[2] | ((buf[1] | (buf[0] << 8)) << 8)) << 8)); /* T5 r20: def 1 arg; buf[4] - IDA-artefakt, ubran */
-				return 1;
-			}
-			return 0;
-		}
-		if (cmd > 0xF007u) {
-			if (cmd == 61451u) {			/* 0xF00B */
-				if (arm_rev_bytes(buf, 2)) {
-					arm_rev_ack();
-					rds_input3A(buf);
-					return 1;
-				}
-				return 0;
-			}
-			if (cmd <= 0xF00Bu) {
-				if (cmd == 61449u) {		/* 0xF009 */
-					r = arm_rev_bytes(buf, 5);
-					if (!r)
-						return 0;
-					Hit_radio_sta(buf[0], buf[1], buf[2],
-						       buf[3], buf[4]);
-					goto tail_ack;
-				}
-				if (cmd > 0xF009u) {		/* 0xF00A */
-					if (arm_rev_bytes(buf, 3)) {
-						arm_rev_ack();
-						rds_input2(buf[2] | ((buf[1] | (buf[0] << 8)) << 8));
-						return 1;
-					}
-					return 0;
-				}
-				r = arm_rev_bytes(buf, 4);	/* cmd <= 0xF008 */
-				if (!r)
-					return 0;
-				Hit_radio_sta(buf[0], buf[1], buf[2], 0, buf[3]);
-				goto tail_ack;
-			}
-			if (cmd == 61456u) {			/* 0xF010 */
-				r = arm_rev_bytes(buf, 1);
-				if (!r)
-					return 0;
-				vs_send(0, 16, (char *)buf, 1);
-				goto tail_ack;
-			}
-			if (cmd > 0xF010u) {			/* 0xF011 */
-				r = arm_rev_bytes(buf, 5);
-				if (!r)
-					return 0;
-				vs_send(0, 17, (char *)buf, 5);
-				goto tail_ack;
-			}
-			if (cmd == 61452u) {			/* 0xF00C */
-				if (arm_rev_bytes(buf, 8)) {
-					arm_rev_ack();
-					rds_input3(buf);
-					return 1;
-				}
-				return 0;
-			}
-			goto err_ret0;			/* 0xF00D..0xF00F */
-		}
-		if (cmd == 61443u) {				/* 0xF003 */
-			r = arm_rev_bytes(buf, 2);
-			if (!r)
-				return 0;
-			{
-				int v = 2275 * (buf[1] | (buf[0] << 8));
-
-				car_status->intval3 = v >> 10;	/* binaRE 0xC168AC98 (+24) */
-				buf[0] = (u8)(v >> 18);
-				buf[1] = (u8)(v >> 10);
-				vs_send(2, 146, (char *)buf, 2);
-			}
-			goto tail_ack;
-		}
-		if (cmd > 0xF003u) {
-			if (cmd == 61445u) {			/* 0xF005 */
-				r = arm_rev_bytes(buf, 2);
-				if (r) {
-					car_status->intval4 = buf[1] | (buf[0] << 8);	/* binaRE 0xC168AC9C (+28) */
-					if (!car_status->intval4)
-						car_status->intval4 = 1;
-					goto tail_ack;
-				}
-			} else if (cmd > 0xF005u) {		/* 0xF006 */
-				r = arm_rev_bytes(buf, 2);
-				if (r) {
-					car_status->wipe_flag = buf[1] | (buf[0] << 8);	/* binaRE 0xC168ACA0 (+32) */
-					if (!car_status->wipe_flag)
-						car_status->wipe_flag = 1;
-					goto tail_ack;
-				}
-			} else {				/* 0xF004 */
-				r = arm_rev_bytes(buf, 1);
-				if (r) {
-					u8 nv = buf[0];
-					u8 dv;
-
-					dv = nv ^ car_status->sta_bits;	/* binaRE 0xC168AC8C (+8) */
-					if (dv & 0x10u) {
-						u8 b = (nv & 0x10u) != 0;
-
-						vs_send(2, 144, (char *)&b, 1);
-					}
-					dv = nv ^ car_status->sta_bits;
-					if (dv & 0x20u) {
-						u8 b = (nv & 0x20u) == 0;
-
-						vs_send(2, 145, (char *)&b, 1);
-					}
-					dv = car_status->sta_bits ^ nv;
-					if (dv & 0x48u) {
-						if (dv & 8u) {
-							u8 b = (nv & 8u) == 0;
-
-							vs_send(2, 147, (char *)&b, 1);
-						}
-						car_status->sta_bits = nv;
-						backlight_update();
-					}
-					car_status->sta_bits = nv;
-					goto tail_ack;
-				}
-			}
-		} else {				/* cmd <= 0xF003 */
-			switch (cmd) {
-			case 0xF000u:
-				r = arm_rev_bytes(buf, 2);
-				if (r) {
-					car_status->intval1 = (buf[1] | (buf[0] << 8)) / 3u;	/* binaRE 0xC168AC90 (+12) */
-					if (!car_status->intval1)
-						car_status->intval1 = 1;
-					goto tail_ack;
-				}
-				break;
-			case 0xF001u:
-				r = arm_rev_bytes(buf, 2);
-				if (r) {
-					car_status->intval2 = (buf[1] | (buf[0] << 8)) / 3u;	/* binaRE 0xC168AC94 (+16) */
-					if (!car_status->intval2)
-						car_status->intval2 = 1;
-					goto tail_ack;
-				}
-				break;
-			case 0xE000u: {
-				u8 mmsg[256];	/* binaRE: IDA-область помечена 4B (v14) + соседние vars;
-							 * оригинал пишет buf[len] и читает len <= 255 — честный буфер 256B */
-				if (arm_rev_bytes(mmsg, 1)) {
-					mmsg[mmsg[0]] = 0;
-					r = arm_rev_bytes(mmsg, mmsg[0]);
-					if (!r)
-						return 0;
-					printk("--mtc mmsg %s\n", (const char *)mmsg);
-					goto tail_ack;
-				}
-				break;
-			}
-			default:
-				goto err_ret0;
-			}
-		}
-	} else {
-		if (cmd == 61953u) {				/* 0xF201 */
-			if (!arm_rev_bytes(buf, 1))
-				return 0;
-			if (!buf[0])
-				car_status->mcu_cmd_state = 5;	/* binaRE 0xC168AD20 (+156) */
-			r = buf[0];
-			car_add_work(42, r, 0);
-			goto tail_ack;
-		}
-		if (cmd > 0xF201u) {
-			if (cmd == 61957u) {			/* 0xF205 */
-				car_add_work(34, 0, 0);
-				return arm_rev_ack();
-			}
-			if (cmd <= 0xF205u) {
-				if (cmd == 61955u) {		/* 0xF203 */
-					car_add_work(44, 0, 0);
-				} else if (cmd > 0xF203u) {	/* 0xF204 */
-					if (!car_status->reserved_10 ||
-					    car_status->mcu_cmd_state == 5) {	/* binaRE 0xC168ACA6 (+38) */
-						car_status->mcu_cmd_state = 5;
-						car_add_work(31, 0, 0);
-					} else {
-						car_status->mcu_cmd_state = 5;
-						car_add_work(32, 0, 0);
-					}
-				} else {				/* 0xF202 */
-					car_add_work(45, 0, 0);
-				}
-				return arm_rev_ack();
-			}
-			if (cmd == 61959u) {			/* 0xF207 */
-				if (!car_status->reserved_10 ||
-				    car_status->mcu_cmd_state == 6) {	/* binaRE 0xC168ACA6 (+38) */
-					car_status->mcu_cmd_state = 6;
-					car_add_work(31, 0, 0);
-				} else {
-					car_status->mcu_cmd_state = 6;
-					car_add_work(32, 0, 0);
-				}
-				return arm_rev_ack();
-			}
-			if (cmd < 0xF207u) {			/* 0xF206 */
-				car_add_work(33, 0, 0);
-				return arm_rev_ack();
-			}
-			if (cmd == 61968u) {			/* 0xF210 */
-				if (!arm_rev_bytes(buf, 1))
-					return 0;
-				car_status->mcu_cmd_state = 6;
-				car_add_work(42, 0, 0);
-				r = 1;
-				goto tail_ack;
-			}
-			goto err_ret0;			/* > 0xF210 */
-		}
-		if (cmd == 61462u) {				/* 0xF016 */
-			if (!arm_rev_bytes(buf, 1))
-				return 0;
-			printk("--mtc hold %d\n", buf[0]);
-			car_add_work(70, buf[0], 0);
-			r = 1;
-			goto tail_ack;
-		}
-		if (cmd <= 0xF016u) {
-			if (cmd == 61460u) {			/* 0xF014 */
-				if (!arm_rev_bytes(buf, 1))
-					return 0;
-				printk("--mtc press %d\n", buf[0]);
-				car_add_work(69, buf[0], 0);
-			} else if (cmd > 0xF014u) {		/* 0xF015 */
-				r = arm_rev_bytes(buf, 1);
-				goto tail_ack;
-			} else {				/* 0xF013 */
-				r = arm_rev_bytes(buf, 2);
-				if (!r)
-					return 0;
-				vs_send(0, 19, (char *)buf, 2);
-			}
-			goto tail_ack;
-		}
-		if (cmd != 61473u) {				/* 0xF021 */
-			if (cmd == 61952u) {			/* 0xF200 */
-				if (!arm_rev_bytes(buf, 1))
-					return 0;
-				car_add_work(43, buf[0], 0);
-				r = 1;
-				goto tail_ack;
-			}
-			if (cmd == 61472u) {			/* 0xF020 */
-				u8 len;
-
-				if (!arm_rev_bytes(&len, 1))
-					goto ret_tail;		/* binaRE LABEL_87 */
-				if (!arm_rev_bytes(buf, len))
-					return 0;
-				vs_send_raw(0, (char *)buf, len);
-				r = 1;
-				goto tail_ack;
-			}
-			goto err_ret0;			/* binaRE LABEL_36 */
-		}
-		{
-			u8 mmsg32[32];
-
-			r = arm_rev_bytes(mmsg32, 32);
-			if (r) {
-				u8 *dst = (u8 *)car_status + 100;	/* binaRE 0xC168ACE8: запись в [+1 .. +32] */
-				int k;
-
-				for (k = 0; k < 32; k++)
-					dst[1 + k] = mmsg32[k];
-				goto tail_ack;
-			}
-		}
-	}
-
-ret_tail:				/* binaRE LABEL_87 */
-	return ((int)cmd < 0) ? 0 : ((int)cmd & 0x8000);
-tail_ack:				/* binaRE LABEL_13 */
-	if (r)
-		return arm_rev_ack();
-	return 0;
-err_ret0:				/* binaRE LABEL_36 */
-	printk("~ mtc rev err cmd %04x\n", cmd);
-	return 0;
-}
-
-/* --- 5. mtcWipeCheck --- */
-/* binaRE 0xC0830648 (mtcWipeCheck, 52B): счётчик "wipe"-запросов (car_status+147,
- * binaRE 0xC168AD17; поле в раунде 2 названо boot_flags). Ранние возвраты в
- * binaRE R0 не устанавливают (BX LR) — здесь 0/счётчик; >3 — tail-call car_add_work(72). */
-static int
-mtcWipeCheck(void)
-{
-	if (!car_status->boot_flags)
-		return 0;
-	car_status->boot_flags = (u8)(car_status->boot_flags + 1);
-	if (car_status->boot_flags <= 3)
-		return car_status->boot_flags;
-	car_add_work(72, 0, 0);	/* binaRE: tail-call — R0 = R0 car_add_work */
-	return 0;		/* мtc_shared.h:253 объявляет car_add_work void */
-}
-
-/* --- 6. mtc_get_pin_map --- */
-/* binaRE 0xC082D5C0 (mtc_get_pin_map, 88B): поиск pin id в pin-таблице (записи 16B,
- * id — первый байт записи, 0 — терминатор). Возврат — указатель на запись или NULL.
- * binaRE: таблица через указатель 0xC0BC9B20 (см. pin_map_tbl), первая запись [P+0x74]. */
-static char *
-mtc_get_pin_map(int pin_id)
-{
-	unsigned char *rec = pin_map_tbl + 0x74;
-
-	if (!rec[0])
-		return NULL;
-	if (rec[0] == pin_id)
-		return rec;
-	rec += 16;
-	for (;;) {
-		if (!rec[0])
-			return NULL;
-		if (rec[0] == pin_id)
-			return rec;
-		rec += 16;
-	}
-}
-
-/* --- 7. mtc_init_test_io --- */
-/* binaRE 0xC082D61C (mtc_init_test_io, 160B): настройка test-GPIO pin-таблицы:
- * iomux_set([+8]), gpio_request([+4]), pull-updown=0, direction=input; флаг [+14] = 0. */
-static int
-mtc_init_test_io(void)
-{
-	unsigned char *rec = pin_map_tbl + 0x74;
-	char name[16];	/* binaRE: 14B-область стека */
-	int idx = 0;
-	int ret = 0;
-
-	while (rec[0]) {
-		u32 gpio = *(u32 *)(rec + 4);
-		u32 iomux = *(u32 *)(rec + 8);
-
-		if (iomux)
-			mtc_iomux_set(iomux);
-		sprintf(name, "tp%d", idx++);
-		gpio_request(gpio, name);
-		gpio_pull_updown(gpio, 0);
-		ret = gpio_direction_input(gpio);
-		rec[14] = 0;
-		rec += 16;
-	}
-	return ret;	/* binaRE: значение последнего gpio_direction_input */
-}
-
-/* --- 8. mtc_test_port2 --- */
-/* binaRE 0xC082D6C4 (mtc_test_port2, 288B): тест пары пинов (3 попытки, оба направления).
- * Флаг "проверено" [+14]: 1 = нет контакта, 0 = OK. */
-static int
-mtc_test_port2(unsigned char *pa, unsigned char *pb)
-{
-	int i;
-	u32 ga = *(u32 *)(pa + 4);
-	u32 gb = *(u32 *)(pb + 4);
-	int ret;
-
-	for (i = 3; i > 0; i--) {
-		gpio_direction_input(gb);
-		gpio_direction_output(ga, 1);
-		_gpio_set_value(ga, 1);
-		_const_udelay(1073740);
-		if (!_gpio_get_value(gb))
-			goto ok;
-		_gpio_set_value(ga, 0);
-		_const_udelay(1073740);
-		if (_gpio_get_value(gb) == 1)
-			goto ok;
-		gpio_direction_input(ga);
-		gpio_direction_output(gb, 1);
-		_gpio_set_value(gb, 1);
-		_const_udelay(1073740);
-		if (!_gpio_get_value(ga))
-			goto ok;
-		_gpio_set_value(gb, 0);
-		_const_udelay(1073740);
-		if (_gpio_get_value(ga) == 1)
-			goto ok;
-	}
-	gpio_direction_input(ga);
-	ret = gpio_direction_input(gb);
-	pa[14] = 1;
-	pb[14] = 1;
-	return ret;
-ok:
-	gpio_direction_input(ga);
-	ret = gpio_direction_input(gb);
-	pa[14] = 0;
-	pb[14] = 0;
-	return ret;
-}
-
-/* --- 9. mtc_test_port3 --- */
-/* binaRE 0xC082D7E4 (mtc_test_port3, 636B): тест тройки пинов (3 раунда, битовая
- * маска 1/2/4 за раунд). Финал: [+14] = (маска != ожидаемая) — 1 = дефект. */
-static int
-mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc)
-{
-	int i;
-	u32 ga = *(u32 *)(pa + 4);
-	u32 gb = *(u32 *)(pb + 4);
-	u32 gc = *(u32 *)(pc + 4);
-	int ret;
-
-	pa[14] = 0;
-	pb[14] = 0;
-	pc[14] = 0;
-	for (i = 3; i > 0; i--) {
-		/* раунд: драйв A */
-		gpio_direction_input(gb);
-		gpio_direction_input(gc);
-		gpio_direction_output(ga, 1);
-		_gpio_set_value(ga, 1);
-		_const_udelay(1073740);
-		if (!_gpio_get_value(gb))
-			pb[14] |= 1;
-		if (!_gpio_get_value(gc))
-			pc[14] |= 1;
-		_gpio_set_value(ga, 0);
-		_const_udelay(1073740);
-		if (_gpio_get_value(gb) == 1)
-			pb[14] |= 1;
-		if (_gpio_get_value(gc) == 1)
-			pc[14] |= 1;
-		gpio_direction_input(gc);
-		gpio_direction_input(ga);
-		/* драйв B */
-		gpio_direction_output(gb, 1);
-		_gpio_set_value(gb, 1);
-		_const_udelay(1073740);
-		if (!_gpio_get_value(gc))
-			pc[14] |= 2;
-		if (!_gpio_get_value(ga))
-			pa[14] |= 2;
-		_gpio_set_value(gb, 0);
-		_const_udelay(1073740);
-		if (_gpio_get_value(gc) == 1)
-			pc[14] |= 2;
-		if (_gpio_get_value(ga) == 1)
-			pa[14] |= 2;
-		gpio_direction_input(ga);
-		gpio_direction_input(gb);
-		/* драйв C */
-		gpio_direction_output(gc, 1);
-		_gpio_set_value(gc, 1);
-		_const_udelay(1073740);
-		if (!_gpio_get_value(ga))
-			pa[14] |= 4;
-		if (!_gpio_get_value(gb))
-			pb[14] |= 4;
-		_gpio_set_value(gc, 0);
-		_const_udelay(1073740);
-		if (_gpio_get_value(ga) == 1)
-			pa[14] |= 4;
-		if (_gpio_get_value(gb) == 1)
-			pb[14] |= 4;
-	}
-	gpio_direction_input(ga);
-	gpio_direction_input(gb);
-	ret = gpio_direction_input(gc);
-	pa[14] = pa[14] != 6;
-	pb[14] = pb[14] != 5;
-	pc[14] = pc[14] != 3;
-	return ret;	/* binaRE: значение последнего gpio_direction_input */
-}
-
-/* --- 10. mtc_test_port --- */
-/* binaRE 0xC082DCF4 (mtc_test_port, 488B): прогон test-последовательности
- * (test_seq_tbl: записи {a, b, c}): a==1 — первый pin (запись 0), иначе поиск по id;
- * c==1 — третья запись 0; c==0/не найден — тест пары (mtc_test_port2), иначе тройки
- * (mtc_test_port3). В конце — вывод результатов на debug-экран. */
-static char *
-mtc_test_port(void)
-{
-	const unsigned char *seq = test_seq_tbl;
-	char *ret = 0;
-
-	while (seq[0]) {
-		unsigned char a = seq[0], b = seq[1], c = seq[2];
-		unsigned char *pa, *pb, *pc;
-		int fa, fb;
-
-		if (a == 1) {
-			pa = pin_map_tbl + 0x74;	/* первая запись */
-			fa = 0;
-		} else {
-			pa = (unsigned char *)mtc_get_pin_map(a);
-			fa = (pa == NULL);
-		}
-		if (b == 1) {
-			pb = pin_map_tbl + 0x74;
-			fb = 0;
-		} else {
-			pb = (unsigned char *)mtc_get_pin_map(b);
-			fb = (pb == NULL);
-		}
-		if (c == 1) {
-			pc = pin_map_tbl + 0x74;
-		} else {
-			pc = (unsigned char *)mtc_get_pin_map(c);
-		}
-		if (!fa && !fb) {
-			if (pc)
-				mtc_test_port3(pa, pb, pc);
-			else
-				mtc_test_port2(pa, pb);	/* c == 0 или не найден */
-		}
-		seq += 3;
-	}
-	{
-		unsigned char *rec = pin_map_tbl + 0x74;
-
-		while (rec[0]) {
-			if (rec[14] == 0)
-				ret = mtc_debug_put_string("*", 1, rec[12], rec[13] - 1,
-							   0xFFFF0000u, 0xFF404040u);
-			else
-				ret = mtc_debug_put_string("*", 1, rec[12], rec[13] - 1,
-							   0xFF00FF00u, 0xFF404040u);
-			rec += 16;
-		}
-	}
-	return ret;	/* binaRE: значение последнего mtc_debug_put_string */
-}
-
-/* --- 11. mtc_clear_screen --- */
-/* binaRE 0xC082DA60 (mtc_clear_screen, 388B): color без стартового байта —
- * "test pattern" (480 строк); иначе — залита цветом. Ширина — is1024screen
- * (binaRE 0xC168ACE2). */
-static void
-mtc_clear_screen(int color)
-{
-	u32 *fb = mtc_fb_buf;	/* binaRE 0xC0D1DE30 */
-	int width = car_status->is1024screen ? 1024 : 800;
-	int x, y;
-
-	if ((color & 0xFF000000u) == 0) {
-		for (y = 0; y < 480; y++) {
-			u32 *row = fb + y * width;
-
-			for (x = 0; x < width; x++) {
-				unsigned int c;
-
-				if ((unsigned int)(y - 16) > 0x1BFu ||
-				    (unsigned int)(x - 1) > 0x2FFu)
-					c = 0;
-				else if (y <= 279)
-					c = 0xFF404040u;	/* серый */
-				else if (y > 399) {
-					if ((unsigned int)(x - 1) > 255u) {
-						if ((unsigned int)(x - 1) > 511u)
-							c = 0xFF000000u | (((x - 1) & 0xFFu) << 16);
-						else
-							c = 0xFF000000u | (((x - 1) & 0xFFu) << 8);
-					} else {
-						c = 0xFF000000u | ((x - 1) & 0xFFu);
-					}
-				} else if (y > 339) {
-					int g = 255 - (x - 1) / 3;
-
-					c = 0xFF000000u | (g << 16) | (g << 8) | g;
-				} else {
-					c = 0;
-				}
-				row[x] = (u32)c;
-			}
-		}
-		return;
-	}
-	for (y = 0; y < 480; y++) {
-		u32 *row = fb + y * width;
-
-		for (x = 0; x < width; x++)
-			row[x] = (u32)color;
-	}
-}
-
-/* --- 12. mtc_debug_putc --- */
-/* binaRE 0xC082DBEC (mtc_debug_putc, 136B): вывод глифа font_8x16 в framebuffer:
- * glyph — индекс (8x16), x — пиксельная колонка (блок 8 px), y — половинная строка
- * (строка = 2*y), fg/bg — ARGB-цвета. */
-static char *
-mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color)
-{
-	const u8 *g = font_8x16 + 16 * glyph;
-	int width = car_status->is1024screen ? 1024 : 800;	/* binaRE 0xC168ACE2 */
-	int stride = car_status->is1024screen ? 4096 : 3200;
-	u32 *p = mtc_fb_buf + 8 * (x + width * 2 * y);	/* binaRE: fb + 32*(a2 + w*2*a3) байт */
-	int row, bit;
-
-	for (row = 0; row < 16; row++) {
-		u8 px = g[row];
-		u32 *dst = p;
-
-		for (bit = 0; bit < 8; bit++) {
-			*dst++ = (px & 0x80u) ? (u32)fg_color : (u32)bg_color;
-			px <<= 1;
-		}
-		p += stride / 4;
-	}
-	return (char *)g;
-}
-
-/* --- 13. mtc_debug_put_string --- */
-/* binaRE 0xC082DC80 (mtc_debug_put_string, 116B): вывод строки (до len символов;
- * хвост — пробелы). */
-static char *
-mtc_debug_put_string(const char *s, int len, int x0, int y, int fg_color, int bg_color)
-{
-	int slen = strlen(s);
-	int i;
-
-	for (i = 0; i < len; i++) {
-		int c = 32;
-
-		if (slen > i)
-			c = s[i];
-		mtc_debug_putc(c, x0 + i, y, fg_color, bg_color);
-	}
-	return (char *)s;
-}
-
-/* --- 14. adc_wheel_callback --- */
-/* binaRE 0xC083BA24 (adc_wheel_callback, 780B): ADC-колбэк рулевого колёса
- * (регистрация adc_register(ch, adc_wheel_callback, &wheel_state), контекст
- * 0xC09BCF38). r0 — указатель на текущее значение ADC канала; r1 — состояние
- * колёса; r2 — прочитанное значение ADC. Транскрипция 1-в-1 (управляющие потоки —
- * из decompiled; LABEL_25/27/28 — метки binaRE). */
-static int
-adc_wheel_callback(const u32 *adc_cur, struct mtc_wheel_state *ws, int adc_val)
-{
-	int ret;
-
-	if (wheel_study.adc_enabled) {			/* binaRE 0xC168E478 — режим "study" */
-		int cur = *adc_cur;
-		int up, dn, dir;
-
-		if (cur == *ws->adc_ref_up)
-			ws->adc_up_val = adc_val;
-		else if (cur == *ws->adc_ref_dn)
-			ws->adc_dn_val = adc_val;
-
-		up = ws->adc_up_val;
-		if (up < 0)
-			return 0;
-		dn = ws->adc_dn_val;
-		if (dn < 0)
-			return 0;
-
-		ret = ws->key_repeat_cnt;
-		if (ret > 0)
-			ws->key_repeat_cnt = --ret;
-
-		if (up > 199) {
-			if (dn <= 199)
-				dir = wheel_study.dir_inv ? 2 : 1;	/* binaRE 0xC168E481 */
-			else
-				dir = 4;
-		} else if (dn > 199) {
-			dir = wheel_study.dir_inv ? 1 : 2;
-		} else {
-			dir = 3;
-		}
-
-		{
-			unsigned char st = ws->wheel_state;
-			unsigned char hi = st >> 4;
-
-			if (hi != (unsigned char)dir) {
-				ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
-				return ret;
-			}
-			if (!ret) {				/* key_repeat_cnt == 0 */
-				if (st == 20) {			/* 0x14 */
-					unsigned char lk = ws->wheel_last_key;
-
-					if (lk != 'A') {
-						if (lk == '@')
-							ws->wheel_last_key = st;	/* binaRE LABEL_27 */
-						ws->key_repeat_cnt = 40;	/* binaRE LABEL_25 */
-						ret = add_wheel_work(ret, ws);
-					}
-				} else if (st == 36) {			/* 0x24 */
-					unsigned char lk = ws->wheel_last_key;
-
-					if (lk != 'B') {
-						if (lk == '@')
-							ws->wheel_last_key = st;	/* LABEL_27 */
-						ret = 1;
-						ws->key_repeat_cnt = 40;	/* LABEL_25 */
-						ret = add_wheel_work(ret, ws);
-					}
-				}
-			}
-			if ((st & 0xF) == hi) {			/* binaRE LABEL_28 */
-				ws->wheel_state = (unsigned char)dir | ((unsigned char)dir << 4);
-				return ret;
-			}
-			ws->wheel_last_key = st;		/* binaRE LABEL_27 */
-			ws->wheel_state = (unsigned char)dir | ((unsigned char)dir << 4);
-			return ret;				/* LABEL_28 */
-		}
-	}
-
-	ret = ws->key_repeat_cnt;
-	if (ret > 0)
-		ws->key_repeat_cnt = ret - 1;
-
-	if (!config_data->d.adc_wheel_gate) {		/* binaRE 0xC168AD59 (config+25) — обычный режим */
-		int dir = 0;
-		unsigned char st, hi;
-
-		if (wheel_study.adc_type == 1) {		/* binaRE 0xC168E480 */
-			if ((unsigned int)(adc_val - 488) <= 0x30u)
-				dir = 1;
-			else if ((unsigned int)(adc_val - 658) <= 0x30u)
-				dir = 2;
-			else if ((unsigned int)(adc_val - 385) <= 0x30u)
-				dir = 3;
-			else if (adc_val > 1000)
-				dir = 4;
-		} else {
-			if ((unsigned int)(adc_val - 437) <= 0x30u)
-				dir = 1;
-			else if ((unsigned int)(adc_val - 590) <= 0x30u)
-				dir = 2;
-			else if ((unsigned int)(adc_val - 330) <= 0x30u)
-				dir = 3;
-			else if (adc_val > 1000)
-				dir = 4;
-		}
-
-		st = ws->wheel_state;
-		hi = st >> 4;
-		if (hi != (unsigned char)dir) {
-			ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
-			return ret;
-		}
-		if (dir) {
-			if (ret) {				/* binaRE: goto LABEL_28 */
-				ws->wheel_state = hi | (hi << 4);
-				return ret;
-			}
-			if (st != 20 && st != 35) {
-				if (st != 36) {
-					if (st != 19) {
-						ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-						return ret;
-					}
-					ret = 1;			/* binaRE LABEL_47 */
-					ws->key_repeat_cnt = 40;
-					ret = add_wheel_work(ret, ws);
-					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-					return ret;
-				}
-				ws->key_repeat_cnt = 40;	/* binaRE LABEL_80 */
-				ret = add_wheel_work(1, ws);
-				ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-				return ret;
-			}
-			return ret;
-		}
-		return ret;
-	}
-
-	{					/* adc_wheel_gate — режим "steering" */
-		int dir;
-
-		if ((unsigned int)(adc_val - 316) > 0x3Au) {
-			if ((unsigned int)(adc_val - 483) > 0x3Au) {
-				if ((unsigned int)(adc_val - 585) > 0x3Au)
-					dir = 0;
-				else
-					dir = 3;
-			} else {
-				dir = 2;
-			}
-		} else {
-			dir = 1;
-		}
-
-		{
-			unsigned char st = ws->wheel_state;
-			unsigned char hi = st >> 4;
-
-			if (hi != (unsigned char)dir) {
-				ws->wheel_state = (st & 0xF) | ((unsigned char)dir << 4);
-				return ret;
-			}
-			if (dir) {
-				if (ret) {			/* binaRE: goto LABEL_28 */
-					ws->wheel_state = hi | (hi << 4);
-					return ret;
-				}
-				if (st == 33 || st == 50 || st == 19) {
-					ws->key_repeat_cnt = 40;	/* binaRE LABEL_80 */
-					ret = add_wheel_work(1, ws);
-					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-					return ret;
-				}
-				if (st != 49 && st != 18 && st != 35) {
-					ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-					return ret;
-				}
-				ws->key_repeat_cnt = 40;	/* binaRE LABEL_47 */
-				ret = add_wheel_work(ret, ws);
-				ws->wheel_state = hi | (hi << 4);	/* LABEL_28 */
-				return ret;
-			}
-			return ret;
-		}
-	}
-}
-
-/* --- 15. stw_range_check --- */
-/* binaRE 0xC083BD50 (stw_range_check, 352B): минимальная разность значений в двух
- * stw-таблицах — таблица A: config+329 (binaRE 0xC168AE89), таблица C: config+404
- * (0xC168AED4): 24 × u16 LE, шаг 3 (область steer_data раунда 2). Результат делится
- * на 2 и пишется в wheel_study.stw_min_a/b (0xC168E4E5/E6); стартовый потолок — 50.
- * Внутренний цикл binaRE идёт до оффсета base+72 (включая байты за концом таблицы)
- * — воспроизведено 1-в-1. */
-static void
-stw_range_check(void)
-{
-	const u8 *cfg = config_data->u8;	/* minfix: u8[512] — член union, не член d (mtc_shared.h) */
-	int i, off;
-	unsigned int min_a = 50, min_c = 50;
-	u16 u;
-
-	for (i = 0; i < 24; i++) {
-		u = cfg[329 + 3 * i] | ((u16)cfg[330 + 3 * i] << 8);
-		for (off = 3 + 3 * i; off <= 72; off += 3) {
-			u16 v = cfg[329 + off] | ((u16)cfg[330 + off] << 8);
-			int d = (u > v) ? u - v : v - u;
-
-			if (min_a >= (unsigned int)d)
-				min_a = (unsigned int)d;
-		}
-	}
-	for (i = 0; i < 24; i++) {
-		u = cfg[404 + 3 * i] | ((u16)cfg[405 + 3 * i] << 8);
-		for (off = 3 + 3 * i; off <= 72; off += 3) {
-			u16 v = cfg[404 + off] | ((u16)cfg[405 + off] << 8);
-			int d = (u > v) ? u - v : v - u;
-
-			if (min_c >= (unsigned int)d)
-				min_c = (unsigned int)d;
-		}
-	}
-	wheel_study.stw_min_a = (u8)(min_a >> 1);	/* binaRE 0xC168E4E5 */
-	wheel_study.stw_min_b = (u8)(min_c >> 1);	/* binaRE 0xC168E4E6 */
-}
-
-/* --- 16. mtc_iomux_set --- */
-/* binaRE 0xC04AE134 (iomux_set, 100B) — board-level pinmux-helper (вызовы:
- * mtc-audio.c:1263, mtc-car.c:3977). mode: [3:0]=значение режима, [7:4]=n,
- * [11:8]=pin в банке, [15:12]=банк (<=3). Адрес регистра — по disassembly
- * (literal pool 0xC04AE184): *(u32*)( (0x7FB4200E + bank*4 + pin) << 2 ). */
-/* binaRE 0xC04AE134; renamed: SDK plat-rk iomux_set collision */
-int
-mtc_iomux_set(unsigned int mode)
-{
-	unsigned int bank, n, pin, val;
-
-	if (mode == 0xFFFFFFFFu)
-		return printk("<6><%s> mode(0x%x) is invalid\n", "iomux_set", mode);
-	bank = (mode >> 12) & 0xFu;
-	if (bank > 3u)
-		return printk("<6><%s> mode(0x%x) is invalid\n", "iomux_set", mode);
-	n = (mode >> 4) & 0xFu;
-	pin = (mode >> 8) & 0xFu;
-	val = ((mode & 0xFu) << (2 * n)) + (3u << (2 * (n + 8)));
-	*(volatile u32 *)(unsigned long)((0x7FB4200Eu + bank * 4u + pin) << 2) = val;
-	return 2 * (n + 8);
-}
-
-/* --- 17. mtc_get_screen_width --- */
-/* binaRE 0xC06A172C (mtc_get_screen_width, 16B) */
-static int
-mtc_get_screen_width(void)
-{
-	return (int)mtc_fb_width;	/* binaRE 0xC0D1DE28 */
+	mutex_unlock(&mtc_car_struct.car_cmd_lock);
 }
 
 // very dirty code
-static long
+static int
 car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct task_struct *v6;		       // r5@5
 	int v7;				       // r3@5
-	unsigned char v8;		       // cf@5
+	unsigned __int8 v8;		       // cf@5
 	char *data_buf;			       // r8@12 MAPDST
 	char *equal_last_pos;		       // r0@12
 	const char *token_start;	       // r7@13
 	size_t slen;			       // r0@14
 	int first_char;			       // r3@15 MAPDST
-	char *v16;	// r1@22 (T5 r20: ptr, IDA lost)
+	int v16;			       // r1@22
 	char v17;			       // zf@23
 	unsigned int v18;		       // r3@24
 	signed int res;			       // r7@28
 	size_t v20;			       // r0@30
 	int v21;			       // r3@30
-	unsigned char v22;		       // cf@30
+	unsigned __int8 v22;		       // cf@30
 	void *data72b;			       // r5@38
 	int v25;			       // r3@40
-	unsigned char v26;		       // cf@40
+	unsigned __int8 v26;		       // cf@40
 	struct task_struct *cur_task;	  // r5@47
-	unsigned char *buf1;		       // r0@47
+	unsigned __int8 *buf1;		       // r0@47
 	int v29;			       // r3@47
-	unsigned char v30;		       // cf@47
+	unsigned __int8 v30;		       // cf@47
 	int mcu_data_size;		       // r6@53
 	void *mcu_data;			       // r0@53 MAPDST
 	int v34;			       // r3@54
-	unsigned char v35;		       // cf@54
+	unsigned __int8 v35;		       // cf@54
 	size_t size;			       // r0@64 MAPDST
-	unsigned char *v38;		       // r6@65
+	unsigned __int8 *v38;		       // r6@65
 	void *data;			       // r5@65 MAPDST
 	int v41;			       // r3@67
-	unsigned char v42;		       // cf@67
+	unsigned __int8 v42;		       // cf@67
 	int i;				       // r4@78
 	int v46;			       // r0@88
 	char v47;			       // r5@88
@@ -2587,7 +1094,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int v57;			       // r0@121
 	int v58;			       // r1@121
 	size_t v59;			       // r0@133
-	u32 *v60;			       // r4@134
+	_DWORD *v60;			       // r4@134
 	int v61;			       // r6@136
 	int v62;			       // r5@136
 	int v63;			       // r0@138
@@ -2596,7 +1103,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	char *v69;			       // r2@172
 	char v70;			       // zf@173
 	char *v71;			       // r3@174
-	char *v78;	// r1@220 (T5 r20: ptr, IDA lost)
+	int v78;			       // r1@220
 	char v79;			       // zf@221
 	char *v80;			       // r3@222
 	unsigned int v81;		       // r3@225
@@ -2614,12 +1121,12 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int v94;			       // r0@276
 	char b1[4];			       // r0@277
 	char b2[4];			       // r1@277
-	char *v97;	// r3@277 (T5 r20: ptr, IDA lost)
+	int v97;			       // r3@277
 	int v98;			       // r2@287
 	int v99;			       // r1@288
-	char *v100;	// r3@288 (T5 r20: ptr, IDA lost)
+	int v100;			       // r3@288
 	char *v102;			       // r6@307
-	char *v103;	// r7@307 (T5 r20: ptr, IDA lost)
+	int v103;			       // r7@307
 	int v104;			       // r8@307
 	int v105;			       // r10@308
 	int v106;			       // r2@308
@@ -2628,10 +1135,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	size_t v109;			       // r0@309
 	int v110;			       // r0@312
 	unsigned int v111;		       // r1@312
-	char *v112;	// r3@312 (T5 r20: ptr, IDA lost)
+	int v112;			       // r3@312
 	size_t v113;			       // r0@313
 	char *v114;			       // r6@315
-	char *v115;	// r8@315 (T5 r20: ptr, IDA lost)
+	int v115;			       // r8@315
 	int v116;			       // r7@315
 	int v117;			       // r10@316
 	int v118;			       // r3@316
@@ -2646,7 +1153,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	size_t v127;			       // r0@323
 	int v128;			       // r3@324
 	char *v129;			       // r6@325
-	char *v130;	// r7@325 (T5 r20: ptr, IDA lost)
+	int v130;			       // r7@325
 	int v131;			       // r8@325
 	int v132;			       // r10@326
 	size_t v133;			       // r0@327
@@ -2655,24 +1162,24 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int v136;			       // r2@334
 	int v137;			       // r3@334
 	size_t size_1;			       // r0@344
-	u32 *v139;			       // r5@345
+	_DWORD *v139;			       // r5@345
 	int v140;			       // r6@347
 	int v141;			       // r4@347
 	int v142;			       // r0@348
-	union mtc_config_data *gap12;	 // r7@350
+	struct mtc_config_data *gap12;	 // r7@350
 	int v144;			       // r2@350
-	u32 *v145;			       // r3@350
+	_DWORD *v145;			       // r3@350
 	int st_pos;			       // r4@350
-	char *v147;	// r1@351 (T5 r20: ptr, IDA lost)
+	int v147;			       // r1@351
 	int v148;			       // t1@351
 	int v150;			       // r4@357
 	int v151;			       // r0@358
-	union mtc_config_data *p_config_data; // r7@360
+	struct mtc_config_data *p_config_data; // r7@360
 	int *v153;			       // r3@360
 	int cur_byte;			       // r4@360
 	int v155;			       // t1@361
-	char *v156; /* IDA: байтовый указатель */	  // r3@363
-	unsigned short *v157;		       // r2@363
+	struct mtc_config_data *v156;	  // r3@363
+	unsigned __int16 *v157;		       // r2@363
 	char *v158;			       // r1@363
 	int v159;			       // t1@364
 	int led1;			       // r0@367
@@ -2680,25 +1187,25 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int led2;			       // r0@368
 	char b_led2;			       // r4@368
 	int led3;			       // r0@369
-	unsigned char *cfg_led;	      // r2@370
+	unsigned __int8 *cfg_led;	      // r2@370
 	int enable_beep;		       // r0@371
 	int backlight;			       // r0@373
-	unsigned char *p_backlight;	  // r2@374
+	unsigned __int8 *p_backlight;	  // r2@374
 	int powerdelay;			       // r0@375
-	unsigned char *p_powerdelay;	 // r2@376
+	unsigned __int8 *p_powerdelay;	 // r2@376
 	int blmode;			       // r0@377
-	unsigned char *p_blmode;	     // r2@378
+	unsigned __int8 *p_blmode;	     // r2@378
 	int wifi_pwr;			       // r0@379 MAPDST
 	int v174;			       // r0@381
 	int cfg_led_multi;		       // r0@383 MAPDST
 	int color;			       // r0@385
-	unsigned char *cfg_color;	    // r2@386
+	unsigned __int8 *cfg_color;	    // r2@386
 	signed int v178;		       // r1@389
 	int v179;			       // r2@397
 	int v180;			       // r2@400
 	int v181;			       // r1@403
-	char *v182;	// r3@403 (T5 r20: ptr, IDA lost)
-	enum MTC_AV_CHANNEL av_channel;	// r1@423 MAPDST (T5 r20: enum iz shared.h, typedef net)
+	int v182;			       // r3@403
+	MTC_AV_CHANNEL av_channel;	     // r1@423 MAPDST
 	signed int v185;		       // r0@439
 	char v186;			       // zf@439
 	unsigned int v187;		       // r1@439
@@ -2708,7 +1215,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	char *v194;			       // r3@482
 	int v195;			       // r0@484
 	int v196;			       // r1@484
-	char *v197;	// r3@484 (T5 r20: ptr, IDA lost)
+	int v197;			       // r3@484
 	int v198;			       // r0@489
 	unsigned int v199;		       // r1@489
 	char *v200;			       // r1@490
@@ -2740,13 +1247,13 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	char *v230;			       // r3@568
 	int v231;			       // r0@571
 	int v232;			       // r1@571
-	char *v233;	// r1@586 (T5 r20: ptr, IDA lost)
+	int v233;			       // r1@586
 	int wipe;			       // r3@587
 	char v235;			       // nf@587
 	unsigned int *v236;		       // r3@588
 	unsigned int v237;		       // r3@591
 	int v238;			       // r1@593
-	char *v239;	// r3@593 (T5 r20: ptr, IDA lost)
+	int v239;			       // r3@593
 	char v240;			       // r0@596
 	int touch_info1;		       // lr@598
 	int touch_info2;		       // r12@598
@@ -2755,7 +1262,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int uv_cal;			       // r2@605
 	int v246;			       // r0@610
 	unsigned int v247;		       // r1@610
-	char *v248;	// r3@610 (T5 r20: ptr, IDA lost)
+	int v248;			       // r3@610
 	int tv_signal;			       // r0@611
 	char *v250;			       // r2@611
 	char *v251;			       // r3@611
@@ -2764,9 +1271,9 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int v254;			       // r0@617
 	int v255;			       // r1@617
 	int v256;			       // r1@625
-	char *v257;	// r3@625 (T5 r20: ptr, IDA lost)
+	int v257;			       // r3@625
 	int v258;			       // r1@627
-	char *v259;			       // r3@627
+	int v259;			       // r3@627
 	int tv_status;			       // r0@628
 	unsigned int radio_signal;	     // r0@629
 	signed int freq;		       // r0@635 MAPDST
@@ -2786,7 +1293,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int cfg_blmode;			       // r2@658
 	int cfg_backlight;		       // r2@659
 	size_t v282;			       // r0@660
-	char *v283;	// r7@662 (T5 r20: ptr, IDA lost)
+	int v283;			       // r7@662
 	int v284;			       // r11@662
 	int v285;			       // t1@662
 	int v286;			       // r8@662
@@ -2819,28 +1326,15 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int av_gps_gain;		       // r0@762 MAPDST
 	char v315;			       // [sp+Bh] [bp-95h]@478
 	char *token_pos;		       // [sp+Ch] [bp-94h]@12 MAPDST
-	unsigned char dtv_ir[4];	     // [sp+10h] [bp-90h]@556
+	unsigned __int8 dtv_ir[4];	     // [sp+10h] [bp-90h]@556
 	char can_buf[100];		       // [sp+14h] [bp-8Ch]@94
 
-	if (cmd == 119) {
-		/* binaRE: case 119 (0xC082E96A) */
-		*(int *)arg = 0;
-		return 0;
-	}
-
-	mutex_lock(&car_struct.car_io_lock);
-	unsigned int user_cmd;	/* IDA: (unsigned)cmd */
-	unsigned long userbuf;	/* IDA: arg */
-	user_cmd = (unsigned int)cmd;
-	userbuf = arg;
-	p_config_data_4 = &car_struct.config_data; /* TENTATIVE: IDA alias */
-	p_buf1_3060 = &car_struct.ioctl_buf1[3060]; /* TENTATIVE: IDA alias */
-
+	mutex_lock(&mtc_car_struct.car_io_lock);
 
 	if (cmd == 0xFE010000) {
 		cur_task = get_current();
-		buf1 = car_struct.ioctl_buf1;
-		v29 = 0; /* IDA CF-flag artifact */
+		buf1 = car_struct->ioctl_buf1;
+		v29 = *(cur_task + 2);
 		v30 = __CFADD__(userbuf, 2);
 		if (userbuf < 0xFFFFFFFE) {
 			v30 = userbuf + 2 >= v29 + !__CFADD__(userbuf, 2);
@@ -2853,10 +1347,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		} else {
 			_copy_from_user(buf1, userbuf, 2u);
 		}
-		mcu_data_size = (car_struct.ioctl_buf1[1] | (car_struct.ioctl_buf1[0] << 8)) + 2;
+		mcu_data_size = (car_struct->ioctl_buf1[1] | (car_struct->ioctl_buf1[0] << 8)) + 2;
 		mcu_data = _kmalloc(mcu_data_size, __GFP_ZERO | __GFP_FS | __GFP_IO | __GFP_WAIT);
 		if (mcu_data) {
-			v34 = 0; /* IDA CF-flag artifact */
+			v34 = *(cur_task + 2);
 			v35 = __CFADD__(userbuf, mcu_data_size);
 			if (!__CFADD__(userbuf, mcu_data_size)) {
 				v35 = userbuf + mcu_data_size >=
@@ -2887,7 +1381,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			v38 = 19;
 			data = 16;
 		}
-		v41 = 0; /* IDA CF-flag artifact */
+		v41 = *(get_current() + 2);
 		v42 = __CFADD__(userbuf, 516);
 		if (userbuf < 0xFFFFFDFC) {
 			v42 = userbuf + 516 >= v41 + !__CFADD__(userbuf, 516);
@@ -2912,7 +1406,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		} else {
 			data72b = 16;
 		}
-		v25 = 0; /* IDA CF-flag artifact */
+		v25 = *(get_current() + 2);
 		v26 = __CFADD__(userbuf, 72);
 		if (userbuf < 0xFFFFFFB8) {
 			v26 = userbuf + 72 >= v25 + !__CFADD__(userbuf, 72);
@@ -2930,13 +1424,13 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		msleep(800u);
 		goto LABEL_62;
 	}
-	car_struct.buffer2[0] = 0;
-	_memzero(car_struct.ioctl_buf1, 3072u);
+	car_struct->buffer2[0] = 0;
+	_memzero(car_struct->ioctl_buf1, 3072u);
 	if (user_cmd >= 3072u) {
 		goto LABEL_140;
 	}
 	v6 = get_current();
-	v7 = 0; /* IDA CF-flag artifact */
+	v7 = *(v6 + 2);
 	v8 = __CFADD__(userbuf, user_cmd);
 	if (!__CFADD__(userbuf, user_cmd)) {
 		v8 = userbuf + user_cmd >= v7 + !__CFADD__(userbuf, user_cmd);
@@ -2946,13 +1440,14 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 	if (v7) {
 		if (user_cmd) {
-			_memzero(car_struct.ioctl_buf1, user_cmd);
+			_memzero(car_struct->ioctl_buf1, user_cmd);
 		}
 	} else {
-		_copy_from_user(car_struct.ioctl_buf1, userbuf, user_cmd);
+		_copy_from_user(car_struct->ioctl_buf1, userbuf, user_cmd);
 	}
-	data_buf = car_struct.ioctl_buf1;
-	equal_last_pos = strrchr(car_struct.ioctl_buf1, '=');
+	car_struct = p_mtc_car_struct_12;
+	data_buf = p_mtc_car_struct_12->ioctl_buf1;
+	equal_last_pos = strrchr(p_mtc_car_struct_12->ioctl_buf1, '=');
 	token_pos = equal_last_pos;
 	if (!equal_last_pos) {
 		goto LABEL_140;
@@ -2996,7 +1491,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				    data_buf[3] != '_') {
 					goto LABEL_62;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_12;
+				if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 					    off_C0831714)) // "rpt_boot_complete"
 				{
 					printk(off_C08318A8,
@@ -3010,7 +1506,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						}
 						goto LABEL_62;
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C0831718)) // "rpt_logo_complete"
 				{
 					printk(off_C08318A4,
@@ -3025,26 +1521,26 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						goto LABEL_62;
 					}
 				} else {
-					v46 = strcmp(car_struct.ioctl_buf1,
+					v46 = strcmp(car_struct->ioctl_buf1,
 						     off_C083171C); // "rpt_boot_android"
 					v47 = v46;
 					if (v46) {
-						v48 = strcmp(car_struct.ioctl_buf1,
+						v48 = strcmp(car_struct->ioctl_buf1,
 							     off_C0831720); // "rpt_boot_appinit"
 						v49 = v48;
 						if (!v48) {
 							if (!strcmp(token_start,
 								    off_C083189C)) // "start"
 							{
-								car_struct.car_status
+								car_struct->car_status
 								    .rpt_boot_appinit = 1;
 							} else {
-								car_struct.car_status
+								car_struct->car_status
 								    .rpt_boot_appinit = v49; // = 0
 							}
 							goto LABEL_62;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08317D8)) // "rpt_boot_recovery"
 						{
 							if (!strcmp(token_start,
@@ -3055,7 +1551,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								    RPT_KEY_MODE_RECOVERY);
 								goto LABEL_62;
 							}
-						} else if (!strcmp(car_struct.ioctl_buf1,
+						} else if (!strcmp(car_struct->ioctl_buf1,
 								   off_C08317F0)) // "rpt_reboot"
 						{
 							if (!strcmp(token_start,
@@ -3063,7 +1559,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							{
 								goto LABEL_62;
 							}
-						} else if (!strcmp(car_struct.ioctl_buf1,
+						} else if (!strcmp(car_struct->ioctl_buf1,
 								   off_C0831818)) // "rpt_power"
 						{
 							printk(off_C083182C,
@@ -3076,11 +1572,11 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							if (!strcmp(token_pos,
 								    str_false_0)) // "false"
 							{
-								car_struct.car_status.rpt_power =
+								car_struct->car_status.rpt_power =
 								    0;
 								goto LABEL_62;
 							}
-						} else if (!strcmp(car_struct.ioctl_buf1,
+						} else if (!strcmp(car_struct->ioctl_buf1,
 								   off_C083181C)) // "rpt_key_mode"
 						{
 							if (!strcmp(token_start,
@@ -3113,12 +1609,12 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					} else {
 						printk(off_C0831864,
 						       token_start); // "rpt_boot_android %s\n"
-						car_struct.car_status.rpt_boot_appinit =
+						car_struct->car_status.rpt_boot_appinit =
 						    v47;			    // = 0
 						if (!strcmp(token_pos, str_true_0)) // "true"
 						{
 							arm_send(MTC_CMD_BOOT_ANDROID);
-							car_struct.car_status.rpt_boot_android = 1;
+							car_struct->car_status.rpt_boot_android = 1;
 							car_add_work(38, 0, 0);
 							goto LABEL_62;
 						}
@@ -3143,18 +1639,18 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					av_channel = MTC_AV_CHANNEL_DVD;
 				} else if (!strcmp(token_pos, off_C08318D8)) // "line"
 				{
-					car_struct.car_status.av_channel_flag1 = 0;
+					car_struct->car_status.av_channel_flag1 = 0;
 					av_channel = MTC_AV_CHANNEL_LINE;
 				} else if (!strcmp(token_pos, off_C08318C0)) // "fm"
 				{
 					av_channel = MTC_AV_CHANNEL_FM;
 				} else if (!strcmp(token_pos, off_C08318DC)) // "dtv"
 				{
-					car_struct.car_status.av_channel_flag1 = 0;
+					car_struct->car_status.av_channel_flag1 = 0;
 					av_channel = MTC_AV_CHANNEL_DTV;
 				} else if (!strcmp(token_pos, off_C08318E0)) // "dvr"
 				{
-					car_struct.car_status.av_channel_flag1 = 0;
+					car_struct->car_status.av_channel_flag1 = 0;
 					av_channel = MTC_AV_CHANNEL_DVR;
 				} else {
 					if (strcmp(token_pos, off_C08318C4)) // "ipod"
@@ -3205,7 +1701,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				audio_channel_switch_unmute();
 				goto LABEL_62;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317D0)) // "av_volume"
+			car_struct = p_mtc_car_struct_12;
+			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1, off_C08317D0)) // "av_volume"
 			{
 				volume = get_token_int(&token_pos);
 				if (volume >= 0 && volume <= 100) {
@@ -3214,7 +1711,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				goto LABEL_140;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317D4)) // "av_phone_volume"
+			if (!strcmp(car_struct->ioctl_buf1, off_C08317D4)) // "av_phone_volume"
 			{
 				phone_volume = get_token_int(&token_pos);
 				if (phone_volume >= 0 && phone_volume <= 100) {
@@ -3223,9 +1720,9 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				goto LABEL_140;
 			}
-			if (strcmp(car_struct.ioctl_buf1, str_av_mute_)) // "av_mute"
+			if (strcmp(car_struct->ioctl_buf1, str_av_mute_)) // "av_mute"
 			{
-				if (!strcmp(car_struct.ioctl_buf1, off_C08317E0)) // "av_phone"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08317E0)) // "av_phone"
 				{
 					if (!strcmp(token_start, off_C08317E4)) // "in"
 					{
@@ -3239,9 +1736,12 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					}
 					if (!strcmp(token_start, off_C08317EC)) // "hangup"
 					{
-						/* binaRE CONFIRMED (naming_report2 T1): 0xC168ACAD = car_status+41 = ch_mode (mtc-car.h:61) */
-						if (car_struct.car_status.ch_mode &&
-						    car_struct.car_status.power_refcnt == 1) {
+						/* TODO (naming_report): car_status._gap6[0] — поля НЕТ в struct mtc_car_status (порог _gap5→_gap7),
+						 * позиция неразрешена (offset-tentative «неверифицируемо»; байт вероятно в зоне reserved_22[32] @101..132).
+						 * Pre-existing-расхождение (так было и до реноме): добавление байта изменило бы layout (запрещено) —
+						 * имя обращения сохранено как есть. */
+						if (car_struct->car_status._gap6[0] &&
+						    car_struct->car_status.power_refcnt == 1) {
 							backlight_off();
 						}
 						audio_add_work(AUDIO_WORK_PHONE, 0, 0, 0);
@@ -3252,7 +1752,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						audio_add_work(AUDIO_WORK_PHONE, 3, 0, 0);
 						goto LABEL_62;
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C083180C)) // "av_speech"
 				{
 					if (!strcmp(token_start, off_C08317E4)) // "in"
@@ -3265,7 +1765,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						audio_add_work(27, 5, 0, 0);
 						goto LABEL_62;
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C0833900)) // "av_gps_ontop"
 				{
 					if (!strcmp(token_start, str_true)) // "true"
@@ -3278,7 +1778,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						audio_add_work(6, 0, 0, 0);
 						goto LABEL_62;
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C0833928)) // "av_lud"
 				{
 					if (!strcmp(token_start, str_on)) // "on"
@@ -3291,7 +1791,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						audio_add_work(12, 0, 0, 0);
 						goto LABEL_62;
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C0833938)) // "av_balance"
 				{
 					balance = get_token_int(&token_pos);
@@ -3302,7 +1802,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							goto LABEL_62;
 						}
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1, off_C083393C)) // "av_eq"
+				} else if (!strcmp(car_struct->ioctl_buf1, off_C083393C)) // "av_eq"
 				{
 					eq1 = get_token_int(&token_pos);
 					if (eq1 >= 0) {
@@ -3315,13 +1815,13 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							}
 						}
 					}
-				} else if (!strcmp(car_struct.ioctl_buf1,
+				} else if (!strcmp(car_struct->ioctl_buf1,
 						   off_C0833940)) // "av_gps_monitor"
 				{
 					if (!strcmp(token_start, str_on)) // "on"
 					{
-						if (car_struct.car_status.av_gps_monitor != 1) {
-							car_struct.car_status
+						if (car_struct->car_status.av_gps_monitor != 1) {
+							p_mtc_car_struct_13->car_status
 							    .av_gps_monitor = 1;
 							audio_add_work(7, 1, 0, 0);
 						}
@@ -3329,23 +1829,23 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					}
 					v305 = strcmp(token_start, str_off); // "off"
 					if (!v305) {
-						if (car_struct.car_status.av_gps_monitor) {
-							car_struct.car_status
+						if (car_struct->car_status.av_gps_monitor) {
+							p_mtc_car_struct_13->car_status
 							    .av_gps_monitor = v305; // =0
 							audio_add_work(7, 0, v305, v305);
 						}
 						goto LABEL_62;
 					}
 				} else {
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_13; */
-					if (!strcmp(car_struct.ioctl_buf1,
+					car_struct = p_mtc_car_struct_13;
+					if (!strcmp(p_mtc_car_struct_13->ioctl_buf1,
 						    off_C0833954)) // "av_gps_switch"
 					{
 						if (!strcmp(token_start, str_on)) // "on"
 						{
-							if (car_struct.car_status.av_gps_switch !=
+							if (car_struct->car_status.av_gps_switch !=
 							    1) {
-								car_struct.car_status
+								car_struct->car_status
 								    .av_gps_switch = 1;
 								audio_add_work(8, 1, 0, 0);
 							}
@@ -3353,26 +1853,26 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						}
 						v312 = strcmp(token_start, str_off); // "off"
 						if (!v312) {
-							if (car_struct.car_status.av_gps_switch) {
-								car_struct.car_status
+							if (car_struct->car_status.av_gps_switch) {
+								car_struct->car_status
 								    .av_gps_switch = v312;
 								audio_add_work(8, 0, v312, v312);
 							}
 							goto LABEL_62;
 						}
-					} else if (!strcmp(car_struct.ioctl_buf1,
+					} else if (!strcmp(car_struct->ioctl_buf1,
 							   off_C0833958)) // "av_gps_gain"
 					{
 						av_gps_gain = get_token_int(&token_pos);
 						if (av_gps_gain >= 0) {
-							if (car_struct.car_status.av_gps_gain !=
+							if (car_struct->car_status.av_gps_gain !=
 							    av_gps_gain) {
-								car_struct.car_status.av_gps_gain =
+								car_struct->car_status.av_gps_gain =
 								    av_gps_gain;
 							}
 							goto LABEL_62;
 						}
-					} else if (!strcmp(car_struct.ioctl_buf1,
+					} else if (!strcmp(car_struct->ioctl_buf1,
 							   off_C083395C)) // "av_active"
 					{
 						av_active = get_token_int(&token_pos);
@@ -3400,16 +1900,17 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return res;
 		}
 		if (data_buf[1] != 'f' || data_buf[2] != 'g' || data_buf[3] != '_') {
-			data_buf = car_struct.ioctl_buf1;
-			if (car_struct.ioctl_buf1[1] != 't' ||
-			    car_struct.ioctl_buf1[2] != 'l' || data_buf[3] != '_') {
+			car_struct = p_mtc_car_struct_12;
+			data_buf = p_mtc_car_struct_12->ioctl_buf1;
+			if (car_struct->ioctl_buf1[1] != 't' ||
+			    p_mtc_car_struct_12->ioctl_buf1[2] != 'l' || data_buf[3] != '_') {
 				goto LABEL_62;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317C4)) // "ctl_uv_cal"
+			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1, off_C08317C4)) // "ctl_uv_cal"
 			{
-				if (car_struct.car_status.reserved_22[8] ||
-				    car_struct.car_status.decoder_state != 1) {
-					car_struct.car_status.uv_cal = 0;
+				if (car_struct->car_status.reserved_22[8] ||
+				    car_struct->car_status.decoder_state != 1) {
+					car_struct->car_status.uv_cal = 0;
 				} else {
 					v178 = strcmp(token_start, off_C083189C); // "start"
 					if (v178) {
@@ -3424,7 +1925,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							v178 = 0;
 						}
 					}
-					car_struct.car_status.uv_cal = 1;
+					car_struct->car_status.uv_cal = 1;
 					capture_add_work(50, v178, 0, 0);
 				}
 				goto LABEL_62;
@@ -3446,8 +1947,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			{
 				if (!strcmp(token_start, off_C0831808)) // "start_front"
 				{
-					cam_front = car_struct.config_data.d.cfg_frontview;
-					if (car_struct.config_data.d.cfg_frontview) {
+					cam_front = car_struct->config_data.cfg_frontview;
+					if (car_struct->config_data.cfg_frontview) {
 						cam_front = 1;
 					}
 					capture_add_work(52, cam_front, 0, 0);
@@ -3511,18 +2012,18 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			if (strcmp(data_buf, off_C08318E4)) // "ctl_radar"
 			{
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_14; */
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_14;
+				if (!strcmp(p_mtc_car_struct_14->ioctl_buf1,
 					    off_C08318E8)) // "ctl_beep"
 				{
-					if (car_struct.config_data.d.ctl_beep &&
+					if (car_struct->config_data.ctl_beep &&
 					    get_token_int(&token_pos) >= 0) {
 						v315 = 5;
 						arm_send_multi(0x9520u, 1, &v315);
 						goto LABEL_62;
 					}
 				} else {
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831904)) // "ctl_dtv_ir"
 					{
 						dtv_ir[0] = get_token_int(&token_pos);
@@ -3532,7 +2033,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						arm_send_multi(MTC_CMD_DTV_IR, 4, dtv_ir);
 						goto LABEL_62;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831908)) // "ctl_dvd_cmd"
 					{
 						dvd_command = get_token_int(&token_pos);
@@ -3540,7 +2041,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							dvd_send_command(dvd_command);
 							goto LABEL_62;
 						}
-					} else if (!strcmp(car_struct.ioctl_buf1,
+					} else if (!strcmp(car_struct->ioctl_buf1,
 							   off_C083190C)) // "ctl_dvd_door"
 					{
 						if (!strcmp(token_start, off_C0831910)) // "open"
@@ -3558,20 +2059,20 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							arm_send(MTC_CMD_DVD_EJECT);
 							goto LABEL_62;
 						}
-					} else if (!strcmp(car_struct.ioctl_buf1,
+					} else if (!strcmp(car_struct->ioctl_buf1,
 							   off_C0833864)) // "ctl_radio_ta"
 					{
 						if (!strcmp(token_start, str_true)) // "true"
 						{
-							Radio_TA(1, 0); /* T5 r20: def 2 arg; a2 padding 0 (decompiled car.c - 1 arg) */
+							Radio_TA(1);
 							goto LABEL_62;
 						}
 						if (!strcmp(token_start, str_false)) // "false"
 						{
-							Radio_TA(0, 0); /* T5 r20: def 2 arg; a2 padding 0 (decompiled car.c - 1 arg) */
+							Radio_TA(0);
 							goto LABEL_62;
 						}
-					} else if (!strcmp(car_struct.ioctl_buf1,
+					} else if (!strcmp(car_struct->ioctl_buf1,
 							   off_C08338AC)) // "ctl_radio_af"
 					{
 						if (!strcmp(token_start, str_true)) // "true"
@@ -3585,7 +2086,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							goto LABEL_62;
 						}
 					} else {
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08338C4)) // "ctl_radio_search"
 						{
 							v240 = strcmp(token_start, str_true) ==
@@ -3593,7 +2094,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							Radio_Set_Search(v240);
 							goto LABEL_62;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08338CC)) // "ctl_radio_frequency"
 						{
 							freq = get_token_int(&token_pos);
@@ -3602,7 +2103,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								goto LABEL_62;
 							}
 						} else if (
-						    !strcmp(car_struct.ioctl_buf1,
+						    !strcmp(car_struct->ioctl_buf1,
 							    off_C08338D0)) // "ctl_radio_sfrequency"
 						{
 							freq = get_token_int(&token_pos);
@@ -3610,7 +2111,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								Radio_Set_Frequency(freq, 1);
 								goto LABEL_62;
 							}
-						} else if (!strcmp(car_struct.ioctl_buf1,
+						} else if (!strcmp(car_struct->ioctl_buf1,
 								   off_C08338D4)) // "ctl_soft_mute"
 						{
 							if (!strcmp(token_start,
@@ -3626,9 +2127,9 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								goto LABEL_62;
 							}
 						} else {
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_13; */
+							car_struct = p_mtc_car_struct_13;
 							if (!strcmp(
-								car_struct.ioctl_buf1,
+								p_mtc_car_struct_13->ioctl_buf1,
 								off_C08338E8)) // "ctl_radio_mute"
 							{
 								if (!strcmp(token_start,
@@ -3647,7 +2148,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								}
 							} else if (
 							    !strcmp(
-								car_struct.ioctl_buf1,
+								car_struct->ioctl_buf1,
 								off_C08338EC)) // "ctl_radio_stereo"
 							{
 								if (!strcmp(token_start,
@@ -3662,37 +2163,37 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								}
 							} else if (
 							    !strcmp(
-								car_struct.ioctl_buf1,
+								car_struct->ioctl_buf1,
 								off_C08338F8)) // "ctl_backview_vol"
 							{
 								backview_vol =
 								    get_token_int(&token_pos);
 								if (backview_vol >= 0) {
-									car_struct.car_status
+									car_struct->car_status
 									    .backview_vol =
 									    backview_vol;
 									goto LABEL_62;
 								}
 							} else if (
 							    !strcmp(
-								car_struct.ioctl_buf1,
+								car_struct->ioctl_buf1,
 								off_C08338FC)) // "ctl_backview_mute"
 							{
 								if (!strcmp(token_start,
 									    str_false)) {
-									car_struct.car_status
+									car_struct->car_status
 									    .backview_vol = 11;
 									goto LABEL_62;
 								}
 								if (!strcmp(token_start,
 									    str_true)) {
-									car_struct.car_status
+									car_struct->car_status
 									    .backview_vol = 0;
 									goto LABEL_62;
 								}
 							} else if (
 							    !strcmp(
-								car_struct.ioctl_buf1,
+								car_struct->ioctl_buf1,
 								off_C0833904)) // "ctl_tv_frequency"
 							{
 								tv_freq = get_token_int(&token_pos);
@@ -3701,7 +2202,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									goto LABEL_62;
 								}
 							} else if (
-							    !strcmp(car_struct.ioctl_buf1,
+							    !strcmp(car_struct->ioctl_buf1,
 								    off_C0833908)) // "ctl_tv_demod"
 							{
 								v301 = get_token_int(&token_pos);
@@ -3709,7 +2210,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									if ((v301 - 1) <= 7) {
 										v302 = v301;
 										car_struct
-										    .car_status
+										    ->car_status
 										    .av_channel_flag1 =
 										    v301;
 										capture_add_work(
@@ -3719,7 +2220,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									goto LABEL_62;
 								}
 							} else if (!strcmp(
-								       car_struct.ioctl_buf1,
+								       car_struct->ioctl_buf1,
 								       off_C083390C)) // "ctl_key"
 							{
 								if (!strcmp(
@@ -3736,7 +2237,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								{
 									arm_send_multi(0x9529u, 0,
 										       0);
-									car_struct.car_status
+									car_struct->car_status
 									    .power2_flag = 1;
 									goto LABEL_62;
 								}
@@ -3753,16 +2254,16 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								    off_C083391C); // "screenbrightness"
 								v299 = v298;
 								if (!v298) {
-									if (car_struct.car_status
+									if (car_struct->car_status
 										.backlight_status) {
 										v298 = 36;
 									} else {
 										v299 =
 										    car_struct
-											.car_status
+											->car_status
 											.backlight_status;
 									}
-									if (!car_struct.car_status
+									if (!car_struct->car_status
 										 .backlight_status) {
 										v298 = 35;
 									}
@@ -3785,7 +2286,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									goto LABEL_62;
 								}
 							} else if (!strcmp(
-								       car_struct.ioctl_buf1,
+								       car_struct->ioctl_buf1,
 								       off_C0833934)) // "ctl_power"
 							{
 								if (!strcmp(token_start, str_on) ||
@@ -3793,7 +2294,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									goto LABEL_62;
 								}
 							} else if (!strcmp(
-								       car_struct.ioctl_buf1,
+								       car_struct->ioctl_buf1,
 								       off_C0833944)) // "ctl_reset"
 							{
 								if (!strcmp(token_start,
@@ -3807,7 +2308,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								v304 = strcmp(token_start,
 									      off_C083394C); // "1"
 								if (!v304) {
-									if (car_struct.car_status
+									if (car_struct->car_status
 										.wipe_flag &
 									    0x40) {
 										arm_send_multi(
@@ -3819,11 +2320,11 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 										arm_send_multi(
 										    MTC_CMD_RESET,
 										    car_struct
-											    .car_status
+											    ->car_status
 											    .wipe_flag &
 											0x40,
 										    (car_struct
-											 .car_status
+											 ->car_status
 											 .wipe_flag &
 										     0x40));
 										msleep(100u);
@@ -3838,7 +2339,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}				      // ctl_radar
 			if (!strcmp(token_start, str_true_0)) // "true"
 			{
-				capture_add_work(64, 0, *&car_struct.car_status.radar_val, 0);
+				capture_add_work(64, 0, *&car_struct->car_status.radar_val, 0);
 				goto LABEL_62;
 			}
 			if (!strcmp(token_start, str_false_0)) // "false"
@@ -3850,32 +2351,34 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			{
 				color = get_token_int(&token_pos);
 				if (color >= 0) {
-					cfg_color = &car_struct.config_data.d.cfg_color[0]; /* IDA alias */
-					car_struct.config_data.d.cfg_color[1] = color;
-					car_struct.config_data.d.cfg_color[0] = BYTE1(color);
+					cfg_color = p_cfg_color;
+					car_struct->config_data.cfg_color[1] = color;
+					car_struct->config_data.cfg_color[0] = BYTE1(color);
 					arm_send_multi(0x9507u, 2, cfg_color);
 					goto LABEL_62;
 				}
 			}
-			if (!strcmp(car_struct.ioctl_buf1,
+			car_struct = p_mtc_car_struct_12;
+			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 				    off_C08317B8)) // "cfg_led_multi"
 			{
 				cfg_led_multi = get_token_int(&token_pos);
 				if (cfg_led_multi >= 0) {
-					car_struct.config_data.d.cfg_led_multi = cfg_led_multi;
+					car_struct->config_data.cfg_led_multi = cfg_led_multi;
 					arm_send_multi(0x9508u, 1,
-						       &car_struct.config_data.d.cfg_led_multi);
+						       &car_struct->config_data.cfg_led_multi);
 					goto LABEL_62;
 				}
 			}
-			if (!strcmp(car_struct.ioctl_buf1,
+			car_struct = p_mtc_car_struct_12;
+			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 				    off_C08317BC)) // "cfg_wifi_pwr"
 			{
 				wifi_pwr = get_token_int(&token_pos);
 				if (wifi_pwr >= 0) {
-					car_struct.config_data.d.wifi_pwr = wifi_pwr;
-					arm_send_multi(MTC_CMD_WIFI_PWR, 1, &car_struct.config_data.d.wifi_pwr); /* IDA alias */
-					if (car_struct.wifi_capable) {
+					car_struct->config_data.wifi_pwr = wifi_pwr;
+					arm_send_multi(MTC_CMD_WIFI_PWR, 1, p_wifi_pwr);
+					if (car_struct->wifi_capable) {
 						v174 = *off_C0831890;
 						if (v174 != 255) {
 							rk29sdk_wifi_power(v174);
@@ -3885,34 +2388,34 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				goto LABEL_140;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C0831834)) // "cfg_blmode"
+			if (!strcmp(car_struct->ioctl_buf1, off_C0831834)) // "cfg_blmode"
 			{
 				blmode = get_token_int(&token_pos);
 				if (blmode >= 0) {
 					p_blmode = off_C0831888;
-					car_struct.config_data.d.cfg_blmode = blmode;
+					car_struct->config_data.cfg_blmode = blmode;
 					arm_send_multi(MTC_CMD_BLMODE, 1, p_blmode);
 					backlight_update();
 					goto LABEL_62;
 				}
 				goto LABEL_140;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C0831838)) // "cfg_powerdelay"
+			if (!strcmp(car_struct->ioctl_buf1, off_C0831838)) // "cfg_powerdelay"
 			{
 				powerdelay = get_token_int(&token_pos);
 				if (powerdelay >= 0) {
 					p_powerdelay = off_C0831884;
-					car_struct.config_data.d.cfg_powerdelay = powerdelay;
+					car_struct->config_data.cfg_powerdelay = powerdelay;
 					arm_send_multi(MTC_CMD_POWERDELAY, 1, p_powerdelay);
 					goto LABEL_62;
 				}
 				goto LABEL_140;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317C0)) // "cfg_mirror"
+			if (!strcmp(car_struct->ioctl_buf1, off_C08317C0)) // "cfg_mirror"
 			{
 				if (!strcmp(token_pos, str_true_0)) // "true"
 				{
-					car_struct.config_data.d.cfg_mirror = 1;
+					car_struct->config_data.cfg_mirror = 1;
 					arm_send(MTC_CMD_MIRROR_ON);
 					goto LABEL_62;
 				}
@@ -3920,32 +2423,32 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				{
 					goto LABEL_140;
 				}
-				car_struct.config_data.d.cfg_mirror = 0;
+				car_struct->config_data.cfg_mirror = 0;
 				arm_send(MTC_CMD_MIRROR_OFF);
 				goto LABEL_62;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C0831830)) // "cfg_backlight"
+			if (!strcmp(car_struct->ioctl_buf1, off_C0831830)) // "cfg_backlight"
 			{
 				backlight = get_token_int(&token_pos);
 				if (backlight >= 0) {
 					p_backlight = off_C0831880;
-					car_struct.config_data.d.cfg_backlight = backlight;
+					car_struct->config_data.cfg_backlight = backlight;
 					arm_send_multi(MTC_CMD_BACKLIGHT, 1, p_backlight);
 					goto LABEL_62;
 				}
-			} else if (!strcmp(car_struct.ioctl_buf1, off_C0831840)) // "cfg_beep"
+			} else if (!strcmp(car_struct->ioctl_buf1, off_C0831840)) // "cfg_beep"
 			{
 				enable_beep = get_token_int(&token_pos);
 				if (enable_beep >= 0) {
-					car_struct.config_data.d.ctl_beep = enable_beep;
+					car_struct->config_data.ctl_beep = enable_beep;
 					arm_send_multi(MTC_CMD_BEEP, 1,
-						       &car_struct.config_data.d.ctl_beep);
+						       &car_struct->config_data.ctl_beep);
 					goto LABEL_62;
 				}
 			} else {
-				if (strcmp(car_struct.ioctl_buf1, off_C0831844)) // "cfg_led"
+				if (strcmp(car_struct->ioctl_buf1, off_C0831844)) // "cfg_led"
 				{
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831854)) // "cfg_ir_assign"
 					{
 						v59 = *(off_C0831874 + 0x20);
@@ -3967,20 +2470,20 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								goto LABEL_140;
 							}
 						} while (v62 != 60);
-						v156 = (char *)&p_config_data_4->d.checksum;
+						v156 = p_config_data_4;
 						v157 = v60;
-						v158 = &p_config_data_4->d.cfg_logo2[8];
+						v158 = &p_config_data_4->cfg_logo2[8];
 						do {
-							v156[206] = *v157 >> 8;
+							v156->reserved_206 = *v157 >> 8;
 							v159 = *v157;
 							v157 += 2;
-							v156[207] = v159;
+							v156->reserved_206[1] = v159;
 							v156 = (v156 + 2);
 						} while (v156 != v158);
 						kfree(v60);
 						goto LABEL_62;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831868)) // "cfg_steer_assign"
 					{
 						size_1 = *(off_C0831874 + 0x20);
@@ -4006,7 +2509,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								v145 = v139;
 								st_pos = 0;
 								do {
-									v147 = (&gap12->d.checksum +
+									v147 = (&gap12->checksum +
 										v144);
 									st_pos += 3;
 									*(v147 + 0x148) =
@@ -4021,13 +2524,13 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								} while (st_pos != 150);
 								kfree(v139);
 								arm_send_multi(MTC_CMD_STEER_ASSIGN,
-									       150, &car_struct.config_data.d.steer_data[0]); /* IDA alias */
+									       150, p_steer_data);
 								stw_range_check();
 								goto LABEL_62;
 							}
 						}
 					} else {
-						if (strcmp(car_struct.ioctl_buf1,
+						if (strcmp(car_struct->ioctl_buf1,
 							   off_C0831870)) // "cfg_config"
 						{
 							goto LABEL_140;
@@ -4054,7 +2557,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								do {
 									v155 = *v153;
 									++v153;
-									*(&p_config_data->d.checksum +
+									*(&p_config_data->checksum +
 									  cur_byte++) = v155;
 								} while (cur_byte != 512);
 								kfree(v139);
@@ -4076,9 +2579,9 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						led3 = get_token_int(&token_pos);
 						if (led3 >= 0) {
 							cfg_led = off_C083187C;
-							car_struct.config_data.d.cfg_led[0] = b_led1;
-							car_struct.config_data.d.cfg_led[1] = b_led2;
-							car_struct.config_data.d.cfg_led[2] = led3;
+							car_struct->config_data.cfg_led[0] = b_led1;
+							car_struct->config_data.cfg_led[1] = b_led2;
+							car_struct->config_data.cfg_led[2] = led3;
 							arm_send_multi(MTC_CMD_LEDCFG, 3, cfg_led);
 							goto LABEL_62;
 						}
@@ -4106,19 +2609,19 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					arm_send(0xF01u);
 					if ((v94 & 0xFF00) != 0xF00 || v94 != 5) {
 						res = 0;
-						*b1 = str_nodisk[0]; /* T5 r20: ptr-tip IDA uteryan */
-						*b2 = str_nodisk[1]; /* T5 r20: ptr-tip IDA uteryan */
-						car_struct.buffer2[6] = *b2 >> 16;
+						*b1 = *str_nodisk[0];
+						*b2 = *(str_nodisk[0] + 1);
+						car_struct->buffer2[6] = *b2 >> 16;
 						v97 = off_C08318F0;
-						*&car_struct.buffer2[0] = *b1;
+						*&car_struct->buffer2[0] = *b1;
 						*(v97 + 0x10) = *b2;
 					} else {
 						res = 0;
-						v198 = str_diskin[0]; /* T5 r20: ptr-tip IDA uteryan */
-						v199 = str_diskin[1]; /* T5 r20: ptr-tip IDA uteryan */
-						car_struct.buffer2[6] = v199 >> 16;
-						*&car_struct.buffer2[0] = v198;
-						*&car_struct.buffer2[4] = v199;
+						v198 = *str_diskin[0];
+						v199 = *(str_diskin[0] + 1);
+						car_struct->buffer2[6] = v199 >> 16;
+						*&car_struct->buffer2[0] = v198;
+						*&car_struct->buffer2[4] = v199;
 					}
 					goto LABEL_30;
 				}
@@ -4139,77 +2642,78 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						goto LABEL_30;
 					}
 				} else {
-					if (!strcmp(car_struct.ioctl_buf1,
+					car_struct = p_mtc_car_struct_12;
+					if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 						    off_C0831730)) // "sta_dvd_folder_cnt"
 					{
 						res = 0;
 						dvd_get_folder_cnt(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831734)) // "sta_dvd_media_cnt"
 					{
 						res = 0;
 						dvd_get_media_cnt(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831738)) // "sta_dvd_folder_idx"
 					{
 						res = 0;
 						dvd_get_folder_idx(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C083173C)) // "sta_dvd_media_idx"
 					{
 						res = 0;
 						dvd_get_media_idx(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831740)) // "sta_dvd_length"
 					{
 						res = 0;
 						dvd_get_length(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831744)) // "sta_dvd_position"
 					{
 						res = 0;
 						dvd_get_position(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831748)) // "sta_dvd_title"
 					{
 						res = 0;
 						dvd_get_media_title(p_buf1);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C083174C)) // "sta_ipod"
 					{
-						v55 = (car_struct.car_status.sta_bits & 0x20) == 0;
-						if (car_struct.car_status.sta_bits & 0x20) {
-							v56 = &car_struct.ioctl_buf1[3060];
+						v55 = (car_struct->car_status.sta_bits & 0x20) == 0;
+						if (car_struct->car_status.sta_bits & 0x20) {
+							v56 = &car_struct->ioctl_buf1[3060];
 							v54 = str_false_0; // "false"
 						} else {
 							v56 = str_true_0; // "true"
 						}
-						if (car_struct.car_status.sta_bits & 0x20) {
+						if (car_struct->car_status.sta_bits & 0x20) {
 							v57 = *v54;
 							v58 = *(v54 + 1);
 						} else {
 							v57 = *v56;
 							v58 = *(v56 + 1);
 						}
-						if (car_struct.car_status.sta_bits & 0x20) {
-							*&car_struct.buffer2[0] = v57;
+						if (car_struct->car_status.sta_bits & 0x20) {
+							*&car_struct->buffer2[0] = v57;
 						} else {
-							*&car_struct.buffer2[0] = v57;
-							car_struct.buffer2[4] = v58;
+							*&car_struct->buffer2[0] = v57;
+							car_struct->buffer2[4] = v58;
 						}
 						res = 0;
 						if (!v55) {
@@ -4217,10 +2721,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						}
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C08318EC)) //  "sta_driving"
 					{
-						v192 = car_struct.car_status.sta_bits;
+						v192 = car_struct->car_status.sta_bits;
 						res = 0;
 						v193 = (v192 & 0x10) == 0;
 						if (v192 & 0x10) {
@@ -4232,92 +2736,92 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						v196 = *(v194 + 1);
 						v197 = off_C08318F0;
 						if (v193) {
-							*&car_struct.buffer2[0] = v195;
+							*&car_struct->buffer2[0] = v195;
 							*(v197 + 0x10) = v196;
 						} else {
-							*&car_struct.buffer2[0] = v195;
+							*&car_struct->buffer2[0] = v195;
 							*(v197 + 0x10) = v196;
 						}
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C08318F8)) // "sta_ill"
 					{
 						res = 0;
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_14; */
-						if (car_struct.car_status.sta_bits & 8) {
+						car_struct = p_mtc_car_struct_14;
+						if (car_struct->car_status.sta_bits & 8) {
 							v202 =
-							    &car_struct.ioctl_buf1[3060];
+							    &p_mtc_car_struct_14->ioctl_buf1[3060];
 							v200 = str_false_0;
 						} else {
 							v202 = str_true_0;
 						}
-						if (car_struct.car_status.sta_bits & 8) {
+						if (car_struct->car_status.sta_bits & 8) {
 							v203 = *v200;
 							v204 = *(v200 + 1);
 						} else {
 							v203 = *v202;
 							v204 = *(v202 + 1);
 						}
-						if (car_struct.car_status.sta_bits & 8) {
-							*&car_struct.buffer2[0] = v203;
+						if (car_struct->car_status.sta_bits & 8) {
+							*&p_mtc_car_struct_14->buffer2[0] = v203;
 							*(v202 + 8) = v204;
 						} else {
-							*&car_struct.buffer2[0] = v203;
-							car_struct.buffer2[4] = v204;
+							*&p_mtc_car_struct_14->buffer2[0] = v203;
+							car_struct->buffer2[4] = v204;
 						}
 						goto LABEL_30;
 					}
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_14; */
-					if (!strcmp(car_struct.ioctl_buf1,
+					car_struct = p_mtc_car_struct_14;
+					if (!strcmp(p_mtc_car_struct_14->ioctl_buf1,
 						    off_C0831920)) // "sta_dtv"
 					{
 						v222 = *(str_true + 1);
-						*&car_struct.buffer2[0] = *str_true;
-						car_struct.buffer2[4] = v222;
+						*&car_struct->buffer2[0] = *str_true;
+						car_struct->buffer2[4] = v222;
 						res = 0;
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831924)) // "sta_battery"
 					{
-						battery = *&car_struct.car_status.battery;
+						battery = *&car_struct->car_status.battery;
 						res = 0;
 						sprintf(p_buf2, str_fmt_d_3, battery); // "%d"
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831928)) // "sta_touch"
 					{
-						touch_type = car_struct.car_status.touch_type;
+						touch_type = car_struct->car_status.touch_type;
 						if (touch_type == 129) {
-							*&car_struct.buffer2[0] = 'ser';
+							*&car_struct->buffer2[0] = 'ser';
 							res = 0;
 						} else {
 							v207 = touch_type == 128;
 							if (touch_type == 128) {
 								v208 = 'pac';
-								*&car_struct.buffer2[0] = 'pac';
+								*&car_struct->buffer2[0] = 'pac';
 							} else {
 								v208 = off_C083192C; // "none"
 							}
 							if (!v207) {
 								v209 = *(v208 + 1);
-								*&car_struct.buffer2[0] = *v208;
-								car_struct.buffer2[4] = v209;
+								*&car_struct->buffer2[0] = *v208;
+								car_struct->buffer2[4] = v209;
 							}
 							res = 0;
 						}
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831930)) // "sta_touch_adc"
 					{
 						res = 0;
 						sta_touch_adc(p_buf2);
 						goto LABEL_30;
 					}
-					if (!strcmp(car_struct.ioctl_buf1,
+					if (!strcmp(car_struct->ioctl_buf1,
 						    off_C0831934)) // "sta_touch_cal"
 					{
 						size = *(off_C0831938 + 0x18);
@@ -4352,7 +2856,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								if (v214 == 1) {
 									v218 = *v216;
 									v219 = *(v216 + 1);
-										/* IDA artifact удалено: car_struct = p_buf1; */
+									car_struct = p_buf1;
 								} else {
 									v216 = p_buf1;
 									v218 = *v215;
@@ -4360,8 +2864,8 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									v215 = *(v215 + 2);
 								}
 								if (v217) {
-									car_struct.car_dev = v218;
-									*&car_struct.car_status
+									car_struct->car_dev = v218;
+									*&car_struct->car_status
 									      .car_ready = v219;
 								} else {
 									*v216 = v218;
@@ -4375,7 +2879,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							} else {
 								v238 = *(str_fail + 1);
 								v239 = p_buf1_3060;
-								*&car_struct.buffer2[0] =
+								*&car_struct->buffer2[0] =
 								    *str_fail;
 								*(v239 + 0x10) = v238;
 								kfree(v211);
@@ -4384,28 +2888,29 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 						}
 						kfree(v211);
 					} else {
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0831948)) // "sta_video_signal"
 						{
-							if (car_struct.car_status
+							if (car_struct->car_status
 								.sta_video_signal) {
 								v220 = *off_C083194C >> 16;
-								*&car_struct.buffer2[0] =
+								*&car_struct->buffer2[0] =
 								    *off_C083194C; // "ok"
-								car_struct.buffer2[2] = v220;
+								car_struct->buffer2[2] = v220;
 								res = 0;
 							} else {
 								res = 0;
 								v224 = p_buf2;
-								v225 = *(off_C0833878 + 1); // "nosignal" (T5 r20: ptr-tip IDA)
-								v226 = *(off_C0833878 + 2); /* T5 r20: ptr-tip IDA */
-								*p_buf2 = *off_C0833878; /* T5 r20: ptr-tip IDA */
+								v225 = *(off_C0833878[0] +
+									 1); // "nosignal"
+								v226 = *(off_C0833878[0] + 2);
+								*p_buf2 = *off_C0833878[0];
 								*(v224 + 1) = v225;
 								v224[8] = v226;
 							}
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C083387C)) // "sta_radio_signal"
 						{
 							radio_signal = Radio_Get_Signal();
@@ -4414,7 +2919,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 								radio_signal); // "%d"
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0833880)) // "sta_tv_status"
 						{
 							tv_status = Tv_Get_Status();
@@ -4422,27 +2927,30 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							sprintf(p_buf2, str_fmt_d_3, tv_status);
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0833884)) // "sta_tv_signal"
 						{
 							tv_signal = check_tv_signal();
 							if (tv_signal == 1) {
 								res = 0;
-								v258 = *(off_C08338E4 + 1); // "ntsc" (T5 r20: ptr-tip IDA)
+								v258 = *(off_C08338E4[0] +
+									 1); // "ntsc"
 								v259 = p_buf1_3060;
-								*&car_struct.buffer2[0] =
-								    *off_C08338E4; /* T5 r20: ptr-tip IDA */
+								*&car_struct->buffer2[0] =
+								    *off_C08338E4[0];
 								*(v259 + 0x10) = v258;
 							} else if (tv_signal == 2) {
 								res = 0;
-								*&car_struct.buffer2[0] = 'lap';
+								*&car_struct->buffer2[0] = 'lap';
 							} else {
 								v252 = tv_signal == 3;
 								res = 0;
 								if (tv_signal == 3) {
-									v251 = off_C08338DC; // "secam" (T5 r20: ptr-tip IDA)
+									v251 = off_C08338DC
+									    [0]; // "secam"
 								} else {
-									v250 = off_C0833878; // "nosignal" (T5 r20: ptr-tip IDA)
+									v250 = off_C0833878
+									    [0]; // "nosignal"
 								}
 								if (tv_signal == 3) {
 									v254 = *v251;
@@ -4455,7 +2963,7 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 									v250 = *(v250 + 2);
 								}
 								if (v252) {
-									*&car_struct.buffer2[0] =
+									*&car_struct->buffer2[0] =
 									    v254;
 									*(v253 + 8) = v255;
 								} else {
@@ -4469,80 +2977,81 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							}
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0833888)) // "sta_radio_stereo"
 						{
 							if (Radio_Get_Stereo()) {
 								res = 0;
-								v246 = off_C08338D8[0]; // "stereo" (T5 r20: ptr-tip IDA)
-								v247 = off_C08338D8[1]; /* T5 r20: ptr-tip IDA */
-								car_struct.buffer2[6] = v247 >> 16;
+								v246 = *off_C08338D8[0]; // "stereo"
+								v247 = *(off_C08338D8[0] + 1);
+								car_struct->buffer2[6] = v247 >> 16;
 								v248 = p_buf1_3060;
-								*&car_struct.buffer2[0] = v246;
+								*&car_struct->buffer2[0] = v246;
 								*(v248 + 0x10) = v247;
 							} else {
 								res = 0;
-								v256 = *(off_C08338E0 + 1); // "mono" (T5 r20: ptr-tip IDA)
+								v256 = *(off_C08338E0[0] +
+									 1); // "mono"
 								v257 = p_buf1_3060;
-								*&car_struct.buffer2[0] =
-								    *off_C08338E0; /* T5 r20: ptr-tip IDA */
+								*&car_struct->buffer2[0] =
+								    *off_C08338E0[0];
 								*(v257 + 0x10) = v256;
 							}
 							goto LABEL_30;
 						}
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_13; */
-						if (!strcmp(car_struct.ioctl_buf1,
+						car_struct = p_mtc_car_struct_13;
+						if (!strcmp(p_mtc_car_struct_13->ioctl_buf1,
 							    off_C0833890)) // "sta_mcu_version"
 						{
-							strcpy(p_buf2, car_struct.mcu_version);
+							strcpy(p_buf2, car_struct->mcu_version);
 							res = 0;
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0833894)) // "sta_mcu_date"
 						{
-							strcpy(p_buf2, car_struct.mcu_date);
+							strcpy(p_buf2, car_struct->mcu_date);
 							res = 0;
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C0833898)) // "sta_mcu_time"
 						{
-							strcpy(p_buf2, car_struct.mcu_time);
+							strcpy(p_buf2, car_struct->mcu_time);
 							res = 0;
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C083389C)) // "sta_uv_cal"
 						{
-							uv_cal = car_struct.car_status.uv_cal;
+							uv_cal = car_struct->car_status.uv_cal;
 							res = 0;
 							sprintf(p_buf2, str_fmt_d_3, uv_cal);
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08338A0)) // "sta_view"
 						{
-							view = car_struct.car_status.sta_view == 0;
-							if (car_struct.car_status.sta_view) {
+							view = car_struct->car_status.sta_view == 0;
+							if (car_struct->car_status.sta_view) {
 								v230 =
-								    &car_struct.ioctl_buf1[3060];
+								    &car_struct->ioctl_buf1[3060];
 								v228 = off_C08338A4[0]; // "front"
 							} else {
 								v230 = off_C08338A8[0]; // "back"
 							}
-							if (car_struct.car_status.sta_view) {
+							if (car_struct->car_status.sta_view) {
 								v231 = *v228;
 								v232 = *(v228 + 1);
 							} else {
 								v231 = *v230;
 								v232 = *(v230 + 1);
 							}
-							if (car_struct.car_status.sta_view) {
-								*&car_struct.buffer2[0] = v231;
+							if (car_struct->car_status.sta_view) {
+								*&car_struct->buffer2[0] = v231;
 							} else {
-								*&car_struct.buffer2[0] = v231;
-								car_struct.buffer2[4] = v232;
+								*&car_struct->buffer2[0] = v231;
+								car_struct->buffer2[4] = v232;
 							}
 							res = 0;
 							if (!view) {
@@ -4550,17 +3059,17 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							}
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08338B0)) // "sta_touch_info"
 						{
 							touch_info1 =
-							    car_struct.car_status.touch_info1;
+							    car_struct->car_status.touch_info1;
 							touch_info2 =
-							    car_struct.car_status.touch_info2;
+							    car_struct->car_status.touch_info2;
 							touch_w =
-							    car_struct.car_status.touch_width;
+							    car_struct->car_status.touch_width;
 							touch_h =
-							    car_struct.car_status.touch_height;
+							    car_struct->car_status.touch_height;
 							res = 0;
 							sprintf(p_buf2, off_C08338C8, touch_w,
 								touch_h, touch_info1,
@@ -4568,23 +3077,23 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 							// 0x%02x)"
 							goto LABEL_30;
 						}
-						if (!strcmp(car_struct.ioctl_buf1,
+						if (!strcmp(car_struct->ioctl_buf1,
 							    off_C08338B4)) // "sta_wipe"
 						{
-							wipe = car_struct.car_status.wipe_flag;
+							wipe = car_struct->car_status.wipe_flag;
 							v235 = wipe < 0;
 							if (wipe < 0) {
 								v236 = 'sey';
-								*&car_struct.buffer2[0] = 'sey';
+								*&car_struct->buffer2[0] = 'sey';
 							} else {
 								v233 =
-								    &car_struct.ioctl_buf1[3060];
+								    &car_struct->ioctl_buf1[3060];
 								v236 = off_C08338B8; // "no"
 							}
 							if (!v235) {
 								v237 = *v236;
 								*(v233 + 0xC) = v237;
-								car_struct.buffer2[2] = v237 >> 16;
+								car_struct->buffer2[2] = v237 >> 16;
 							}
 							res = 0;
 							goto LABEL_30;
@@ -4600,228 +3109,231 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				{
 					res = 0;
 					sprintf(buf_1, str_fmt_d_4,
-						car_struct.car_status.cfg_maxvolume); // "%d"
+						car_struct->car_status.cfg_maxvolume); // "%d"
 					goto LABEL_30;
 				}
 				if (!strcmp(data_buf, off_C0831754)) // "cfg_customer"
 				{
 					res = 0;
-					strcpy(buf_1, &car_struct.config_data.d.cfg_customer[0]); /* IDA alias */
+					strcpy(buf_1, p_cfg_customer);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_12;
+				if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 					    off_C0831758)) // "cfg_sn"
 				{
-					strcpy(p_buf2, car_struct.config_data.d.cfg_sn);
+					strcpy(p_buf2, car_struct->config_data.cfg_sn);
 					res = 0;
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C083175C)) // "cfg_model"
+				if (!strcmp(car_struct->ioctl_buf1, off_C083175C)) // "cfg_model"
 				{
-					strcpy(p_buf2, car_struct.config_data.d.cfg_model);
+					strcpy(p_buf2, car_struct->config_data.cfg_model);
 					res = 0;
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831760)) // "cfg_password"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831760)) // "cfg_password"
 				{
-					strcpy(p_buf2, car_struct.config_data.d.cfg_password);
+					strcpy(p_buf2, car_struct->config_data.cfg_password);
 					res = 0;
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831764)) // "cfg_logo1"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831764)) // "cfg_logo1"
 				{
-					strcpy(p_buf2, car_struct.config_data.d.cfg_logo1);
+					strcpy(p_buf2, car_struct->config_data.cfg_logo1);
 					res = 0;
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831768)) // "cfg_logo2"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831768)) // "cfg_logo2"
 				{
-					strcpy(p_buf2, car_struct.config_data.d.cfg_logo2);
+					strcpy(p_buf2, car_struct->config_data.cfg_logo2);
 					res = 0;
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C083176C)) // "cfg_canbus"
+				if (!strcmp(car_struct->ioctl_buf1, off_C083176C)) // "cfg_canbus"
 				{
-					canbus = car_struct.config_data.d.cfg_canbus;
+					canbus = car_struct->config_data.cfg_canbus;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, canbus);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831770)) // "cfg_canbus_cfg"
 				{
-					canbus_cfg = car_struct.config_data.d.canbus_cfg;
+					canbus_cfg = car_struct->config_data.canbus_cfg;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, canbus_cfg);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831774)) // "cfg_atvmode"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831774)) // "cfg_atvmode"
 				{
-					cfg_atvmode = car_struct.config_data.d.cfg_atvmode;
+					cfg_atvmode = car_struct->config_data.cfg_atvmode;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_atvmode);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831778)) // "cfg_dtv"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831778)) // "cfg_dtv"
 				{
-					cfg_dtv = car_struct.config_data.d.cfg_dtv;
+					cfg_dtv = car_struct->config_data.cfg_dtv;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_dtv);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C083177C)) // "cfg_frontview"
 				{
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3,
-						car_struct.config_data.d.cfg_frontview);
+						car_struct->config_data.cfg_frontview);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_12;
+				if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 					    off_C0831780)) // "cfg_ipod"
 				{
-					cfg_ipod = car_struct.config_data.d.cfg_ipod;
+					cfg_ipod = car_struct->config_data.cfg_ipod;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_ipod);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831784)) // "cfg_dvd"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831784)) // "cfg_dvd"
 				{
-					cfg_dvd = car_struct.config_data.d.cfg_dvd;
+					cfg_dvd = car_struct->config_data.cfg_dvd;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_dvd);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831788)) // "cfg_bt"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831788)) // "cfg_bt"
 				{
-					cfg_bt = car_struct.config_data.d.cfg_bt;
+					cfg_bt = car_struct->config_data.cfg_bt;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_bt);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C083178C)) // "cfg_radio"
+				if (!strcmp(car_struct->ioctl_buf1, off_C083178C)) // "cfg_radio"
 				{
-					cfg_radio = car_struct.config_data.d.cfg_radio;
+					cfg_radio = car_struct->config_data.cfg_radio;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_radio);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831790)) // "cfg_rds"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831790)) // "cfg_rds"
 				{
-					cfg_rds = car_struct.config_data.d.cfg_rds;
+					cfg_rds = car_struct->config_data.cfg_rds;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_rds);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831794)) // "cfg_logo_type"
 				{
-					cfg_logo_type = car_struct.config_data.d.cfg_logo_type;
+					cfg_logo_type = car_struct->config_data.cfg_logo_type;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_logo_type);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831798)) // "cfg_radio_area"
 				{
-					cfg_radio_area = car_struct.config_data.d.cfg_radio_area;
+					cfg_radio_area = car_struct->config_data.cfg_radio_area;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_radio_area);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C083179C)) // "cfg_launcher"
+				if (!strcmp(car_struct->ioctl_buf1, off_C083179C)) // "cfg_launcher"
 				{
-					cfg_launcher = car_struct.config_data.d.cfg_launcher;
+					cfg_launcher = car_struct->config_data.cfg_launcher;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_launcher);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C08317A0)) // "cfg_led_type"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08317A0)) // "cfg_led_type"
 				{
-					cfg_led_type = car_struct.config_data.d.cfg_led_type;
+					cfg_led_type = car_struct->config_data.cfg_led_type;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_led_type);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C08317A4)) // "cfg_rudder"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08317A4)) // "cfg_rudder"
 				{
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3,
-						car_struct.config_data.d.cfg_rudder);
+						car_struct->config_data.cfg_rudder);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_12;
+				if (!strcmp(p_mtc_car_struct_12->ioctl_buf1,
 					    off_C08317A8)) // "cfg_key0"
 				{
-					cfg_key0 = car_struct.config_data.d.cfg_key0;
+					cfg_key0 = car_struct->config_data.cfg_key0;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_key0);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C08317AC)) // "cfg_appdisable"
 				{
-					cfg_appdisable = car_struct.config_data.d.cfg_appdisable;
+					cfg_appdisable = car_struct->config_data.cfg_appdisable;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_appdisable);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C08317B0)) // "cfg_language_selection"
 				{
-					cfg_ls1 = car_struct.config_data.d.cfg_language_selection[0];
-					cfg_ls2 = car_struct.config_data.d.cfg_language_selection[1];
+					cfg_ls1 = car_struct->config_data.cfg_language_selection[0];
+					cfg_ls2 = car_struct->config_data.cfg_language_selection[1];
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_ls2 | (cfg_ls1 << 8));
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C08317B4)) // "cfg_color"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08317B4)) // "cfg_color"
 				{
-					cfg_color1 = car_struct.config_data.d.cfg_color[0];
-					cfg_color2 = car_struct.config_data.d.cfg_color[1];
+					cfg_color1 = car_struct->config_data.cfg_color[0];
+					cfg_color2 = car_struct->config_data.cfg_color[1];
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3,
 						cfg_color2 | (cfg_color1 << 8));
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C08317B8)) // "cfg_led_multi"
 				{
-					cfg_led_multi = car_struct.config_data.d.cfg_led_multi;
+					cfg_led_multi = car_struct->config_data.cfg_led_multi;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_led_multi);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C08317BC)) // "cfg_wifi_pwr"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08317BC)) // "cfg_wifi_pwr"
 				{
-					wifi_pwr = car_struct.config_data.d.wifi_pwr;
+					wifi_pwr = car_struct->config_data.wifi_pwr;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, wifi_pwr);
 					goto LABEL_30;
 				}
-				v67 = strcmp(car_struct.ioctl_buf1, off_C08317C0); // "cfg_mirror"
+				v67 = strcmp(car_struct->ioctl_buf1, off_C08317C0); // "cfg_mirror"
 				if (!v67) {
-					v70 = car_struct.config_data.d.cfg_mirror == 0;
-					if (car_struct.config_data.d.cfg_mirror) {
+					v70 = car_struct->config_data.cfg_mirror == 0;
+					if (car_struct->config_data.cfg_mirror) {
 						v71 = str_true_0;
 					} else {
-						v71 = &car_struct.ioctl_buf1[3060];
+						v71 = &car_struct->ioctl_buf1[3060];
 					}
-					if (car_struct.config_data.d.cfg_mirror) {
+					if (car_struct->config_data.cfg_mirror) {
 						v67 = *v71;
 						v68 = *(v71 + 1);
 					} else {
 						v69 = str_false_0;
 					}
-					if (car_struct.config_data.d.cfg_mirror) {
-						*&car_struct.buffer2[0] = v67;
-						car_struct.buffer2[4] = v68;
+					if (car_struct->config_data.cfg_mirror) {
+						*&car_struct->buffer2[0] = v67;
+						car_struct->buffer2[4] = v68;
 					} else {
 						v67 = *v69;
 						v68 = *(v69 + 1);
 					}
 					if (v70) {
-						*&car_struct.buffer2[0] = v67;
+						*&car_struct->buffer2[0] = v67;
 					}
 					res = 0;
 					if (v70) {
@@ -4829,76 +3341,76 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					}
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831830)) // "cfg_backlight"
 				{
-					cfg_backlight = car_struct.config_data.d.cfg_backlight;
+					cfg_backlight = car_struct->config_data.cfg_backlight;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_backlight);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831834)) // "cfg_blmode"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831834)) // "cfg_blmode"
 				{
-					cfg_blmode = car_struct.config_data.d.cfg_blmode;
+					cfg_blmode = car_struct->config_data.cfg_blmode;
 					res = 0;
 					sprintf(p_buf2, str_fmt_d_3, cfg_blmode);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831838)) // "cfg_powerdelay"
 				{
 					res = 0;
 					sprintf(p_buf1, str_fmt_d_4,
-						car_struct.config_data.d.cfg_powerdelay); // "%d"
+						car_struct->config_data.cfg_powerdelay); // "%d"
 					goto LABEL_30;
 				}
-	/* IDA artifact удалено: car_struct = p_mtc_car_struct_14; */
-				if (!strcmp(car_struct.ioctl_buf1,
+				car_struct = p_mtc_car_struct_14;
+				if (!strcmp(p_mtc_car_struct_14->ioctl_buf1,
 					    off_C083183C)) // "cfg_ill"
 				{
-					cfg_ill = car_struct.config_data.d.cfg_ill;
+					cfg_ill = car_struct->config_data.cfg_ill;
 					res = 0;
 					sprintf(p_buf1, str_fmt_d_4, cfg_ill); // "%d,"
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831840)) // "cfg_beep"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831840)) // "cfg_beep"
 				{
-					cfg_beep = car_struct.config_data.d.ctl_beep;
+					cfg_beep = car_struct->config_data.ctl_beep;
 					res = 0;
 					sprintf(p_buf1, str_fmt_d_4, cfg_beep); // "%d,"
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831844)) // "cfg_led"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831844)) // "cfg_led"
 				{
-					cfg_led2 = car_struct.config_data.d.cfg_led[2];
-					cfg_led0 = car_struct.config_data.d.cfg_led[0];
-					cfg_led1 = car_struct.config_data.d.cfg_led[1];
+					cfg_led2 = car_struct->config_data.cfg_led[2];
+					cfg_led0 = car_struct->config_data.cfg_led[0];
+					cfg_led1 = car_struct->config_data.cfg_led[1];
 					res = 0;
 					sprintf(p_buf1, off_C0831858, cfg_led0, cfg_led1,
 						cfg_led2); // "%d,%d,%d"
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C0831848)) // "cfg_dvr"
+				if (!strcmp(car_struct->ioctl_buf1, off_C0831848)) // "cfg_dvr"
 				{
-					cfg_dvr = car_struct.config_data.d.cfg_dvr;
+					cfg_dvr = car_struct->config_data.cfg_dvr;
 					res = 0;
 					sprintf(p_buf1, str_fmt_d_4, cfg_dvr); // "%d"
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C083184C)) // "cfg_wheelstudy_type"
 				{
 					cfg_wheelstudy_type =
-					    car_struct.config_data.d.cfg_wheelstudy_type;
+					    car_struct->config_data.cfg_wheelstudy_type;
 					res = 0;
 					sprintf(p_buf1, str_fmt_d_4, cfg_wheelstudy_type);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831850)) // "cfg_key_assign"
 				{
 					v102 = p_buf1;
-					v103 = &car_struct.config_data.d.checksum;
+					v103 = &car_struct->config_data.checksum;
 					v104 = 0;
 					while (1) {
 						v105 = *(v103 + 0x80);
@@ -4923,11 +3435,11 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					sprintf(&v102[v113], str_fmt_d_4, v108);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1,
+				if (!strcmp(car_struct->ioctl_buf1,
 					    off_C0831854)) // "cfg_ir_assign"
 				{
 					v114 = p_buf1;
-					v115 = &car_struct.config_data.d.checksum;
+					v115 = &car_struct->config_data.checksum;
 					v116 = 0;
 					while (1) {
 						v117 = *(v115 + 0xD0);
@@ -4951,11 +3463,11 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					sprintf(&v114[v127], str_fmt_d_4, v119);
 					goto LABEL_30;
 				}
-				v128 = strcmp(car_struct.ioctl_buf1,
+				v128 = strcmp(car_struct->ioctl_buf1,
 					      off_C0831868); // "cfg_steer_assign"
 				if (!v128) {
 					v129 = p_buf1;
-					v130 = &car_struct.config_data.d.checksum;
+					v130 = &car_struct->config_data.checksum;
 					v131 = 0;
 					while (1) {
 						v17 = v131 == 147;
@@ -4980,10 +3492,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					sprintf(&v129[v282], str_fmt_d_3, v132);
 					goto LABEL_30;
 				}
-				if (!strcmp(car_struct.ioctl_buf1, off_C08338F0)) // "cfg_config"
+				if (!strcmp(car_struct->ioctl_buf1, off_C08338F0)) // "cfg_config"
 				{
-					v285 = car_struct.config_data.d.checksum;
-					v283 = &car_struct.config_data.d.checksum;
+					v285 = car_struct->config_data.checksum;
+					v283 = &car_struct->config_data.checksum;
 					v284 = v285;
 					v286 = 0;
 					v287 = p_buf2;
@@ -5005,15 +3517,16 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 	}
 	if (first_char == 'a') {
-		if (car_struct.ioctl_buf1[1] == 'v' && car_struct.ioctl_buf1[2] == '_') {
-			if (!strcmp(car_struct.ioctl_buf1, str_av_mute_)) // "av_mute"
+		car_struct = p_mtc_car_struct_12;
+		if (car_struct->ioctl_buf1[1] == 'v' && p_mtc_car_struct_12->ioctl_buf1[2] == '_') {
+			if (!strcmp(p_mtc_car_struct_12->ioctl_buf1, str_av_mute_)) // "av_mute"
 			{
 				is_audio_mute = isAudioMute();
 				not_mute = is_audio_mute == 0;
 				if (is_audio_mute) {
 					v86 = str_true_0; // "true"
 				} else {
-					v86 = &car_struct.ioctl_buf1[3060];
+					v86 = &car_struct->ioctl_buf1[3060];
 				}
 				if (is_audio_mute) {
 					is_audio_mute = *v86;
@@ -5025,11 +3538,11 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					is_audio_mute = *v84;
 					v83 = *(v84 + 1);
 				} else {
-					*&car_struct.buffer2[0] = is_audio_mute;
-					car_struct.buffer2[4] = v83;
+					*&car_struct->buffer2[0] = is_audio_mute;
+					car_struct->buffer2[4] = v83;
 				}
 				if (not_mute) {
-					*&car_struct.buffer2[0] = is_audio_mute;
+					*&car_struct->buffer2[0] = is_audio_mute;
 				}
 				res = 0;
 				if (not_mute) {
@@ -5037,72 +3550,72 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				goto LABEL_30;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08316FC)) // "av_channel"
+			if (!strcmp(car_struct->ioctl_buf1, off_C08316FC)) // "av_channel"
 			{
 				switch (getAudioChannel()) {
 				case MTC_AV_CHANNEL_GSM_BT:
 					res = 0;
 					v110 = *off_C08318B8; // "gsm_bt"
 					v111 = *(off_C08318B8 + 1);
-					car_struct.buffer2[6] = v111 >> 16;
+					car_struct->buffer2[6] = v111 >> 16;
 					v112 = off_C08318F0;
-					*&car_struct.buffer2[0] = v110;
+					*&car_struct->buffer2[0] = v110;
 					*(v112 + 0x10) = v111;
 					break;
 				case MTC_AV_CHANNEL_SYS:
 					res = 0;
-					*&car_struct.buffer2[0] = 'sys';
+					*&car_struct->buffer2[0] = 'sys';
 					break;
 				case MTC_AV_CHANNEL_DVD:
 					res = 0;
-					*&car_struct.buffer2[0] = 'dvd';
+					*&car_struct->buffer2[0] = 'dvd';
 					break;
 				case MTC_AV_CHANNEL_LINE:
 					res = 0;
 					v99 = *(off_C08318D8 + 1);
 					v100 = off_C08318F0;
-					*&car_struct.buffer2[0] = *off_C08318D8; // "line"
+					*&car_struct->buffer2[0] = *off_C08318D8; // "line"
 					*(v100 + 0x10) = v99;
 					break;
 				case MTC_AV_CHANNEL_FM:
 					res = 0;
 					v98 = *off_C08318C0 >> 16;
 					*(off_C08318F0 + 0xC) = *off_C08318C0; // "fm"
-					car_struct.buffer2[2] = v98;
+					car_struct->buffer2[2] = v98;
 					break;
 				case MTC_AV_CHANNEL_DTV:
 					res = 0;
-					*&car_struct.buffer2[0] = 'vtd';
+					*&car_struct->buffer2[0] = 'vtd';
 					break;
 				case MTC_AV_CHANNEL_IPOD:
 					res = 0;
 					v181 = *(off_C08318C4 + 1);
 					v182 = off_C08318F0;
-					*&car_struct.buffer2[0] = *off_C08318C4; // "ipod"
+					*&car_struct->buffer2[0] = *off_C08318C4; // "ipod"
 					*(v182 + 0x10) = v181;
 					break;
 				case MTC_AV_CHANNEL_DVR:
 					res = 0;
-					*&car_struct.buffer2[0] = 'rvd';
+					*&car_struct->buffer2[0] = 'rvd';
 					break;
 				default:
 					goto LABEL_102;
 				}
 				goto LABEL_30;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C0831700)) // "av_gps_monitor"
+			if (!strcmp(car_struct->ioctl_buf1, off_C0831700)) // "av_gps_monitor"
 			{
-				v17 = car_struct.car_status.av_gps_monitor == 0;
-				if (car_struct.car_status.av_gps_monitor) {
-					v16 = &car_struct.ioctl_buf1[3060];
+				v17 = car_struct->car_status.av_gps_monitor == 0;
+				if (car_struct->car_status.av_gps_monitor) {
+					v16 = &car_struct->ioctl_buf1[3060];
 					v18 = off_C0831704; // "on"
 				} else {
 					v18 = 'ffo';
-					*&car_struct.buffer2[0] = 'ffo';
+					*&car_struct->buffer2[0] = 'ffo';
 				}
 				if (!v17) {
-					v18 = *(int *)v18; /* T5 r20: v18 - int* (rodata "on"), ptr-tip IDA uteryan */
-					car_struct.buffer2[2] = v18 >> 16;
+					v18 = *v18;
+					car_struct->buffer2[2] = v18 >> 16;
 				}
 				res = 0;
 				if (!v17) {
@@ -5110,27 +3623,27 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 				goto LABEL_30;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317DC)) // "av_gps_switch"
+			if (!strcmp(car_struct->ioctl_buf1, off_C08317DC)) // "av_gps_switch"
 			{
-				v79 = car_struct.car_status.av_gps_switch == 0;
-				if (car_struct.car_status.av_gps_switch) {
-					v78 = &car_struct.ioctl_buf1[3060];
+				v79 = car_struct->car_status.av_gps_switch == 0;
+				if (car_struct->car_status.av_gps_switch) {
+					v78 = &car_struct->ioctl_buf1[3060];
 					v80 = off_C0831704;
 				} else {
 					v80 = 'ffo';
-					*&car_struct.buffer2[0] = 'ffo';
+					*&car_struct->buffer2[0] = 'ffo';
 				}
 				if (!v79) {
 					v81 = *v80;
 					*(v78 + 0xC) = v81;
-					car_struct.buffer2[2] = v81 >> 16;
+					car_struct->buffer2[2] = v81 >> 16;
 				}
 				res = 0;
 				goto LABEL_30;
 			}
-			if (!strcmp(car_struct.ioctl_buf1, off_C08317F8)) // "av_gps_gain"
+			if (!strcmp(car_struct->ioctl_buf1, off_C08317F8)) // "av_gps_gain"
 			{
-				av_gps_gain = car_struct.car_status.av_gps_gain;
+				av_gps_gain = car_struct->car_status.av_gps_gain;
 				res = 0;
 				sprintf(buf_1, str_fmt_d_4, av_gps_gain); // "%d"
 				goto LABEL_30;
@@ -5139,10 +3652,10 @@ car_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 LABEL_102:
 	res = -1;
-	car_struct.buffer2[0] = 0;
+	car_struct->buffer2[0] = 0;
 LABEL_30:
 	v20 = strlen(buf_1);
-	v21 = 0; /* IDA CF-flag artifact */
+	v21 = *(v6 + 2);
 	v22 = __CFADD__(userbuf, v20 + 1);
 	if (!__CFADD__(userbuf, v20 + 1)) {
 		v22 = userbuf + v20 + 1 >= v21 + !__CFADD__(userbuf, v20 + 1);
@@ -5166,18 +3679,18 @@ car_add_work(int a1, int a2, int flush)
 	work = kmalloc(sizeof(struct mtc_work), __GFP_IO);
 	// TODO: alloc check
 
-	INIT_DELAYED_WORK(&work->dwork, &car_work); /* T5 r20: makros beret struct delayed_work * */
+	INIT_DELAYED_WORK(work->dwork, &car_work);
 
 	work->cmd1 = a1;
 	work->cmd2 = a2;
-	queue_delayed_work(car_struct.car_wq, &work->dwork, msecs_to_jiffies(0));
+	queue_delayed_work(mtc_car_struct.car_wq, &work->dwork, msecs_to_jiffies(0));
 
 	if (flush) {
-		flush_workqueue(car_struct.car_wq);
+		flush_workqueue(mtc_car_struct.car_wq);
 	}
 }
 
-EXPORT_SYMBOL_GPL(car_add_work);
+EXPORT_SYMBOL_GPL(car_add_work)
 
 /* fully decompiled */
 void
@@ -5188,14 +3701,14 @@ car_add_work_delay(int a1, int a2, unsigned int delay)
 	work = kmalloc(sizeof(struct mtc_work), __GFP_IO);
 	// TODO: alloc check
 
-	INIT_DELAYED_WORK(&work->dwork, &car_work); /* T5 r20: makros beret struct delayed_work * */
+	INIT_DELAYED_WORK(work->dwork, &car_work);
 
 	work->cmd1 = a1;
 	work->cmd2 = a2;
-	queue_delayed_work(car_struct.car_wq, &work->dwork, msecs_to_jiffies(delay));
+	queue_delayed_work(mtc_car_struct.car_wq, &work->dwork, msecs_to_jiffies(delay));
 }
 
-EXPORT_SYMBOL_GPL(car_add_work_delay);
+EXPORT_SYMBOL_GPL(car_add_work_delay)
 
 /* fully decompiled */
 static void
@@ -5203,15 +3716,15 @@ mtc_car_work(struct work_struct *work)
 {
 	(void)work;
 
-	mutex_lock(&car_struct.car_comm->car_lock);
+	mutex_lock(&mtc_car_struct.car_comm->car_lock);
 	udelay(20);
 
 	while (!getPin(gpio_MCU_DIN) && arm_rev()) {
 		;
 	}
 
-	enable_irq(car_struct.car_comm->mcu_din_gpio);
-	mutex_unlock(&car_struct.car_comm->car_lock);
+	enable_irq(mtc_car_struct.car_comm->mcu_din_gpio);
+	mutex_unlock(&mtc_car_struct.car_comm->car_lock);
 }
 
 static void
@@ -5219,7 +3732,7 @@ car_avm(void)
 {
 	unsigned char buf[7];
 
-	if (config_data->d.cfg_canbus == 0xA) {
+	if (config_data->cfg_canbus == 0xA) {
 		key_beep();
 
 		buf[0] = 0x06; // length?
@@ -5230,13 +3743,13 @@ car_avm(void)
 		buf[5] = 0x01;
 		buf[6] = 0x34;
 
-		if (car_struct.car_status.cam_state) { // ?
+		if (mtc_car_struct->car_status.cam_state) { // ?
 			printk("mBackView\n");
 			arm_send_multi(0xC000u, 7, buf);
 		} else {
 			arm_send_multi(0xC000u, 7, buf);
 		}
-	} else if (config_data->d.cfg_canbus == 0x25) {
+	} else if (config_data->cfg_canbus == 0x25) {
 		key_beep();
 
 		buf[0] = 0x05; // length?
@@ -5246,7 +3759,7 @@ car_avm(void)
 		buf[4] = 0x01;
 		buf[5] = 0x36;
 
-		if (car_struct.car_status.cam_state) { // ?
+		if (mtc_car_struct->car_status.cam_state) { // ?
 			printk("mBackView\n");
 			arm_send_multi(0xC000u, 6, buf);
 		} else {
@@ -5265,7 +3778,7 @@ car_comm_init(void)
 
 	mutex_init(&car_comm->car_lock);
 
-	car_struct.car_comm = car_comm;
+	mtc_car_struct.car_comm = car_comm;
 
 	gpio_request(gpio_MCU_CLK, "mcu_clk");
 	gpio_pull_updown(gpio_MCU_CLK, 0);
@@ -5294,7 +3807,7 @@ car_comm_init(void)
 	return 0;
 }
 
-EXPORT_SYMBOL_GPL(car_comm_init);
+EXPORT_SYMBOL_GPL(car_comm_init)
 
 /* fully decompiled */
 static int
@@ -5332,8 +3845,8 @@ car_probe(struct platform_device *pdev)
 	int cur_byte;
 
 	// tmp defines
-	struct mutex *car_io_lock = &car_struct.car_io_lock;
-	struct mutex *car_cmd_lock = &car_struct.car_cmd_lock;
+	struct mutex *car_io_lock = &mtc_car_struct.car_io_lock;
+	struct mutex *car_cmd_lock = &mtc_car_struct.car_cmd_lock;
 
 	printk("--mtc car\n");
 	gpio_request(gpio_FCAM_PWR, "fcam_pwr");
@@ -5371,10 +3884,10 @@ car_probe(struct platform_device *pdev)
 		return 0;
 	}
 
-	car_struct.tv.tv_usec = 0;
-	car_struct.tv.tv_sec = 0;
+	mtc_car_struct.tv.tv_usec = 0;
+	mtc_car_struct.tv.tv_sec = 0;
 
-	car_struct.car_wq = create_singlethread_workqueue("car_wq");
+	mtc_car_struct.car_wq = create_singlethread_workqueue("car_wq");
 	car_comm_init();
 	mtc_bootmode = board_boot_mode();
 
@@ -5383,9 +3896,9 @@ car_probe(struct platform_device *pdev)
 	printk("--mtc bootmode %d\n", mtc_boot_mode & 0xF);
 
 	if (!(board_boot_mode() & 0xF)) {
-		INIT_DELAYED_WORK(&car_struct.wipecheckclear_work, &WipeCheckClear_work); /* T5 r20: makros beret struct delayed_work * */
-		car_status->wipe_flag = 1; /* IDA: wipe_check == wipe_flag */
-		queue_delayed_work(car_struct.car_wq, &car_struct.wipecheckclear_work,
+		INIT_DELAYED_WORK(mtc_car_struct.wipecheckclear_work, &WipeCheckClear_work);
+		car_status->wipe_check = 1;
+		queue_delayed_work(mtc_car_struct.car_wq, &mtc_car_struct.wipecheckclear_work,
 				   msecs_to_jiffies(60000u));
 	}
 
@@ -5402,10 +3915,10 @@ car_probe(struct platform_device *pdev)
 	memzero(config_data, 512u);
 	printk("--mtc config_pre\n");
 
-	arm_send_multi(MTC_CMD_MCUVER, 16, car_struct.mcu_version);
+	arm_send_multi(MTC_CMD_MCUVER, 16, mtc_car_struct.mcu_version);
 	for (pos = 0; pos < 16; pos++) {
 
-		cur_byte = car_struct.mcu_version[pos];
+		cur_byte = mtc_car_struct.mcu_version[pos];
 		if (cur_byte == 0) {
 			break;
 		}
@@ -5464,7 +3977,7 @@ car_probe(struct platform_device *pdev)
 	}
 
 	if (car_status->mtc_customer != 4) {
-		mtc_iomux_set(0x1A51u);
+		iomux_set(0x1A51u);
 	}
 
 	arm_send_multi(0x1510u, 1, &config_data->d.cfg_backlight);
@@ -5474,13 +3987,12 @@ car_probe(struct platform_device *pdev)
 	}
 
 	printk("--mtc config\n");
-	arm_send_multi(MTC_CMD_MCUDATE, 16, car_struct.mcu_date);
-	arm_send_multi(MTC_CMD_MCUTIME, 16, car_struct.mcu_time);
+	arm_send_multi(MTC_CMD_MCUDATE, 16, mtc_car_struct.mcu_date);
+	arm_send_multi(MTC_CMD_MCUTIME, 16, mtc_car_struct.mcu_time);
 
 	arm_send_multi(MTC_CMD_GET_MCUCONFIG, 512, config_data->u8);
 	printk("--mtc MCU config \n");
-	int i;	/* C89: hoisted */
-	for (i = 0; i < 512; i++) {
+	for (int i = 0; i < 512; i++) {
 		printk("%02x ", config_data->u8[i]);
 
 		if ((i & 0xF) == 15) {
@@ -5500,7 +4012,7 @@ car_probe(struct platform_device *pdev)
 	}
 
 	if (car_status->mtc_customer == 4) {
-		car_struct.wifi_capable = 1;
+		mtc_car_struct.wifi_capable = 1;
 	}
 
 	if (car_status->wipe_flag & 1) {
@@ -5550,7 +4062,7 @@ static irqreturn_t
 mcu_isr(unsigned int irq)
 {
 	disable_irq_nosync(irq);
-	queue_work(car_struct.car_comm->mcc_rev_wq, &car_struct.car_comm->work);
+	queue_work(mtc_car_struct->car_comm->mcc_rev_wq, &mtc_car_struct->car_comm->work);
 
 	return IRQ_HANDLED;
 }

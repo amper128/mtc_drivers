@@ -11,10 +11,12 @@
 #include <linux/time.h>
 #include <linux/device.h>
 #include <linux/workqueue.h>
+#include <linux/fb.h>
 #include <linux/mutex.h>
+#include <linux/platform_device.h>
 
-#include "mtc_shared.h"
-#include "mtc-car.h"
+#include "shared.h"
+#include "car.h"
 
 /* cross-TU (mtc-car.c ctl_lcd и др. call-sites) */
 void lcd_show(const char *str);
@@ -69,7 +71,8 @@ lcd_send_cmd(int16_t cmd)
 	gpio_direction_output(gpio_LCD_CS, 0);
 	lcd_delay();
 
-	for (unsigned int bits = 12; bits > 0; bits--)
+	unsigned int bits; /* C89: hoisted */
+	for (bits = 12; bits > 0; bits--)
 	{
 		int bit = 1;
 
@@ -111,30 +114,30 @@ static struct mutex lcd_mutex;             /* bss @0xC0BCA12C (общий LCD mu
  */
 static const u32 lcd_seg_tab[99] =
 {
-	0xC0804000, 0x41810242, 0x0804C2C1, 0x9EDE100C
-	0x0B07035E, 0x1B19150F, 0x5F9FDF1F, 0x00001713
-	0x0000FC00, 0x00006000, 0x0000DB00, 0x0000F300
-	0x00006700, 0x0000B700, 0x0000BF00, 0x0000E000
-	0x0000FF00, 0x0000F700, 0x00000000, 0x00000300
-	0x0000EF00, 0x0000F148, 0x00009C00, 0x0000F048
-	0x00009F00, 0x00008F00, 0x0000BD00, 0x00006F00
-	0x00009048, 0x00007800, 0x00000E30, 0x00001C00
-	0x00006CA0, 0x00006C90, 0x0000FC00, 0x0000CF00
-	0x0000FC10, 0x0000CF10, 0x0000B700, 0x00008048
-	0x00007C00, 0x00000C24, 0x00006C54, 0x000000B4
-	0x00007700, 0x00009024, 0x0647C7C6, 0x8784C444
-	0x468685C5, 0xCBCA0545, 0xC8480A4B, 0x89C98B88
-	0x09494A8A, 0x0E4FCFCE, 0x8F8CCC4C, 0x4E8E8DCD
-	0xD3D20D4D, 0xD0501253, 0x91D19390, 0x11515292
-	0x1455D5D4, 0x95959454, 0x00000000, 0xD7D60000
-	0x96561657, 0x00009797, 0x00000000, 0x1859D9D8
-	0x99999858, 0x00000000, 0xDBDA0000, 0x9A5A1A5B
-	0x00009B9B, 0x00000000, 0x1C5DDDDC, 0x9D9D9C5C
-	0x00000000, 0x00000000, 0x00000071, 0x000000B3
-	0x00000137, 0x0000007F, 0x000000B8, 0x00000134
-	0x00000072, 0x000000B1, 0x00000133, 0x00000077
-	0x000000BF, 0x00000138, 0x00000074, 0x000000B2
-	0x00000131, 0x00000073, 0x000000B7, 0x0000013F
+	0xC0804000, 0x41810242, 0x0804C2C1, 0x9EDE100C,
+	0x0B07035E, 0x1B19150F, 0x5F9FDF1F, 0x00001713,
+	0x0000FC00, 0x00006000, 0x0000DB00, 0x0000F300,
+	0x00006700, 0x0000B700, 0x0000BF00, 0x0000E000,
+	0x0000FF00, 0x0000F700, 0x00000000, 0x00000300,
+	0x0000EF00, 0x0000F148, 0x00009C00, 0x0000F048,
+	0x00009F00, 0x00008F00, 0x0000BD00, 0x00006F00,
+	0x00009048, 0x00007800, 0x00000E30, 0x00001C00,
+	0x00006CA0, 0x00006C90, 0x0000FC00, 0x0000CF00,
+	0x0000FC10, 0x0000CF10, 0x0000B700, 0x00008048,
+	0x00007C00, 0x00000C24, 0x00006C54, 0x000000B4,
+	0x00007700, 0x00009024, 0x0647C7C6, 0x8784C444,
+	0x468685C5, 0xCBCA0545, 0xC8480A4B, 0x89C98B88,
+	0x09494A8A, 0x0E4FCFCE, 0x8F8CCC4C, 0x4E8E8DCD,
+	0xD3D20D4D, 0xD0501253, 0x91D19390, 0x11515292,
+	0x1455D5D4, 0x95959454, 0x00000000, 0xD7D60000,
+	0x96561657, 0x00009797, 0x00000000, 0x1859D9D8,
+	0x99999858, 0x00000000, 0xDBDA0000, 0x9A5A1A5B,
+	0x00009B9B, 0x00000000, 0x1C5DDDDC, 0x9D9D9C5C,
+	0x00000000, 0x00000000, 0x00000071, 0x000000B3,
+	0x00000137, 0x0000007F, 0x000000B8, 0x00000134,
+	0x00000072, 0x000000B1, 0x00000133, 0x00000077,
+	0x000000BF, 0x00000138, 0x00000074, 0x000000B2,
+	0x00000131, 0x00000073, 0x000000B7, 0x0000013F,
 	0x00000078, 0x000000B4, 0x00000132
 };
 
@@ -461,3 +464,64 @@ MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC LCD driver");
 MODULE_LICENSE("BSD");
 MODULE_ALIAS("platform:mtc-lcd");
+
+/* ====================== binaRE fb glue (rk_fb_open/close, rk_direct_fb_open, rk_fb_show_logo) ====================== */
+
+static struct platform_device *lcd_platform_dev; /* binaRE 0xC0D1DE08, module BSS, no kallsyms name */
+
+/* binaRE rk_fb_open @0xc069fa88 (IDA 9.3 decompiled) — 't' (local) в kallsyms → static */
+static int
+rk_fb_open(struct fb_info *info) /* a1 */
+{
+	int v1; /* r4 */
+	int v2; /* r1 */
+
+	v1 = *(int *)((char *)info + 604); /* binaRE *(a1+604) */
+	v2 = ((int (*)(int, int))((char *)v1 + 472))(v1, (char *)info + 220); /* binaRE *(v1+472)(v1, a1+220) */
+	if (!*(((char *)*(int *)((char *)v1 + 4 * (v2 + 4))) + 12)) /* binaRE !*( *(v1+4*(v2+4)) + 12 ) */
+		((void (*)(int, int, int))((char *)v1 + 416))(v1, v2, 1); /* binaRE *(v1+416)(v1, v2, 1) — open=1 */
+	return 0;
+}
+
+/* binaRE rk_fb_close @0xc069fad0 (IDA 9.3 decompiled) — 't' (local) в kallsyms → static */
+static int
+rk_fb_close(struct fb_info *info) /* a1 */
+{
+	int v1; /* r4 */
+	int v2; /* r1 */
+
+	v1 = *(int *)((char *)info + 604); /* binaRE *(a1+604) */
+	v2 = ((int (*)(int, int))((char *)v1 + 472))(v1, (char *)info + 220); /* binaRE *(v1+472)(v1, a1+220) */
+	if (*(((char *)*(int *)((char *)v1 + 4 * (v2 + 4))) + 12)) /* binaRE *( *(v1+4*(v2+4)) + 12 ) */
+		((void (*)(int, int, int))((char *)v1 + 416))(v1, v2, 0); /* binaRE *(v1+416)(v1, v2, 0) — close=0 */
+	return 0;
+}
+
+/* binaRE rk_direct_fb_open @0xc06a02dc (IDA 9.3 decompiled) — 'T' (EXPORT) в kallsyms */
+int
+rk_direct_fb_open(struct fb_info *fb, int a2) /* a1, a2 */
+{
+	if (a2)
+		return rk_fb_open(fb); /* binaRE a2 → rk_fb_open(a1) */
+	else
+		return rk_fb_close(fb); /* binaRE → rk_fb_close(a1) */
+}
+
+/* binaRE rk_fb_show_logo @0xc06a26dc (IDA 9.3 decompiled) — 'T' (EXPORT) в kallsyms */
+int
+rk_fb_show_logo(void)
+{
+	int drvdata; /* r4 */
+	struct fb_info *fb;
+	void *ops;
+
+	drvdata = dev_get_drvdata(&lcd_platform_dev->dev); /* binaRE dev_get_drvdata(MEMORY[0xC0D1DE08]+8) (&pdev->dev, struct platform_device: dev @+8) */
+	fb = *(struct fb_info **)((char *)drvdata + 4); /* binaRE *(drvdata+4) */
+	ops = *(void **)((char *)fb + 568); /* binaRE *(fb+568) — class_ops (IDA перечитывает в обеих ветках) */
+	if (fb_prepare_logo(fb, 0)) { /* binaRE fb_prepare_logo(*(drvdata+4), 0) */
+		fb_set_cmap((struct fb_cmap *)((char *)fb + 532), fb); /* binaRE fb_set_cmap(fb+532 [cmap], fb) */
+		fb_show_logo(fb, 0); /* binaRE: IDA — арги stale; info/rotate=0 по аналогии с fb_prepare_logo(fb, 0) (SDK-патч fb.h: (fb_info, rotate)) */
+		((void (*)(int))((char *)ops + 40))((char *)fb + 60); /* binaRE (*(fb+568)+40)(fb+60) */
+	}
+	return ((int (*)(void))((char *)ops + 68))(); /* binaRE return (*(fb+568)+68)() */
+}

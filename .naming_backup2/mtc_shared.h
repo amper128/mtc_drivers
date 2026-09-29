@@ -1,6 +1,5 @@
 #include <linux/gpio.h>
 #include <linux/workqueue.h>
-#include <stdbool.h>
 
 #ifndef _MTC_SHARED_H
 #define _MTC_SHARED_H
@@ -150,12 +149,12 @@ union mtc_config_data {
 		char reserved_21[2];  /* @21..22 was _gap[2]: unused */
 		char cfg_frontview;
 		char cfg_logo_type;
-		char adc_wheel_gate;    /* @25 was _gap3[0]: гейт fallback-обработки колёса — бинар: единственный потребитель
-		 * adc_wheel_callback (A:0x00D9 r2 w0). Имя TENTATIVE. */
+		char default_ajx_ch;  /* @25 was _gap3[0]: канал после AJX-unmute (код, mtc-audio.c:745). РАСХОЖДЕНИЕ: бинарный
+		 * Audio_AJXChannel читает @28 (reserved_28) — layout-shift, naming_report §6.5; чинить здесь нельзя */
 		char reserved_26;	   /* @26 was _gap3[1]: unused */
 		char cfg_rudder;
-		char default_ajx_ch;    /* @28 was _gap4[1]: AJX-канал по умолчанию — бинар: Audio_AJXChannel читает СЮДА
-		 * (A:0x00DC r2 w0, decompiled_Audio_AJXChannel.c:17) */
+		char reserved_28;	   /* @28 was _gap4[1]: бинар — Audio_AJXChannel читает AJX-канал по умолчанию СЮДА (кандидат
+		 * на default_ajx_ch); в ручном коде не используется */
 		char cfg_dvr;
 		char cfg_appdisable;
 		char cfg_ill;
@@ -192,7 +191,6 @@ union mtc_config_data {
 		char cfg_blmode;
 		char reserved_496[16]; /* @496..511 was _gap13[16]: хвост блоба, unused */
 	} d;
-	char arr[512];  /* T5: плоский алиас cfg-байтов (keys.c: .d.arr -> .arr) */
 	u8 u8[512];
 };
 
@@ -255,83 +253,4 @@ extern int car_comm_init(void);
 extern void car_add_work(int a1, int a2, int flush);
 extern void car_add_work_delay(int a1, int a2, unsigned int delay);
 
-
-/* ===== T5 smoke-green (executor): Windows-макросы + IDA API maps + enum'ы + cross-TU прототипы ===== */
-#define LOBYTE(w)   ((unsigned char *)&(w))[0]
-#define HIBYTE(w)   (((unsigned char *)&(w))[3])
-#define BYTE1(w)    (((unsigned char *)&(w))[1])
-#define BYTE2(w)    (((unsigned char *)&(w))[2])
-#define LOWORD(w)   (*(unsigned short *)&(w))
-#define HIWORD(w)   (*(unsigned short *)(((unsigned char *)&(w)) + 2))
-#define memzero(p, n)         memset((p), 0, (n))
-#define _memzero(p, n)        memset((p), 0, (n))
-#define _kmalloc(sz, fl)      kmalloc((sz), (fl))
-#define _copy_from_user(d, us, n) copy_from_user((d), (us), (n))
-#define _copy_to_user(d, us, n)   copy_to_user((d), (us), (n))
-#define kzfree(p)             kfree(p) /* kernel 3.0: kzfree нет */
-
-/* TENTATIVE: порядок/значения по определению enum в audio_card_glue.c (IPOD=6, DVR=7) */
-enum MTC_AV_CHANNEL {
-	MTC_AV_CHANNEL_GSM_BT = 0, MTC_AV_CHANNEL_SYS = 1, MTC_AV_CHANNEL_DVD = 2,
-	MTC_AV_CHANNEL_LINE = 3, MTC_AV_CHANNEL_FM = 4, MTC_AV_CHANNEL_DTV = 5,
-	MTC_AV_CHANNEL_IPOD = 6, MTC_AV_CHANNEL_DVR = 7,
-};
-
-enum mtc_car_work { CAR_WORK_BL_ON = 35, CAR_WORK_BL_OFF = 36 }; /* по case в car_work */
-
-enum mtc_audio_work {
-	AUDIO_WORK_CH_ENTER = 0, AUDIO_WORK_CH_EXIT = 1, AUDIO_WORK_MUTE = 2,
-	AUDIO_WORK_VOLUME = 3, AUDIO_WORK_PHONE_VOLUME = 4, AUDIO_WORK_PHONE = 0xA,
-}; /* по switch audio-work handler'а (audio_card_glue.c); PHONE — TENTATIVE */
-
-/* cross-TU прототипы (T5): сигнатуры — по определениям в mtc_drivers/ref_kernel (binaRE) */
-/* T5: прототипы дособраны вручную по определениям (parse_defs пропустил multi-line сигнатуры) */
-int Radio_TA(int enable, int a2);
-void Radio_AF(int af);
-int Radio_Get_Signal(void);
-int Radio_Get_Stereo(void);
-void Radio_Set_Search(char arg);
-int Radio_Set_Frequency(int freq, int with_data);
-void Radio_Set_Mute(int mute);
-void Radio_Set_Stereo(int val);
-void rds_input(int a1);
-void rds_input2(int a1);
-void rds_input3(char *rds);
-void rds_input3A(char *rds);
-void Tv_Set_Frequency(signed int freq);
-void Tv_Set_Demod(int a1);
-int Tv_Get_Status(void);
-void audio_active(void);
-void audio_deactive(void);
-int getAudioChannel(void);
-bool isAudioMute(void);
-void audio_flush_work(void);
-void audio_channel_switch_unmute(void);
-void decorder_power(int pwr); /* def: backview.c */
-int codec_active(void);
-int codec_deactive(void);
-int vs_send(int port_num, unsigned char cmd, char *cmd_data, int count); /* def: vs.c; binary returns int */
-void vs_send_raw(int port_num, unsigned char *data, int count); /* def: vs.c */
-int mtc_iomux_set(unsigned int mode);
-int send_event_key(unsigned int a1);
-int key_beep(void);
-char key_enter_mode(char result);
-int send_ir_key(int result);
-void lcd_show(const char *str);
-void dvd_send_command(u32 command);
-int dvd_get_folder(int result, const char *buf_1, int a3, int a4);
-int dvd_get_media(int result, const char *a2, int a3, int a4);
-int dvd_get_folder_cnt(char *buf);
-int dvd_get_media_cnt(char *buf);
-int dvd_get_folder_idx(char *buf);
-int dvd_get_media_idx(char *buf);
-int dvd_get_length(char *buf);
-int dvd_get_position(char *buf);
-int dvd_get_media_title(const char *buf);
-int check_tv_signal(void); /* TENTATIVE */
-int board_boot_mode(void); /* def: ref_kernel mach-rk30/common.c */
-int rk_fb_show_logo(void); /* binaRE @0xc06a26dc (def: lcd.c) */
-int rk29sdk_wifi_power(int on); /* def: ref_kernel board-rk30-sdk-sdmmc.c */
-int sta_touch_adc(char *buf); /* TENTATIVE */
-int sta_touch_cal(void *data); /* TENTATIVE */
 #endif // _MTC_SHARED_H

@@ -3,8 +3,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
-#include "vs.h"
-#include "car.h" /* extern car_struct (car.h:142, def car.c:113/251-area) — гейт call_active vs_uart */
+#include "mtc-vs.h"
 
 /* forward declarations */
 static struct uart_ops vs_uart_ops;
@@ -174,12 +173,14 @@ vs_set_termios(struct uart_port *port, struct ktermios *termios, struct ktermios
 static void
 vs_work(struct work_struct *work)
 {
-	struct mtc_vs_port *vss = container_of(work, struct mtc_vs_port, vs_work); /* vs.h:6 — struct tag (bare-типеда нет) */
+	struct mtc_vs_port *vss = container_of(work, mtc_vs_port, vs_work);
 	struct tty_struct *tty = vss->uart_port.state->port.tty;
+	struct task_info *task;
 	// int tx;
 	void *pd;
 	void *pdev;
 
+	task = get_current();
 	do {
 		// if ( CONTAINING_RECORD(work, mtc_vs_port, vs_work)->uart_port.x_char )
 		if (vss->uart_port.icount.tx) {
@@ -189,7 +190,7 @@ vs_work(struct work_struct *work)
 			pd = vss->uart_port.private_data;
 			pdev = vss->pdev;
 		LABEL_4:
-			if ((((unsigned long)pd - (unsigned long)pdev) & 0xFFFu) > 0xFF) {
+			if (((pd - pdev) & 0xFFFu) > 0xFF) {
 				goto LABEL_5;
 			}
 			goto LABEL_13;
@@ -205,9 +206,9 @@ vs_work(struct work_struct *work)
 			goto LABEL_4;
 		}
 
-		vss->pdev = (void *)((((unsigned long)pdev) + 1) & 0xFFFu); /* binaRE: IDA void*+int артефакт (паттерн vs.c:191); pdev в vs.h — struct platform_device* */
+		vss->pdev = ((pdev + 1) & 0xFFF);
 		vss->uart_port.icount.tx++;
-		if ((((unsigned long)vss->uart_port.private_data - (unsigned long)vss->pdev) & 0xFFFu) > 0xFF) {
+		if (((vss->uart_port.private_data - vss->pdev) & 0xFFFu) > 0xFF) {
 		LABEL_5:
 			if (vss->shutdown) {
 				return;
@@ -219,7 +220,7 @@ vs_work(struct work_struct *work)
 		if (vss->shutdown) {
 			return;
 		}
-	} while (1 /* IDA: *task->stack — плейсхолдер */ && vss->uart_port.private_data != vss->pdev &&
+	} while (!(*task->stack & 0x80000) && vss->uart_port.private_data != vss->pdev &&
 		 !(tty->stopped || tty->hw_stopped)); // what is it???
 }
 
@@ -277,11 +278,8 @@ vs_dowork(struct uart_port *port)
 {
 	struct mtc_vs_port *vs_port = (struct mtc_vs_port *)port;
 
-	/* binaRE decompiled_vs_dowork ea=0xc082cd04: **(_DWORD **)(*((_DWORD *)get_current()+3)+4) & 0x80000;
-	 * task-flags — IDA-миспарс, имя поля не придумывать */
 	if (!vs_port->shutdown && !(vs_port->vs_work.data.counter & 1) &&
-	    !(**((unsigned int **)(*(unsigned int *)((char *)get_current() + 12)) + 4) & 0x80000) &&
-	    !vs_port->port_disabled) {
+	    !(**(get_current()->flags + 4) & 0x80000) && !vs_port->port_disabled) {
 		queue_work(vs_port->vs_wq, &vs_port->vs_work);
 	}
 }
@@ -316,12 +314,11 @@ vs_send_raw(int port_num, unsigned char *data, int count)
 	int v12;		     // r2@12
 	int v13;		     // r2@13
 	char flags;		     // [sp+6h] [bp-2Ah]@11
-	unsigned char byte;
-	/* binaRE/IDA: tentative decls removed (dup of params) */
+	unsigned char byte;	  // [sp+7h] [bp-29h]@11
 
 	vs_port = vs_portlist.vss_dev[port_num];
 
-	if (vs_uart_init && car_struct.car_status.call_active && vs_port->vs_rx) {
+	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
 		mutex_lock(&vs_port->lock);
 
 		printk("vs_send raw ");
@@ -337,13 +334,12 @@ vs_send_raw(int port_num, unsigned char *data, int count)
 			byte = data[i];
 			flags = 0;
 
-			/* tty.h:63 struct tty_buffer {next; char_buf_ptr; flag_buf_ptr; used; size;} — IDA DWORD-офсеты [1..4] -> именованные поля (индексация [1] в SDK нет — плоские указатели); decompiled_vs_send_raw ea=0xc082cd70 */
-			tail = tty->buf.tail;
-			if (tail && (v12 = tail->used, v12 < tail->size)) {
-				tail->flag_buf_ptr[v12] = 0;
-				v13 = tail->used;
-				tail->char_buf_ptr[v13] = byte; /* бинар v15[0] = byte */
-				tail->used = v13 + 1;
+			tail = tty->buf.tail; // bytes magic?
+			if (tail && (v12 = *(tail + 3), v12 < *(tail + 4))) {
+				*(*(tail + 2) + v12) = 0;
+				v13 = *(tail + 3);
+				*(*(tail + 1) + v13) = chars;
+				*(tail + 3) = v13 + 1;
 			} else {
 				tty_insert_flip_string_flags(tty, &byte, &flags, 1u);
 			}
@@ -365,10 +361,11 @@ vs_send_raw(int port_num, unsigned char *data, int count)
 	}
 }
 
-EXPORT_SYMBOL_GPL(vs_send_raw);
+EXPORT_SYMBOL_GPL(vs_send_raw)
 
 /* dirty code */
-int vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count) /* binaRE: binary returns int (decompiled_vs_send.c ea=0xc082ced8); дерево: void — расхождение, фикс под бинар */
+void
+vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count)
 {
 	signed int flip_buf;	 // r7@0
 	int _port_num;		     // r9@1
@@ -391,10 +388,10 @@ int vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count) /
 
 	_port_num = port_num;
 	vs_port = vs_portlist.vss_dev[port_num];
-	if (vs_uart_init && car_struct.car_status.call_active && vs_port->vs_rx) {
+	if (vs_uart_init && car_status._gap1[0] && vs_port->vs_rx) {
 		size = count + 4;
 		mutex_lock(&vs_port->lock);
-		data = kmalloc(size, __GFP_ZERO | __GFP_FS | __GFP_IO | __GFP_WAIT); /* binaRE: _kmalloc (shared.h:268) не включён в vs.c -> kmalloc (slab.h) */
+		data = _kmalloc(size, __GFP_ZERO | __GFP_FS | __GFP_IO | __GFP_WAIT);
 		_count = count;
 		checksum = count + cmd; // really checksum?
 		data[1] = cmd;
@@ -423,13 +420,13 @@ int vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count) /
 					tty = vs_port->uart_port.state->port.tty;
 					chars = data[i];
 					flags = 0;
-					tail = tty->buf.tail; /* tty.h:63 struct tty_buffer — поля вместо DWORD-офсетов */
-					if (tail && (v23 = tail->used, v23 < tail->size)) {
+					tail = tty->buf.tail;
+					if (tail && (v23 = *(tail + 3), v23 < *(tail + 4))) {
 						flip_buf = 0;
-						tail->flag_buf_ptr[v23] = 0;
-						v18 = tail->used;
-						tail->char_buf_ptr[v18] = chars;
-						tail->used = v18 + 1;
+						*(*(tail + 2) + v23) = 0;
+						v18 = *(tail + 3);
+						*(*(tail + 1) + v18) = chars;
+						*(tail + 3) = v18 + 1;
 						if ((i & 0xF) == 15) {
 							goto LABEL_21;
 						}
@@ -461,9 +458,7 @@ int vs_send(int port_num, unsigned char cmd, char *cmd_data, signed int count) /
 		}
 		mutex_unlock(&vs_portlist.vss_dev[_port_num]->lock);
 		kfree(data);
-		return 0; /* binaRE: IDA-путь `return kfree(v13)` — r0 после kfree не определён; минимальный возврат */
 	}
-	return vs_uart_init; /* binaRE: else-путь возвращает MEMORY[0xC168AC7C] = vs_uart_init (decompiled_vs_send.c) */
 }
 
 /* decompiled, but contains unknown structure fields */

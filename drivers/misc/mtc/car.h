@@ -1,6 +1,6 @@
 #include <linux/mutex.h>
 
-#include "mtc_shared.h"
+#include "shared.h"
 
 #ifndef _MTC_CAR_H
 #define _MTC_CAR_H

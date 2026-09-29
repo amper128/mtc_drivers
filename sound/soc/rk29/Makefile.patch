@@ -1,0 +1,27 @@
+# T3: build snd-soc-wm8731 for CONFIG_SND_RK29_WM8731 (MTC RK3188 + WM8731 machine).
+# Base: SDK rk3188_rk3066_r-box_android4.4.2 kernel/sound/soc/rk29/Makefile
+# Apply with: patch -p1 < sound/soc/rk29/Makefile.patch  (from kernel root)
+--- a/sound/soc/rk29/Makefile
++++ b/sound/soc/rk29/Makefile
+@@ -13,6 +13,10 @@
+ 
+ # ROCKCHIP Machine Support
+ snd-soc-wm8900-objs := rk29_wm8900.o
++#$_rbox_$_modify_$_begin
++# T3 binaRE: MTC RK3188 + Wolfson WM8731 machine (rk29_wm8731_init @0xc0862494)
++snd-soc-wm8731-objs := rk29_wm8731.o
++#$_rbox_$_modify_$_end
+ snd-soc-rt5621-objs := rk29_rt5621.o
+ snd-soc-rt5631-objs := rk29_rt5631.o
+ snd-soc-rt5616-objs := rk29_rt5616.o
+@@ -37,6 +41,10 @@
+ obj-$(CONFIG_SND_RK29_SOC_WM8994) += snd-soc-wm8994.o
+ obj-$(CONFIG_SND_RK29_SOC_WM8988) += snd-soc-wm8988.o
+ obj-$(CONFIG_SND_RK29_SOC_WM8900) += snd-soc-wm8900.o
++#$_rbox_$_modify_$_begin
++# T3 binaRE: MTC RK3188 + Wolfson WM8731 machine card
++obj-$(CONFIG_SND_RK29_WM8731) += snd-soc-wm8731.o
++#$_rbox_$_modify_$_end
+ obj-$(CONFIG_SND_RK29_SOC_RT5621) += snd-soc-rt5621.o
+ obj-$(CONFIG_SND_RK29_SOC_RT5631) += snd-soc-rt5631.o
+ obj-$(CONFIG_SND_RK29_SOC_RT5631_PHONE) += snd-soc-rt5631-phone.o

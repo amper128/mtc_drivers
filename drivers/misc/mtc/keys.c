@@ -1,4 +1,3 @@
-#include <asm-generic/gpio.h>
 #include <asm/errno.h>
 #include <linux/adc.h>
 #include <linux/earlysuspend.h>
@@ -12,7 +11,50 @@
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 
-#include "mtc-car.h"
+#include "car.h"
+static enum hrtimer_restart wheel_timer(struct hrtimer *t)
+{ (void)t; return HRTIMER_RESTART; /* binaRE placeholder */ }
+
+static enum hrtimer_restart adc_wheel_timer(struct hrtimer *t)
+{ (void)t; return HRTIMER_RESTART; /* binaRE placeholder */ }
+
+static void adc_mcu_timer(unsigned long arg)
+{ (void)arg; /* binaRE placeholder */ }
+
+static void modemute_work(struct work_struct *work)
+{ (void)work; /* binaRE placeholder */ }
+
+static void volkey_work(struct work_struct *work)
+{ (void)work; /* binaRE placeholder */ }
+
+
+static irqreturn_t ir_isr(int irq, void *dev_id)
+{ (void)irq; (void)dev_id; return IRQ_HANDLED; /* binaRE placeholder */ }
+
+/* binaRE decompiled_keys_early_suspend ea=0xc083b36c size=4: в бинаре пусто (bx lr) */
+static void keys_early_suspend(struct early_suspend *h)
+{ (void)h; }
+
+/* binaRE decompiled_keys_later_resume ea=0xc083b370 size=4: в бинаре пусто (bx lr) */
+static void keys_later_resume(struct early_suspend *h)
+{ (void)h; }
+
+/* binaRE: decompiled_keys_isr (ea=0xc083b384, 56 bytes) существует, НО тело с IDA-артефактами
+ * (*_DWORD(dev_id+4)=0; mod_timer(dev_id+16, msecs_to_jiffies(10)-30000, + лишний r2)) —
+ * арифметику не выдумываем: минимальный стаб (образец cif0_irq/ipp_mirror_work backview.c),
+ * восстановить по бинару позже */
+static irqreturn_t keys_isr(int irq, void *dev_id)
+{ (void)irq; (void)dev_id; return IRQ_HANDLED; /* binaRE placeholder, decompiled_keys_isr ea=0xc083b384 */ }
+
+/* binaRE: ir_task / ir_timer — декомпиляций в src_all нет (tasklet/timer-обработчики lost in
+ * decompilation) — минимальные стабы (образец cif0_irq/ipp_mirror_work backview.c) */
+static void ir_task(unsigned long data)
+{ (void)data; /* binaRE placeholder — lost in decompilation */ }
+
+static void ir_timer(unsigned long data)
+{ (void)data; /* binaRE placeholder — lost in decompilation */ }
+
+
 
 static unsigned int mtc_keycodes[] = {
     KEY_NUMERIC_0,
@@ -137,27 +179,32 @@ static struct mtc_keys_drv *keys_dev;
  *     +0x78 backlight-переключатель (полей нет), +0x8C/+0x8D touch-результат (полей нет),
  *     +0x94 touch-гейт, +0x98 counter, +0x9C key, +0x9D code2, +0xA0 dwork (полей нет)
  * ========================================================================== */
-static char key_enter_mode(char result); /* вызов из mtc-car.c (implicit decl); binary 0xc083bebc */
-static int key_beep(void);
-static int send_ir_key(int result);
-static int send_event_key(unsigned int a1);
+char key_enter_mode(char result); /* вызов из mtc-car.c (implicit decl); binary 0xc083bebc */
+int key_beep(void);
+int send_ir_key(int result);
+int send_event_key(unsigned int a1);
 static void mtc_touch_work_func(void);
 
 /* binaRE round3 externs. vs_send/audio_add_work/capture_add_work объявлены под ТИПЫ БИНАРЯ
  * (R0 используется вызывающим) — расхождение с void-определениями дерева помечено;
- * backlight_on/off, isKeyDisable, isAudioKeyEnable — определений в дереве нет. */
+ * backlight_on/off — определений в дереве нет; isKeyDisable/isAudioKeyEnable — определения ниже (EOF). */
 extern int vs_send(int port_num, unsigned char cmd, char *cmd_data, int count); /* дерево mtc-vs.c:368: void — расхождение */
 extern int audio_add_work(unsigned int cmd1, int cmd2, int cmd3, int val1); /* дерево mtc-audio.c:1644: void — расхождение */
 extern int capture_add_work(unsigned int cmd1, int cmd2, unsigned int delay, int flush); /* дерево mtc-backview.c:556: void — расхождение */
 extern void backlight_on(void); /* определения нет в дереве; бинар: арг не нужен (IDA — stale R0) */
 extern void backlight_off(void); /* то же */
-extern int isKeyDisable(void); /* определения нет в дереве (call C083C174) */
-extern int isAudioKeyEnable(void); /* определения нет в дереве (call C083C25C) */
+int isKeyDisable(void); /* binaRE @0xc083b7b8 (по IDA-name: isKeyDisable) — определение ниже (EOF) */
+int isAudioKeyEnable(void); /* binaRE @0xc083b748 (по IDA-name: isAudioKeyEnable) — определение ниже (EOF) */
 extern int arm_send_multi(unsigned int cmd, int count, unsigned char *buf); /* = mtc_shared.h:251 (совместимое переобъявление) */
-extern unsigned char dword_C0BCA228[]; /* бинарные данные: таблица тона key_beep */
+/* binaRE, kernel.elf file-off 0x7CA228; size по IDA max-ref; key_beep шлёт 1-й байт */
+static const unsigned char dword_C0BCA228[40] = {
+	0x05, 0x00, 0x00, 0x00, 0x29, 0x48, 0x2a, 0x02, 0x2b, 0x2c, 0x2d, 0x44, 0x45, 0x03, 0x30, 0x01,
+	0x42, 0xff, 0x31, 0x39, 0x3a, 0x43, 0x36, 0x32, 0xff, 0x16, 0x33, 0x47, 0x00, 0x00, 0x00, 0x00,
+	0x05, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00
+};
 
 /* key_enter_mode @ 0xc083bebc */
-static char
+char
 key_enter_mode(char result)
 {
 	car_struct.car_status.key_mode = result; /* binaRE: STRB R0, [car_status+0x2A] = key_mode (0xC168ACAE) */
@@ -165,7 +212,7 @@ key_enter_mode(char result)
 }
 
 /* key_beep @ 0xc083bfbc */
-static int
+int
 key_beep(void)
 {
 	if (car_struct.config_data.d.ctl_beep) /* binaRE 0xC168AF24 = config_data+0x1E4 (484) = d.ctl_beep */
@@ -176,7 +223,7 @@ key_beep(void)
 
 /* send_ir_key @ 0xc083c0d4 (149L) — полный декод по disasm C083C0D4-C083C44C;
  * result/R0 = исходный key; v1/R4 = key после ремапа ('O' → 'E'/'D') */
-static int
+int
 send_ir_key(int result)
 {
 	int v1; /* decompiled v1 (R4): key после ремапа */
@@ -298,7 +345,7 @@ backlight_flow: /* LABEL_20 (asm C083C180) */
 }
 
 /* send_event_key @ 0xc083ce74 — dev = keys_data+0x08 (binaRE 0xC168E47C = p_input_dev) */
-static int
+int
 send_event_key(unsigned int a1)
 {
 	input_event(keys_data->p_input_dev, 1u, a1, 1);
@@ -333,7 +380,8 @@ mtc_key_suspend(void)
 			break;
 		}
 	}
-	return flush_workqueue(keys_data->keys_ws.wheel_wq); /* asm tail: LDR R0,[keys_data+0x10] = wheel_wq (0xC168E484) */
+	flush_workqueue(keys_data->keys_ws.wheel_wq);
+	return 0; /* binaRE: flush_workqueue возвращает void */ /* asm tail: LDR R0,[keys_data+0x10] = wheel_wq (0xC168E484) */
 }
 
 /* mtc_key_resume @ 0xc083d064 — НЕ static (earlysuspend из mtc-car.c) */
@@ -462,7 +510,7 @@ keys_probe(struct platform_device *pdev)
 	struct input_dev *gpio_keys_input0;
 	struct mtc_keys_input_id *keys_ids;
 	struct mtc_keys_input_id *cur_id;
-	int v26;
+	char *v26; /* binaRE: IDA int->ptr */
 
 	struct adc_client *wheel_adc_client;
 	void (*adc_wheel_callback)(struct adc_client *, void *, int);
@@ -486,8 +534,8 @@ keys_probe(struct platform_device *pdev)
 	if (car_struct.car_status.mtc_customer == 12) {
 		LOBYTE(keys_data->intval1) = 1;
 	} else if (car_struct.car_status.mtc_customer == 8 &&
-		   car_struct.config_data.d.arr[1] != 3) {
-		if (car_struct.config_data.d.arr[1] == 1) {
+		   car_struct.config_data.arr[1] != 3) {
+		if (car_struct.config_data.arr[1] == 1) {
 			BYTE1(keys_data->intval1) = 1;
 		}
 		keys_data->no_adc_ch1 = 1;
@@ -496,8 +544,8 @@ keys_probe(struct platform_device *pdev)
 	keys_data->keys_ws.wheel_wq = create_workqueue("wheel_wq");
 	keys_data->process_wq = create_workqueue("process_wq");
 
-	INIT_WORK(keys_data->keys_ws.volkey_work, volkey_work);
-	INIT_WORK(keys_data->keys_ws.modemute_work, modemute_work);
+	INIT_WORK(&keys_data->keys_ws.volkey_work, volkey_work); /* поле by-value: struct work_struct */
+	INIT_WORK(&keys_data->keys_ws.modemute_work, modemute_work);
 
 	keys_data->keys_dev = kzalloc(sizeof(struct mtc_keys_drv), GFP_KERNEL); // 0x748 bytes
 	if (!keys_data->keys_dev) {
@@ -527,7 +575,9 @@ keys_probe(struct platform_device *pdev)
 		gpio_keys_input0->evbit[0] |= BIT_MASK(EV_REP);
 	}
 
-	for (int cur_dev = 0; cur_dev < input_dev_count; cur_dev++) {
+	int cur_dev; /* C89: hoisted */
+	int i;       /* C89: hoisted (был C99-init в for) */
+	for (cur_dev = 0; cur_dev < input_dev_count; cur_dev++) {
 		keys_ids = mtc_keys_devices;
 		cur_id = &keys_ids[cur_dev];
 
@@ -588,8 +638,7 @@ keys_probe(struct platform_device *pdev)
 				     HRTIMER_MODE_REL,
 				     2000000); // ?
 			keys_dev->keys_input[cur_dev].adc_wheel_hrtimer.function = adc_wheel_timer;
-			hrtimer_start(&keys_dev->keys_input[cur_dev].adc_wheel_hrtimer, 10000000LL,
-				      HRTIMER_MODE_REL);
+			hrtimer_start(&keys_dev->keys_input[cur_dev].adc_wheel_hrtimer, ktime_set(0, 1000), /* binaRE: ktime_t (было 10000000LL) */ HRTIMER_MODE_REL);
 		} else {
 			if (keys_ids[cur_dev].dev_type == 2) {
 				gpio_label = cur_id->dev_name;
@@ -613,7 +662,7 @@ keys_probe(struct platform_device *pdev)
 				keys_dev->keys_input[cur_dev].adc_wheel_hrtimer.function =
 				    wheel_timer;
 				hrtimer_start(&keys_dev->keys_input[cur_dev].adc_wheel_hrtimer,
-					      10000000LL, HRTIMER_MODE_REL);
+					      ktime_set(0, 10000000), /* binaRE: ktime_t (было 10000000LL) */ HRTIMER_MODE_REL);
 			} else if (cur_id->gpio1 != -1) {
 				int res;
 
@@ -660,7 +709,7 @@ keys_probe(struct platform_device *pdev)
 						     ir_task,
 						     &keys_dev->keys_input[cur_dev].callback_param);
 
-					setup_timer(keys_dev->keys_input[cur_dev].ir_timer,
+					setup_timer(&keys_dev->keys_input[cur_dev].ir_timer, /* поле by-value: struct timer_list */
 						    ir_timer,
 						    &keys_dev->keys_input[cur_dev].callback_param);
 
@@ -710,7 +759,7 @@ keys_probe(struct platform_device *pdev)
 		}
 	}
 
-	for (int i = 0; i < ARRAY_SIZE(mtc_keycodes); i++) {
+	for (i = 0; i < ARRAY_SIZE(mtc_keycodes); i++) {
 		input_set_capability(gpio_keys_input0, 1u, mtc_keycodes[i]);
 	}
 
@@ -783,3 +832,43 @@ MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC keys driver");
 MODULE_LICENSE("BSD");
 MODULE_ALIAS("platform:mtc-keys");
+
+/* binaRE isKeyDisable @0xc083b7b8 (IDA 9.3 decompiled) */
+int
+isKeyDisable(void)
+{
+	if ((!car_struct.car_status.rpt_boot_android && car_struct.car_status.key_mode != 3) /* binaRE 0xC168AC88 = +4; 0xC168ACAE = +42 */
+	    || !car_struct.car_status.power_refcnt /* binaRE 0xC168AC85 = +1 */
+	    || car_struct.car_status.cam_state /* binaRE 0xC168ACA6 = +34 */
+	    || car_struct.car_status.cam_signal /* binaRE 0xC168ACA9 = +37 */
+	    || !car_struct.car_status.call_active) { /* binaRE 0xC168AC87 = +3 */
+		return 1;
+	}
+	if (car_struct.car_status.video_src_ready) /* binaRE 0xC168ACDF = +91 */
+		return 1;
+	return car_struct.car_status.ch_status; /* binaRE 0xC168ACE5 = +97 (result=ch_status; if → return 1) */
+}
+
+/* binaRE isAudioKeyEnable @0xc083b748 (IDA 9.3 decompiled) */
+int
+isAudioKeyEnable(void)
+{
+	int result;
+
+	result = car_struct.car_status.power_refcnt; /* binaRE 0xC168AC85 = +1 */
+	if (car_struct.car_status.power_refcnt) { /* binaRE 0xC168AC85 = +1 */
+		if (car_struct.car_status.ch_mode || car_struct.car_status.video_src_ready) { /* binaRE 0xC168ACAD = +41; 0xC168ACDF = +91 */
+			return 1;
+		} else {
+			result = car_struct.car_status.ch_status; /* binaRE 0xC168ACE5 = +97 */
+			if (car_struct.car_status.ch_status) { /* binaRE 0xC168ACE5 = +97 */
+				return 1;
+			} else if (!car_struct.car_status.cam_state || car_struct.car_status.backview_vol <= 0xA) { /* binaRE 0xC168ACA6 = +34; 0xC168ACB0 = +44 (car.h: backview_vol; r25-план «reserved_12(+44)» — off-by-one, бинарный якорь = +44) */
+				result = car_struct.car_status.call_active; /* binaRE 0xC168AC87 = +3 */
+				if (car_struct.car_status.call_active)
+					return 1;
+			}
+		}
+	}
+	return result;
+}

@@ -1,14 +1,14 @@
 #include <linux/module.h>
 
-#include "mtc_shared.h"
-#include "mtc-car.h"
+#include "shared.h"
+#include "car.h"
 
 /* decompiled */
 signed int
 is_Atv()
 {
-	if (car_struct.config_data.cfg_dtv > 5) {
-		if (car_struct.config_data.cfg_dtv != 14) {
+	if (car_struct.config_data.d.cfg_dtv > 5) {
+		if (car_struct.config_data.d.cfg_dtv != 14) {
 			return 0;
 		}
 	}
@@ -70,7 +70,7 @@ Tv_Set_Demod(int a1)
 		return;
 	}
 
-	if ( car_struct.config_data.cfg_dtv != 5 )
+	if ( car_struct.config_data.d.cfg_dtv != 5 )
 	{
 		v4 = a1 - 1 + ((a1 - 1) <= 0) - (a1 - 1);
 		if ( a1 == 5 )
@@ -81,7 +81,7 @@ Tv_Set_Demod(int a1)
 		{
 			v5 = a1 - 1 + ((a1 - 1) <= 0) - (a1 - 1);
 		}
-		if ( car_struct.config_data.cfg_dtv - 14 > 0 )
+		if ( car_struct.config_data.d.cfg_dtv - 14 > 0 )
 		{
 			if ( v5 )
 			{
