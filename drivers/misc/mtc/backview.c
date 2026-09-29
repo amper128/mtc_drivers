@@ -1990,3 +1990,53 @@ label_15: /* binaRE LABEL_15 */
 	v7 = 2;
 	goto label_28; /* binaRE LABEL_28 */
 }
+
+/* === binaRE T8a: mtc_direct_fb_buf (c06a0a20, T, 92B) и fb-якоря === */
+
+/* binaRE 0xC0D1DE18 (bss u32): указатель на fb-память (MEMORY[0xC0D1DE18]). */
+static unsigned int mtc_fb_info_ptr; /* 0xC0D1DE18 */
+
+/* binaRE t c06a0328 (rk_pan_display, 420L) / t c06a04d4 (rk_fb_set_par, 1260L):
+ * декомпиляции в src_all ЕСТЬ (decompiled_rk_pan_display.c / decompiled_rk_fb_set_par.c),
+ * но вне scope T8a → честные static-стабы (прецедент keys_isr, keys.c L46).
+ * Реальные тела: ref_kernel/drivers/video/rockchip/rk_fb.c L623/L784 (static там же;
+ * exported-обёртка rk_direct_fb_show L1382). */
+static int rk_pan_display(void *var, void *info)
+{ (void)var; (void)info; return 0; /* binaRE placeholder t c06a0328 */ }
+static void rk_fb_set_par(void *info)
+{ (void)info; /* binaRE placeholder t c06a04d4 */ }
+
+/* --- mtc_direct_fb_buf --- */
+/* binaRE 0xC06A0A20 (T, 92B) — src_all/decompiled_mtc_direct_fb_buf.c, 1-в-1.
+ * a1: выбор буфера (смещения 344064/688128/1036800 от mtc_fb_info_ptr).
+ * fb[59]/fb[67] — поля struct fb_info (DWORD-индексы IDA). */
+int
+mtc_direct_fb_buf(int a1)
+{
+	unsigned int *fb; /* binaRE (_DWORD *)rk_get_fb(1) */
+	unsigned int v3, v4, v5, v6;
+
+	fb = (unsigned int *)rk_get_fb(1);
+	v3 = mtc_fb_info_ptr; /* binaRE MEMORY[0xC0D1DE18] */
+	if (a1)
+		v4 = mtc_fb_info_ptr + 688128;
+	else
+		v4 = mtc_fb_info_ptr + 344064;
+	if (a1) {
+		v3 = mtc_fb_info_ptr + 1036800;
+		v5 = v4 + 3072;
+	} else {
+		v5 = v4 + 1536;
+	}
+	if (a1)
+		fb[59] = v5;
+	v6 = (unsigned int)fb;
+	if (a1) {
+		fb[67] = v3;
+	} else {
+		fb[59] = v3;
+		fb[67] = v5;
+	}
+	rk_fb_set_par(fb);
+	return rk_pan_display((void *)(v6 + 60), (void *)v6); /* binaRE: fb+60B (&var) */
+}

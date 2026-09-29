@@ -191,7 +191,7 @@ Lcd_work(struct work_struct *work)
 /* binaRE lcd_show_symbol @0xc083860c (IDA 9.3 decompiled)
  * mask: bits 9..29 (21-bit field) -> symbol_map bytes 1..29; result = mask >> 1
  * consumed LSB-first. seg = byte: page[seg & 0x1F] set/clear bit(seg >> 6). */
-static void
+void
 lcd_show_symbol(unsigned int mask)
 {
 	unsigned int result = mask >> 1;

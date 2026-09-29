@@ -56,32 +56,26 @@ static void ir_timer(unsigned long data)
 
 
 
-static unsigned int mtc_keycodes[] = {
-    KEY_NUMERIC_0,
-    KEY_BACK,
-    KEY_NUMERIC_2,
-    KEY_NUMERIC_3,
-    KEY_NUMERIC_4,
-    KEY_NUMERIC_5,
-    KEY_NUMERIC_6,
-    KEY_NUMERIC_7,
-    KEY_NUMERIC_8,
-    KEY_NUMERIC_9,
-    KEY_NUMERIC_STAR,
-    KEY_NUMERIC_POUND,
-    0x20E,
-    0x20F,
-    KEY_CAMERA_FOCUS,
-    KEY_TOUCHPAD_ON,
-    KEY_HOME,
-    KEY_MENU,
-    KEY_VOLUMEDOWN,
-    KEY_VOLUMEUP,
-    KEY_TOUCHPAD_OFF,
-    KEY_CAMERA_ZOOMIN,
-    KEY_CAMERA_ZOOMOUT,
-    KEY_CAMERA_UP,
-    KEY_CAMERA_DOWN,
+/* binaRE c0a0ac84 (T rodata): mtc_keycode — 25 x u32 (100B), hand-assembled 1-в-1
+ * от raw-байтов IDA C0A0AC84 (декомпиляции в src_all НЕТ — это ДАННЫЕ, не код;
+ * IDA ошибочно декompилирует как MOVS/LSLS). Коньюмеры: keys_probe (i<100 step4,
+ * 25 x input_set_capability) и searchAdcKey (i<75 step3, байты: [0]=ADC-код,
+ * [1]=low, [2]=high). Значения >= 0x200 — vendor-коды за пределами input.h. */
+const unsigned int mtc_keycode[25] = {
+	0x200, 0x9E /* KEY_BACK */, 0x202, 0x203, 0x204, 0x205, 0x206, 0x207,
+	0x208, 0x209, 0x20A, 0x20B,
+	0x20E, 0x20F, 0x210, 0x213,
+	0x66 /* KEY_HOME */, 0x8B /* KEY_MENU */,
+	0x72 /* KEY_VOLUMEDOWN */, 0x73 /* KEY_VOLUMEUP */,
+	0x214, 0x215, 0x216, 0x217, 0x218
+};
+
+/* binaRE c0a09bd0 (T rodata): mtc_keydefault — 76B raw (kallsyms: следующий
+ * символ c0a09c1c CustomerStr). Структура НЕ определена — TODO: layout/semantics.
+ * Байты 1-в-1 из raw-дампа IDA C0A09BD0. */
+const unsigned char mtc_keydefault[76] = {
+	0x05, 0x00, 0x81, 0x05, 0x02, 0x8A, 0x05, 0x02, 0xDF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x01, 0x1B, 0x05, 0x01, 0xA6, 0x05, 0x02, 0x8A, 0x05, 0x03,
+	0x2B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0xD0, 0x05, 0x02, 0x00, 0x05, 0x02, 0x46, 0x01, 0x00, 0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 static struct early_suspend mtc_keys_early_suspend;
@@ -759,8 +753,8 @@ keys_probe(struct platform_device *pdev)
 		}
 	}
 
-	for (i = 0; i < ARRAY_SIZE(mtc_keycodes); i++) {
-		input_set_capability(gpio_keys_input0, 1u, mtc_keycodes[i]);
+	for (i = 0; i < ARRAY_SIZE(mtc_keycode); i++) {
+		input_set_capability(gpio_keys_input0, 1u, mtc_keycode[i]);
 	}
 
 	input_set_capability(gpio_keys_input0, 1u, KEY_ENTER);

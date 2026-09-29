@@ -724,7 +724,7 @@ dvd_power(int pwr)
 }
 
 /* fully decompiled */
-static u32
+u32
 dvd_play_cmd(void)
 {
 	u32 cmd;
@@ -739,7 +739,7 @@ dvd_play_cmd(void)
 }
 
 /* fully decompiled */
-static u32
+u32
 dvd_stop_cmd(void)
 {
 	u32 cmd; // r0@2
@@ -754,7 +754,7 @@ dvd_stop_cmd(void)
 }
 
 /* dirty code */
-static void
+void
 dvd_send_command_direct(u32 command)
 {
 	int dvd_flag;		 // r2@4

@@ -231,7 +231,7 @@ static const char str_fmt_d_comma_2[] = "%d"; /* TENTATIVE: все usage — spr
 static const char str_fmt_d_comma_3[] = "%d"; /* TENTATIVE: все usage — sprintf(dst,fmt,int) */
 
 static struct miscdevice mtc_car_miscdev; /* forward (def ниже) */
-static void car_avm(void); /* forward (def ниже) */
+static noinline void car_avm(void); /* forward (def ниже); binaRE t LOCAL c082fa8c — noinline: в orig не инлайнен, -O2 у нас инлайнит */
 static irqreturn_t mcu_isr_cb(int irq, void *dev_id)
 { (void)irq; (void)dev_id; return IRQ_HANDLED; /* binaRE placeholder */ }
 static void WipeCheckClear_work(struct work_struct *work)
@@ -291,21 +291,22 @@ static void power_soft_off(void);
 static int check_customer(const char *name);
 static int get_token_int(char **pos);
 static int process_mcu_command(unsigned int cmd);
-static int mtcWipeCheck(void);
-static char *mtc_get_pin_map(int pin_id);
-static int mtc_init_test_io(void);
-static int mtc_test_port2(unsigned char *pa, unsigned char *pb);
-static int mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc);
-static char *mtc_test_port(void);
-static void mtc_clear_screen(int color);
-static char *mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color);
-static char *mtc_debug_put_string(const char *s, int len, int x0, int y,
+int mtcWipeCheck(void);
+char *mtc_get_pin_map(int pin_id);
+int mtc_init_test_io(void);
+int mtc_test_port2(unsigned char *pa, unsigned char *pb);
+int mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc);
+char *mtc_test_port(void);
+void mtc_clear_screen(int color);
+char *mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color);
+char *mtc_debug_put_string(const char *s, int len, int x0, int y,
 				  int fg_color, int bg_color);
 static int adc_wheel_callback(const u32 *adc_cur, struct mtc_wheel_state *ws,
 			      int adc_val);
 static void stw_range_check(void);
 int mtc_iomux_set(unsigned int mode);
-static int mtc_get_screen_width(void);
+int mtc_get_screen_width(void);
+int mtc_get_screen_height(void);
 
 struct mtc_car_struct car_struct;   /* T5 minfix: было static mtc_car_struct (дубль глобала); символ kallsyms = car_struct (car.h:142, якорь 0xC168AC80) */
 
@@ -1428,6 +1429,7 @@ static const unsigned char font_8x16[1280] = {
 
 /* binaRE .bss: экран/фреймбуфер (mtc_get_screen_width / mtc_debug_putc / mtc_clear_screen) */
 static unsigned int mtc_fb_width;	/* 0xC0D1DE28 — ширина экрана (800/1024) */
+static unsigned int mtc_fb_height;	/* 0xC0D1DE2C — высота экрана (480/768) */
 static u32 *mtc_fb_buf;			/* 0xC0D1DE30 — framebuffer (ARGB u32) */
 
 /* binaRE 0xC0BC9B20: указатель на pin-таблицу (16B-записи: [0]=pin id, 0=терминатор;
@@ -1938,7 +1940,7 @@ err_ret0:				/* binaRE LABEL_36 */
 /* binaRE 0xC0830648 (mtcWipeCheck, 52B): счётчик "wipe"-запросов (car_status+147,
  * binaRE 0xC168AD17; поле в раунде 2 названо boot_flags). Ранние возвраты в
  * binaRE R0 не устанавливают (BX LR) — здесь 0/счётчик; >3 — tail-call car_add_work(72). */
-static int
+int
 mtcWipeCheck(void)
 {
 	if (!car_status->boot_flags)
@@ -1954,7 +1956,7 @@ mtcWipeCheck(void)
 /* binaRE 0xC082D5C0 (mtc_get_pin_map, 88B): поиск pin id в pin-таблице (записи 16B,
  * id — первый байт записи, 0 — терминатор). Возврат — указатель на запись или NULL.
  * binaRE: таблица через указатель 0xC0BC9B20 (см. pin_map_tbl), первая запись [P+0x74]. */
-static char *
+char *
 mtc_get_pin_map(int pin_id)
 {
 	unsigned char *rec = pin_map_tbl + 0x74;
@@ -1976,7 +1978,7 @@ mtc_get_pin_map(int pin_id)
 /* --- 7. mtc_init_test_io --- */
 /* binaRE 0xC082D61C (mtc_init_test_io, 160B): настройка test-GPIO pin-таблицы:
  * iomux_set([+8]), gpio_request([+4]), pull-updown=0, direction=input; флаг [+14] = 0. */
-static int
+int
 mtc_init_test_io(void)
 {
 	unsigned char *rec = pin_map_tbl + 0x74;
@@ -2003,7 +2005,7 @@ mtc_init_test_io(void)
 /* --- 8. mtc_test_port2 --- */
 /* binaRE 0xC082D6C4 (mtc_test_port2, 288B): тест пары пинов (3 попытки, оба направления).
  * Флаг "проверено" [+14]: 1 = нет контакта, 0 = OK. */
-static int
+int
 mtc_test_port2(unsigned char *pa, unsigned char *pb)
 {
 	int i;
@@ -2049,7 +2051,7 @@ ok:
 /* --- 9. mtc_test_port3 --- */
 /* binaRE 0xC082D7E4 (mtc_test_port3, 636B): тест тройки пинов (3 раунда, битовая
  * маска 1/2/4 за раунд). Финал: [+14] = (маска != ожидаемая) — 1 = дефект. */
-static int
+int
 mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc)
 {
 	int i;
@@ -2125,7 +2127,7 @@ mtc_test_port3(unsigned char *pa, unsigned char *pb, unsigned char *pc)
  * (test_seq_tbl: записи {a, b, c}): a==1 — первый pin (запись 0), иначе поиск по id;
  * c==1 — третья запись 0; c==0/не найден — тест пары (mtc_test_port2), иначе тройки
  * (mtc_test_port3). В конце — вывод результатов на debug-экран. */
-static char *
+char *
 mtc_test_port(void)
 {
 	const unsigned char *seq = test_seq_tbl;
@@ -2183,7 +2185,7 @@ mtc_test_port(void)
 /* binaRE 0xC082DA60 (mtc_clear_screen, 388B): color без стартового байта —
  * "test pattern" (480 строк); иначе — залита цветом. Ширина — is1024screen
  * (binaRE 0xC168ACE2). */
-static void
+void
 mtc_clear_screen(int color)
 {
 	u32 *fb = mtc_fb_buf;	/* binaRE 0xC0D1DE30 */
@@ -2235,7 +2237,7 @@ mtc_clear_screen(int color)
 /* binaRE 0xC082DBEC (mtc_debug_putc, 136B): вывод глифа font_8x16 в framebuffer:
  * glyph — индекс (8x16), x — пиксельная колонка (блок 8 px), y — половинная строка
  * (строка = 2*y), fg/bg — ARGB-цвета. */
-static char *
+char *
 mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color)
 {
 	const u8 *g = font_8x16 + 16 * glyph;
@@ -2260,7 +2262,7 @@ mtc_debug_putc(int glyph, int x, int y, int fg_color, int bg_color)
 /* --- 13. mtc_debug_put_string --- */
 /* binaRE 0xC082DC80 (mtc_debug_put_string, 116B): вывод строки (до len символов;
  * хвост — пробелы). */
-static char *
+char *
 mtc_debug_put_string(const char *s, int len, int x0, int y, int fg_color, int bg_color)
 {
 	int slen = strlen(s);
@@ -2532,10 +2534,18 @@ mtc_iomux_set(unsigned int mode)
 
 /* --- 17. mtc_get_screen_width --- */
 /* binaRE 0xC06A172C (mtc_get_screen_width, 16B) */
-static int
+int
 mtc_get_screen_width(void)
 {
 	return (int)mtc_fb_width;	/* binaRE 0xC0D1DE28 */
+}
+
+/* --- 18. mtc_get_screen_height --- */
+/* binaRE 0xC06A173C (mtc_get_screen_height, 16B) — src_all/decompiled_mtc_get_screen_height.c, 1-в-1 */
+int
+mtc_get_screen_height(void)
+{
+	return (int)mtc_fb_height;	/* binaRE 0xC0D1DE2C */
 }
 
 // very dirty code
@@ -5214,8 +5224,7 @@ mtc_car_work(struct work_struct *work)
 	mutex_unlock(&car_struct.car_comm->car_lock);
 }
 
-static void
-car_avm(void)
+static noinline void car_avm(void) /* binaRE t LOCAL c082fa8c */
 {
 	unsigned char buf[7];
 

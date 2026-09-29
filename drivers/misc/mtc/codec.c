@@ -277,3 +277,12 @@ soc_codec_reg_show(void *comp, char *buf, unsigned int count, unsigned long long
 	}
 	return total; /* SDK: возвращает скопированный размер (L172) */
 }
+
+/* binaRE 0xC0860E4C (wm8731_trigger, 8B, t LOCAL): src_all/decompiled_wm8731_trigger.c,
+ * 1-в-1 (MOV R0,#0; BX LR). Вызовов в src_all-декомпиляциях НЕТ (grep по имени — 0;
+ * вероятно .trigger слот snd_soc_dai_driver, DAI-таблица не реконструирована) —
+ * static сохранён для T6-символа. */
+static int wm8731_trigger(void)
+{
+	return 0; /* binaRE 0xC0860E4C */
+}
