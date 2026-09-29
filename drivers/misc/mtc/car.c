@@ -5591,7 +5591,7 @@ car_exit()
 	platform_driver_unregister(&mtc_car_driver);
 }
 
-module_init(car_init);
+fs_initcall_sync(car_init);
 module_exit(car_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");

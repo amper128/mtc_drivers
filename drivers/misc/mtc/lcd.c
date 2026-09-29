@@ -458,7 +458,21 @@ static struct platform_driver mtc_lcd_driver = {
 	},
 };
 
-module_platform_driver(mtc_lcd_driver);
+static int __init
+lcd_init()
+{
+	platform_driver_register(&mtc_lcd_driver);
+	return 0;
+}
+
+static void
+lcd_exit()
+{
+	platform_driver_unregister(&mtc_lcd_driver);
+}
+
+module_init(lcd_init);
+module_exit(lcd_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC LCD driver");

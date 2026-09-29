@@ -826,7 +826,21 @@ static struct platform_driver mtc_keys_driver = {
 	},
 };
 
-module_platform_driver(mtc_keys_driver);
+static int __init
+keys_init()
+{
+	platform_driver_register(&mtc_keys_driver);
+	return 0;
+}
+
+static void
+keys_exit()
+{
+	platform_driver_unregister(&mtc_keys_driver);
+}
+
+module_init(keys_init);
+module_exit(keys_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC keys driver");

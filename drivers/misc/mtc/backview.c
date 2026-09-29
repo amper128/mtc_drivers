@@ -1692,7 +1692,7 @@ static struct i2c_driver mtc_backview_i2c_driver = {
     .id_table = backview_id,
 };
 
-module_init(backview_init);
+fs_initcall(backview_init);
 
 /* binaRE check_np @0xc08392a0 (IDA 9.3 decompiled) */
 int

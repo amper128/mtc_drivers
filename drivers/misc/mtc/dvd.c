@@ -1195,7 +1195,21 @@ static struct platform_driver mtc_dvd_driver = {
 	},
 };
 
-module_platform_driver(mtc_dvd_driver);
+static int __init
+dvd_init()
+{
+	platform_driver_register(&mtc_dvd_driver);
+	return 0;
+}
+
+static void
+dvd_exit()
+{
+	platform_driver_unregister(&mtc_dvd_driver);
+}
+
+module_init(dvd_init);
+module_exit(dvd_exit);
 
 MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC DVD driver");
