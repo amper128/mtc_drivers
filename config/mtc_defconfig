@@ -35,10 +35,10 @@ CONFIG_RK_CHECK_UACCESS=y
 CONFIG_TRACK_LOCALHOST=y
 CONFIG_ANDROID_KITKAT=y
 CONFIG_MACH_RK3188_MTC=y  /* T4: binary machine = "Trk3188" (strings kernel.elf x2); board-rk3188-mtc.c exists ONLY in SDK tree (patched "RK30board"->"Trk3188"); choice: replaces BOX — Kconfig/Makefile entry added by T4 patches */
-CONFIG_FIQ_DEBUGGER=y
-CONFIG_FIQ_DEBUGGER_NO_SLEEP=y
-CONFIG_FIQ_DEBUGGER_CONSOLE=y
-CONFIG_FIQ_DEBUGGER_CONSOLE_DEFAULT_ENABLE=y
+# CONFIG_FIQ_DEBUGGER is not set  /* T8b -orig-sig: fiq_debugger_* = 0 in orig kallsyms (our build added 25: fiq_debbuger_fiq_handler, claim_fiq, __initcall_fiq_debugger_init2, debug_printf_nfiq...); orig has only core vector_fiq/do_unexp_fiq (arch vectors, always present) */
+# CONFIG_FIQ_DEBUGGER_NO_SLEEP is not set  /* T8b -orig-sig: see CONFIG_FIQ_DEBUGGER above */
+# CONFIG_FIQ_DEBUGGER_CONSOLE is not set  /* T8b -orig-sig: see CONFIG_FIQ_DEBUGGER above */
+# CONFIG_FIQ_DEBUGGER_CONSOLE_DEFAULT_ENABLE is not set  /* T8b -orig-sig: see CONFIG_FIQ_DEBUGGER above */
 CONFIG_NO_HZ=y
 CONFIG_HIGH_RES_TIMERS=y
 CONFIG_SMP=y
@@ -242,6 +242,7 @@ CONFIG_PPPOPNS=y
 CONFIG_INPUT_EVDEV=y
 CONFIG_INPUT_KEYRESET=y
 # CONFIG_KEYBOARD_ATKBD is not set
+# KEYS_RK29 = y (default, pinned by build constraint, NOT by orig-sig) /* T8b: tried ->n (T6 double keys_init drift: c041e1e0 mtc + c041f9c0 rk29; orig rk29_keys_pdata = 0) but BUILD FAILS: rk29_keys.c is the ONLY definition of rk28_send_wakeup_key in this tree (called unconditionally by plat-rk/usb_detect.c + drivers/mmc/host/rk29_sdmmc.c; link error x2). Orig HAS rk28_send_wakeup_key (=1) but no rk29_keys_probe => orig ran an OLDER rk29_keys.c revision (defines wakeup-key only). Double keys_init stays as source-revision drift */
 # CONFIG_INPUT_MOUSE is not set
 CONFIG_INPUT_JOYSTICK=y
 CONFIG_JOYSTICK_XPAD=y
@@ -250,6 +251,10 @@ CONFIG_JOYSTICK_XPAD_LEDS=y
 CONFIG_INPUT_MISC=y
 CONFIG_INPUT_KEYCHORD=y
 CONFIG_INPUT_UINPUT=y
+CONFIG_INPUT_TABLET=y  /* T8b +orig-sig: wacom_* = 95 in orig (wacom_features_0x00...wacom_close, wacom_disconnect); was off -> 95 missing */
+CONFIG_TABLET_USB_WACOM=y  /* T8b +orig-sig: drivers/input/tablet/wacom_wac.c; depends USB_ARCH_HAS_HCD (auto y); orig wacom_* = 95 */
+CONFIG_INPUT_TOUCHSCREEN=y  /* T8b +orig-sig: goodix_* = 11 in orig (goodix_ts_init/probe, goodix_tool_read/write, goodix_ts_early_suspend...); was off -> 11 missing */
+CONFIG_TOUCHSCREEN_GT82X_IIC=y  /* T8b +orig-sig: goodix_touch_82x.c module_init(goodix_ts_init) => __initcall_goodix_ts_init6 (t6: TWO instances init6/init7 in orig; init6 = this driver); depends I2C2_RK30 (=y); 2nd instance NOT reproducible: only late_initcall goodix drivers (gt818/D70_L3188A) depend on I2C2_RK29 (depends ARCH_RK29 — impossible on 3188); goodix_tool_read/write absent from all SDK sources */
 CONFIG_ROCKCHIP_REMOTECTL=y
 CONFIG_RK_REMOTECTL=y
 CONFIG_RK_IR_WAKEUP=y
@@ -287,13 +292,13 @@ CONFIG_REGULATOR_ACT8846=y
 CONFIG_ACT8846_SUPPORT_RESET=y
 CONFIG_MEDIA_SUPPORT=y
 CONFIG_VIDEO_DEV=y
-CONFIG_SOC_CAMERA=y
-CONFIG_SOC_CAMERA_OV2659=y
+# CONFIG_SOC_CAMERA is not set  /* T8b -orig-sig: soc_camera_* = 0 in orig (soc_camera_apply_sensor_flags, soc_camera_cropcap... 50+ added in our build); orig 'soc_*' = ALSA-SoC only (soc_pcm_*, soc_probe_codec) */
+# CONFIG_SOC_CAMERA_OV2659 is not set  /* T8b -orig-sig: sensor_* = 85 added (SensorChipID, sensor_1080p, sensor_EffectSeqe...) — ALL defined in ov2659.o (nm-verified); orig has 0 */
 # CONFIG_SOC_CAMERA_OV3640 is not set
 # CONFIG_SOC_CAMERA_OV5642 is not set
 # CONFIG_SOC_CAMERA_OV5640 is not set
-CONFIG_VIDEO_RK29=y
-CONFIG_VIDEO_RK29_CAMMEM_ION=y
+# CONFIG_VIDEO_RK29 is not set  /* T8b -orig-sig: 'RKXX Camera Sensor Interface' depends on SOC_CAMERA (off per orig); orig videobuf_* = 0 (VIDEOBUF_DMA_CONTIG select would add videobuf-dma-contig syms) */
+# CONFIG_VIDEO_RK29_CAMMEM_ION is not set  /* T8b -orig-sig: choice member of VIDEO_RK29 — off with parent */
 CONFIG_USB_VIDEO_CLASS=y
 CONFIG_ION=y
 CONFIG_ION_ROCKCHIP=y
@@ -311,6 +316,9 @@ CONFIG_RK_TVENCODER=y
 CONFIG_RK1000_TVOUT=y
 CONFIG_RK1000_TVOUT_CVBS=y
 CONFIG_RGA_RK30=y
+CONFIG_BACKLIGHT_LCD_SUPPORT=y  /* T8b +orig-sig: backlight_* = 44 in orig (backlight_class_init, backlight_device_register, rk29_backlight_*...); was off -> 18+ missing */
+CONFIG_BACKLIGHT_CLASS_DEVICE=y  /* T8b +orig-sig: parent of BACKLIGHT_RK29_BL; tristate default m forced =y (orig symbols built-in) */
+CONFIG_BACKLIGHT_RK29_BL=y  /* T8b +orig-sig: drivers/video/backlight/rk29_backlight.c — orig has rk29_backlight_init/probe/set, __initcall_rk29_backlight_init5s; depends BACKLIGHT_CLASS_DEVICE && PLAT_RK (both y) */
 CONFIG_LOGO=y
 # CONFIG_LOGO_LINUX_MONO is not set
 # CONFIG_LOGO_LINUX_VGA16 is not set
@@ -328,6 +336,7 @@ CONFIG_SND_RK_SOC_SPDIF_CARD=y
 CONFIG_SND_RK29_SOC_RK1000=y
 CONFIG_SND_RK29_CODEC_SOC_SLAVE=y
 CONFIG_UHID=y
+CONFIG_USB_HIDDEV=y  /* T8b +orig-sig: hiddev_* = 17 in orig (hiddev_connect, hiddev_ioctl, hiddev_report_event...); drivers/hid/usbhid/hiddev.c; depends USB_HID (=y) */
 CONFIG_HID_A4TECH=y
 CONFIG_HID_ACRUX=y
 CONFIG_HID_ACRUX_FF=y
@@ -429,16 +438,16 @@ CONFIG_FUSE_FS=y
 #
 # CD-ROM/DVD Filesystems
 #
-CONFIG_ISO9660_FS=y
-CONFIG_JOLIET=y
-CONFIG_ZISOFS=y
-CONFIG_UDF_FS=y
-CONFIG_UDF_NLS=y
+# CONFIG_ISO9660_FS is not set  /* T8b -orig-sig: isofs_* = 0 in orig (our build added 39: isofs_fill_super, isofs_mount, isofs_iget5_set...); CD-ROM/DVD family off in orig */
+# CONFIG_JOLIET is not set  /* T8b -orig-sig: depends ISO9660_FS; orig joliet/isofs = 0 */
+# CONFIG_ZISOFS is not set  /* T8b -orig-sig: zisofs_* = 0 in orig; depends ISO9660_FS && ZLIB_INFLATE */
+# CONFIG_UDF_FS is not set  /* T8b -orig-sig: udf_* + isofs_* = 0 in orig (our build added 172: udf_read_super, isofs_alloc_inode, isofs_bread...) */
+# CONFIG_UDF_NLS is not set  /* T8b -orig-sig: depends on UDF_FS — off with parent */
 
 CONFIG_VFAT_FS=y
 CONFIG_TMPFS=y
 # CONFIG_MISC_FILESYSTEMS is not set
-CONFIG_CIFS=y
+# CONFIG_CIFS is not set  /* T8b -orig-sig: cifs* = 0 in orig (our build added 224: cifsConvertToUCS, cifsERROR, cifsFYI_proc_fops...) */
 CONFIG_PARTITION_ADVANCED=y
 CONFIG_EFI_PARTITION=y
 CONFIG_NLS_CODEPAGE_437=y
@@ -472,8 +481,9 @@ CONFIG_SND_RK29_WM8731=y  /* +bin-sig: rk29_wm8731_init c0862494 */
 CONFIG_MTC_DRIVERS=y  /* T2: mtc_* = 18 built-in syms (mtc_getTouchKey, mtc_direct_fb_buf, mtc_get_pin_map...); drivers/misc/mtc not in SDK tree — option from mtc_drivers tree */
 # --- TBD (present in binary; driver absent from SDK tree / option name not confirmed) ---
 # TBD(+): TEF6606 FM radio — tef6606_* = 8 syms (tef6606_i2c_probe, __initcall_tef6606_init6, tef6606_id); driver NOT in SDK kernel — option name TBD (std: TEF6606)
-# TBD(+): Mali-400 GPU — mali_* = 529 syms (_mali_osk_*), drm_* = 0 (mali built WITHOUT DRM); option name TBD
-# TBD(+): goodix touch — goodix_* = 11, keytouch* = 3, TWO instances (__initcall_goodix_ts_init6 / _init7); option name TBD (2nd instance = mtc)
+# TBD(+): Mali-400 GPU — mali_* = 440 in orig (anchored ^mali: mali400_clock_set, mali_bcast_*, mali_allocate_empty_page), drm_* = 0 (mali built WITHOUT DRM); T8b VERIFIED: no Mali-400 driver exists in SDK kernel tree (ref_kernel AND /server/FTP SDK kernel, both 3.0.36, no *mali* file, no MALI* Kconfig) -> CANNOT enable via defconfig; needs external Mali-400 driver source
+# TBD(+): goodix touch — goodix_* = 11, keytouch* = 3, TWO instances (__initcall_goodix_ts_init6 / _init7); T8b: init6 instance CLOSED via TOUCHSCREEN_GT82X_IIC=y (goodix_touch_82x.c, static goodix_ts_init + module_init); init7 instance + goodix_tool_read/write remain (no matching SDK source — see TOUCHSCREEN_GT82X_IIC comment above)
 # TBD(+): ch7025 GPS — ch7025_* = 8 syms (__initcall_ch7025_init6, ch7025_i2c_write); driver NOT in SDK kernel — option name TBD (NEW vs xdauto-baseline report)
+# TBD(+): UMP — ump_* = 41 in orig (ump_block_allocator_create, ump_cache_operations_control_wrapper, ump_dd_handle_create_from_secure_id...); T8b VERIFIED: no ump driver in SDK tree (grep all drivers/mm/arch) — no option to enable
 # TBD: vendor cpufreq "rk3188 cpufreq version 2.2" — driver name/option TBD; CPU_FREQ_DT absent in SDK base
 # TBD: MACH_TYPE — no machine_id/ATAG-id symbol in kallsyms (board match by atag name, T4 CLOSED)
