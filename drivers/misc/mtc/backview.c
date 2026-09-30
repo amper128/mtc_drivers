@@ -1795,9 +1795,93 @@ check_np_adv7181d(struct i2c_client *client, int a2, int *changed, int cam_state
 
 static char bss_C168AF2B; /* binaRE 0xC168AF2B, module BSS, no kallsyms name */
 
-/* binaRE: vip_reset — символа в kallsyms нет, определение в SDK-дереве не найдено (grep) — stub (no-op) */
-static void vip_reset(int pwr)
+/* binaRE 0xFED00128/0xFED000BC — RK3188 PMU-регистры (прямой access из бинара, MTC-14) */
+#ifndef MEMORY
+#define MEMORY(addr) (*(volatile u32 *)(unsigned long)(addr))
+#endif
+
+/* бинар: инлайн dsb(15) — символа __dsb в kallsyms нет (инлайн оригинала;
+ * если ядро уже предоставит __dsb через asm/barrier.h — этот #define не сработает) */
+#ifndef __dsb
+#define __dsb(opt) asm volatile("dsb %0"::"i"(opt):"memory")
+#endif
+
+static char bss_C168AF2B; /* binaRE 0xC168AF2B, module BSS, no kallsyms name */
+static volatile u32 *bss_C168E40C; /* binaRE 0xC168E40C = cif0_phys (ioremapped CIF base), module BSS */
+
+/* binaRE vip_reset @0xc0839b9c (532B) — src_all/decompiled_vip_reset.c, константы 1:1 (сверены).
+ * Не в kallsyms (инлайн/локальный); non-static по tree-прецеденту (вызов vip_reset(1) из camera_start).
+ * v2 = (u32*)cif0_phys1 (binaRE MEMORY[0xC168E418]); v3 = (u32*)cif0_phys (MEMORY[0xC168E40C]).
+ * LABEL_5/6/17/19 развёрнуты в эквивалентный поток: [18]=16 и PMU-op при pwr==1 — на всех путях. */
+int vip_reset(int pwr)
 {
+	volatile u32 *cif1 = (volatile u32 *)mtc_backview_dev.cif0_phys1; /* binaRE MEMORY[0xC168E418] */
+	volatile u32 *cif0 = bss_C168E40C; /* binaRE MEMORY[0xC168E40C] */
+	u32 result;
+
+	printk("rst %d\n", pwr);
+	mtc_backview_dev._gap2[1] = mtc_backview_dev.decoder_type; /* binaRE MEMORY[0xC168E466] = MEMORY[0xC168E45E] */
+	if (pwr == 1) { /* binaRE: 2× PMU-секвенция */
+		MEMORY(0xFED00128) = 1073758208; /* 0x4008000 */
+		__dsb(15);
+		_const_udelay(536870);
+		MEMORY(0xFED00128) = 0x40000000;
+		__dsb(15);
+		_const_udelay(536870);
+	}
+	cif1[0] = 61442;
+	cif1[1] = 5;
+	if (!car_struct.car_status.reserved_19) { /* binaRE MEMORY[0xC168ACE1] = car_status+93 (car.h) */
+		cif1[3] = 0;
+		mtc_backview_dev.mirror_image = 0; /* binaRE MEMORY[0xC168E45F] */
+		cif1[2] = 0xFFFFFFFF;
+		cif1[17] = 786448;
+		cif1[10] = 29885104;
+		cif1[9] = 688;
+	} else {
+		u32 dt = mtc_backview_dev.decoder_type; /* binaRE MEMORY[0xC168E45E] */
+
+		cif1[2] = 0xFFFFFFFF;
+		switch (dt) {
+		case 3:
+			cif1[3] = 12;
+			cif1[17] = 0;
+			cif1[10] = 37749456;
+			mtc_backview_dev.mirror_image = 1; /* binaRE E45F=1 */
+			cif1[9] = 720;
+			break;
+		case 2:
+			cif1[3] = 12;
+			cif1[17] = 1572864;
+			cif1[10] = 31458000;
+			mtc_backview_dev.mirror_image = 1;
+			cif1[9] = 720;
+			break;
+		case 0:
+		case 1:
+		case 4:
+			cif1[3] = 32;
+			cif1[17] = 0;
+			cif1[10] = 31458000;
+			mtc_backview_dev.mirror_image = 0;
+			cif1[9] = 720;
+			break;
+		}
+	}
+	cif1[18] = 16; /* binaRE LABEL_5/16: все пути */
+	if (pwr == 1) /* binaRE LABEL_17 */
+		MEMORY(0xFED000BC) = MEMORY(0xFED000BC) & 0xEFFFEFF | 0x1000000;
+	cif1[5] = cif0[0] + 1382400;
+	cif1[6] = cif0[0] + 1797120;
+	result = cif0[0] + 2211840;
+	cif1[7] = result;
+	cif1[8] = cif0[0] + 2626560;
+	cif1[24] = 0;
+	cif1[0] = 61443;
+	if (pwr != 2)
+		mtc_backview_dev._gap2[2] = 0; /* binaRE MEMORY[0xC168E467] */
+	mtc_backview_dev.camera_working = 0; /* binaRE MEMORY[0xC168E464] */
+	return (int)result;
 }
 
 extern int arm_send_multi(unsigned int cmd, int count, unsigned char *buf); /* = car.c:952 (EXPORT_SYMBOL_GPL) */
@@ -1897,7 +1981,7 @@ label_9: /* binaRE LABEL_9 */
 label_14: /* binaRE LABEL_14 */
 	vs_send(2, 158, (char *)&v14, 2); /* binaRE: 2 байта [sp+6h..7h] = v14+v15 */
 	mtc_backview_dev._gap1b[0] = 1; /* binaRE MEMORY[0xC168E463] */
-	vip_reset(1); /* binaRE — stub (выше) */
+	vip_reset(1); /* binaRE 0xc0839b9c (MTC-14: полное тело выше) */
 	queue_delayed_work(mtc_backview_dev.cap_wq, &mtc_backview_dev.capture_dwork, msecs_to_jiffies(200)); /* binaRE v5 = MEMORY[0xC168E3E4] (cap_wq @E3E4); -1050090464 = &capture_dwork (cf. camera_stop) */
 	printk("aa\n");
 	v7 = 40;

@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/workqueue.h>
+#include <linux/i2c.h> /* MTC-14: gtp-секция (i2c_transfer, i2c_client) */
 #include <linux/uaccess.h> /* T5 r20: copy_from/to_user */
 #include <stdbool.h>
 #include <linux/sched.h>
@@ -5607,3 +5608,333 @@ MODULE_AUTHOR("Alexey Hohlov <root@amper.me>");
 MODULE_DESCRIPTION("Decompiled MTC CAR driver");
 MODULE_LICENSE("BSD");
 MODULE_ALIAS("platform:mtc-car");
+
+/* ==========================================================================
+ * binaRE MTC-14 — gtp (touch) секция + sta_touch_adc
+ * первоисточники: src_all/decompiled_gtp_init_panel.c / decompiled_gtp_write_panel.c /
+ * decompiled_get_panel.c / decompiled_gtp_reset_guitar.c / decompiled_sub_C083DFDC.c /
+ * decompiled_sub_C083E0D8.c / decompiled_sta_touch_adc.c
+ * ========================================================================== */
+
+/* binaRE gtp_dev — offsets IDA-верные (gtp_init_panel/gtp_write_panel): +8 client*,
+ * +136 w (u16), +138 h (u16), +141 sub (u8), +147 cfg_len (u8). */
+struct gtp_dev {
+	char _gap0[8];
+	struct i2c_client *i2c_client; /* @+8: binaRE *(a1+8) */
+	char _gap1[128];	 /* @8..135 */
+	u16 touch_w;		 /* @136 (0x88): width (v18[3]+v18[4]<<8) */
+	u16 touch_h;		 /* @138 (0x8A): height (v18[5]+(s8)v18[6]<<8) */
+	char _gap2[2];
+	u8 sub;			 /* @141 (0x8D): v18[8]&3 */
+	char _gap3[5];
+	u8 cfg_len;		 /* @147 (0x93): gtp_write_panel: -70 (0xBA = 186) */
+	char _gap4[9];		 /* до 152: минимальный размер по max-доступу */
+};
+
+/* binaRE 0xC0BCA410 (dword_C0BCA410): BSS-блок gtp: config-buf @0 (gtp_write_panel:
+ * [1]=cmd 0xF2, [2..]=payload+chksum; memset +2..+241, send 0xF2B) + панель-данные get_panel
+ * (&dword_C0BCA410[11*i], fallback [98]/[99] u32). TENTATIVE-размер 768B (max-доступ). */
+static u8 gtp_bss[768];
+
+/* binaRE off_C0BCA578: таблица touch-панелей, 44B-stride: [1]=w, [2]=h (u32-slots),
+ * +12=vendor (u8), +13=flag (u8), [11]=ptr name (NULL = конец).
+ * TENTATIVE: dump 0xC0BCA* нет → zero-таблица: get_panel всегда «--mtc touch NULL» / NULL
+ * (byte-1:1 строк — отдельная задача). */
+static u8 gtp_panel_tab[44 * 8];
+
+/* binaRE loc_C0A0AD9C (186B): GTP-init блоб (gtp_write_panel: memcpy 186B).
+ * TENTATIVE: dump 0xC0A0AD* нет → zero-блоб (byte-1:1 — отдельная задача). */
+static const u8 gtp_init_blob[186] = {0};
+
+/* binaRE gtp_reset_guitar @0xc083df60 (t, 124B): gpio 216/217, msleep 0/ms/2/6/50.
+ * a2 = ms (вызовы: 10 из i2c-хелперов; constprop.6-инлайн: out1/msleep20/out0/msleep50).
+ * Уровень INT-линии — binaRE *(u16*)(client+2)==20 (offset IDA-верный). */
+static int gtp_reset_guitar(struct i2c_client *client, int ms)
+{
+	gpio_direction_output(216, 0);
+	msleep(ms);
+	gpio_direction_output(217, *(unsigned short *)((char *)client + 2) == 20); /* binaRE */
+	msleep(2);
+	gpio_direction_output(216, 1);
+	msleep(6);
+	gpio_direction_input(216);
+	gpio_direction_output(217, 0);
+	msleep(50);
+	return gpio_direction_input(217);
+}
+
+/* binaRE sub_C083E0D8 @0xc083e0d8 (112B): 1-msg i2c raw write (len), retry×5 + reset.
+ * (дубль имени в kallsyms → static в дереве; см. REPORTS MTC-14) */
+static int gtp_i2c_raw_write(struct i2c_client *client, const u8 *buf, u16 len)
+{
+	struct i2c_msg msg;
+	unsigned int retry = 5;
+	int res;
+
+	msg.addr = *(unsigned short *)((char *)client + 2);	/* binaRE *(u16*)(a1+2) */
+	msg.flags = 0;
+	msg.len = len;
+	msg.buf = (u8 *)buf;
+
+	while (1) {
+		res = i2c_transfer(*(struct i2c_adapter **)((char *)client + 24), &msg, 1); /* binaRE *(u32*)(a1+24) */
+		if (res == 1)
+			break;
+		if (!--retry) {
+			gtp_reset_guitar(client, 10);
+			return res;
+		}
+	}
+	return res;
+}
+
+/* binaRE sub_C083DFDC @0xc083dfdc (156B): 2-msg i2c write: msg0 = reg 2B (flags 0),
+ * msg1 = data len-2 (flags 1 = I2C_M_TEN), retry×5 + reset. */
+static int gtp_i2c_block_write(struct i2c_client *client, const u8 *buf, u16 len)
+{
+	struct i2c_msg msg[2];
+	unsigned int retry = 5;
+	int res;
+
+	msg[0].addr = *(unsigned short *)((char *)client + 2);	/* binaRE *(u16*)(a1+2) */
+	msg[0].flags = 0;
+	msg[0].len = 2;
+	msg[0].buf = (u8 *)buf;
+	msg[1].addr = msg[0].addr;
+	msg[1].flags = 1; /* binaRE: 1 (= I2C_M_TEN) */
+	msg[1].len = len - 2;
+	msg[1].buf = (u8 *)(buf + 2);
+
+	while (1) {
+		res = i2c_transfer(*(struct i2c_adapter **)((char *)client + 24), msg, 2);
+		if (res == 2)
+			break;
+		if (!--retry) {
+			gtp_reset_guitar(client, 10);
+			return res;
+		}
+	}
+	return res;
+}
+
+/* binaRE get_panel @0xc083e378 (T, 272B) — non-static (EXPORT).
+ * TENTATIVE: zero-таблица gtp_panel_tab → функция всегда «--mtc touch NULL» / NULL.
+ * binaRE-индексы u32-based: e[1]=w, e[2]=h, +12=vendor, +13=flag, e[11]=name ptr;
+ * parallel-область = &dword_C0BCA410[11*i] (fallback [98]/[99] ← [91]/[92]). */
+char **get_panel(unsigned short w, unsigned short h, int vendor, int flag)
+{
+	const char *name;
+	unsigned int *e;
+	int idx = 0;
+
+	name = "JRC-8004"; /* binaRE v4: имя первой строки (при match i>0 IDA печатает i-1 — 1:1) */
+	e = (unsigned int *)gtp_panel_tab; /* binaRE &off_C0BCA578 (zero, TENTATIVE) */
+	while (1) { /* binaRE: if("JRC-8004") — строка непустая, ветка всегда */
+		unsigned int ev8;
+		int v10;
+
+		ev8 = ((unsigned char *)e)[12]; /* vendor (binaRE +12) */
+		v10 = ((ev8 == 65 && vendor == 95) ? 65 : vendor); /* binaRE: v9 ? 65 : a3 */
+		if (e[1] == w && e[2] == h && v10 == ev8) {
+			if (((unsigned char *)e)[13] == flag) /* binaRE +13 = flag */
+				break;
+			if ((v10 == 83 || v10 == 81) && flag != 3) /* binaRE: LOBYTE(v8)=(83|81); a4!=3 → 0 */
+				break;
+			if (v10 == 65 && flag == 0) /* binaRE v12 */
+				break;
+		}
+		name = (const char *)e[11]; /* binaRE v7 = v6[11] */
+		e += 11; /* 44B-stride */
+		if (!name) {
+			printk("--mtc touch NULL\n");
+			return NULL; /* binaRE nullptr */
+		}
+		idx++;
+	}
+	printk("--mtc touch %s\n", name);
+
+	{
+		unsigned int *cfg = (unsigned int *)(gtp_bss + 44 * idx); /* binaRE &dword_C0BCA410[11*v5] */
+		if (!cfg[98])
+			cfg[98] = cfg[91];
+		if (!cfg[99])
+			cfg[99] = cfg[92];
+	}
+	return (char **)(gtp_panel_tab + 44 * idx); /* binaRE &(&off_C0BCA578)[11*v5] */
+}
+
+/* binaRE gtp_write_panel @0xc09c60b4 (t, 220B): blob 186B → gtp_bss (memset +2..+241,
+ * payload, chksum = -sum(buf[2..len-1]) в buf[len]), send 0xF2B. TENTATIVE: zero-blob. */
+static unsigned int gtp_write_panel(struct gtp_dev *dev)
+{
+	u8 v17[186];
+	unsigned int i;
+	s8 sum = 0;
+	unsigned int retry = 5;
+	int res;
+
+	memcpy(v17, gtp_init_blob, 186); /* binaRE memcpy(v17, &loc_C0A0AD9C, 186) */
+	dev->cfg_len = -70; /* binaRE *(u8*)(a1+147) = -70 (0xBA = 186) */
+	memset((char *)gtp_bss + 2, 0, 240); /* binaRE _memzero(dword_C0BCA410+2, 240) */
+	memcpy((char *)gtp_bss + 2, v17, dev->cfg_len);
+
+	for (i = 2; dev->cfg_len > i; ++i)
+		sum += gtp_bss[i];
+	gtp_bss[dev->cfg_len] = -sum; /* binaRE *((u8*)buf+v6) = -v7 */
+	printk("chksum %02x\n", (s8)gtp_bss[dev->cfg_len]);
+
+	retry = 5;
+	while (1) {
+		res = gtp_i2c_raw_write(dev->i2c_client, gtp_bss, 0xF2); /* binaRE sub_C083E0D8(client, dword_C0BCA410, 0xF2) */
+		if (res > 0)
+			break;
+		if (!--retry) {
+			if (res) {
+				printk("<<-GTP-ERROR->> Send config error.\n");
+				msleep(10);
+				return 0; /* binaRE: return msleep(10) — msleep void (IDA-артефакт), return-нормализация */
+			}
+			break;
+		}
+	}
+	printk("911 write success!!\n");
+	msleep(10);
+	return 0; /* binaRE: return msleep(10) — return-нормализация */
+}
+
+/* binaRE gtp_init_panel @0xc09c61a8 (t, 728B): block_write(0x80,'G',186B);
+ * w/h → gtp_dev+136/+138 и car_status.touch_width/height (+touch_info1/2);
+ * vendor==66 && (u32){w|h<<16}==39322690 && !flag && v18[186]==61 → gtp_write_panel;
+ * get_panel(w,h,vendor,flag) → keys_data+0xD0 (config_id); printk-дамп; switch w (классы).
+ * MEMORY-якоря: AD0C/AD10 = car_status+136/140 (touch_width/height), AD14/AD15 = +144/145
+ * (touch_info1/2), E541 = keys_data+0xCD (flag), E544 = +0xD0 (config_id),
+ * ACE3 = car_status+95 (is1024screen), ACE4 = +96 (reserved_20, gtp-класс). */
+static int gtp_init_panel(struct gtp_dev *dev)
+{
+	u8 v18[188];
+	int vendor;
+	u32 flag;
+	u32 word;
+	int matched = 0;
+	int i;
+
+	v18[0] = 0x80;
+	v18[1] = 71; /* 'G' (binaRE) */
+	if (gtp_i2c_block_write(dev->i2c_client, v18, 188) < 0) {
+		printk("\n");
+		return 0; /* binaRE LABEL_39 */
+	}
+	dev->touch_w = (u16)(v18[3] + (v18[4] << 8)); /* binaRE v5 → *(u16*)(a1+136) */
+	vendor = v18[2]; /* binaRE v6 (vendor) */
+	dev->touch_h = (u16)(v18[5] + ((s8)v18[6] << 8)); /* binaRE: v4 + (v3<<8), v3 = __int16(v18[6]) sign-ext */
+	flag = *(const u32 *)((char *)mtc_keys_data_ptr() + 0xCD); /* binaRE MEMORY[0xC168E541] = keys_data+0xCD */
+	car_struct.car_status.touch_width = dev->touch_w; /* binaRE MEMORY[0xC168AD0C] = car_status+136 */
+	car_struct.car_status.touch_height = dev->touch_h; /* binaRE MEMORY[0xC168AD10] = +140 */
+	car_struct.car_status.touch_info1 = vendor; /* binaRE MEMORY[0xC168AD14] = +144 */
+	car_struct.car_status.touch_info2 = (char)flag; /* binaRE MEMORY[0xC168AD15] = +145 */
+	dev->sub = v18[8] & 3; /* binaRE *(u8*)(a1+141) */
+
+	if (vendor == 66 && *(const u32 *)&dev->touch_w == 39322690 && !flag && v18[186] == 61) /* binaRE: (u16)w | ((u16)h << 16) */
+		gtp_write_panel(dev);
+
+	*(u32 *)((char *)mtc_keys_data_ptr() + 0xD0) = (u32)(unsigned long)get_panel(dev->touch_w, dev->touch_h, vendor, (int)flag); /* binaRE MEMORY[0xC168E544] = keys_data+0xD0 (config_id) */
+	printk("--mtc config_id %d vendor_id %d\n", vendor, flag);
+	printk("Touch911             ");
+	word = *(const u32 *)&dev->touch_w; /* binaRE *(u32*)(a1+136) */
+	switch (word) {
+	case 31458080:
+		car_struct.car_status.is1024screen = 0; /* binaRE MEMORY[0xC168ACE3] = +95 */
+		matched = 1;
+		break;
+	case 39322624:
+		car_struct.car_status.is1024screen = 1;
+		matched = 1;
+		break;
+	case 52429280:
+		car_struct.car_status.is1024screen = 2;
+		matched = 1;
+		break;
+	case 67109464:
+		car_struct.car_status.is1024screen = 3;
+		matched = 1;
+		break;
+	}
+	if (!matched) {
+		u16 w16 = dev->touch_w; /* binaRE v12 */
+		u16 h16;
+
+		if (w16 <= 0x320) {
+			if (w16 <= 0x1F4) {
+				h16 = dev->touch_h; /* binaRE v14 */
+				if (h16 > 0x320) {
+					dev->touch_h = 800;
+					car_struct.car_status.reserved_20 = h16 - 32; /* binaRE MEMORY[0xC168ACE4] = +96 */
+					car_struct.car_status.is1024screen = 6;
+				}
+				goto gtp_dump;
+			}
+		} else {
+			h16 = dev->touch_h; /* binaRE v13 */
+			if (h16 <= 0x1F4) {
+				dev->touch_w = 800;
+				car_struct.car_status.reserved_20 = w16 - 32;
+				car_struct.car_status.is1024screen = 4;
+				goto gtp_dump;
+			}
+			if (w16 > 0x400) {
+				if (h16 >= 0x258) {
+					dev->touch_w = 1024;
+					car_struct.car_status.reserved_20 = w16;
+					car_struct.car_status.is1024screen = 5;
+					goto gtp_dump;
+				}
+				goto gtp_l28;
+			}
+		}
+		if (w16 < 0x258)
+			goto gtp_dump;
+gtp_l28: /* binaRE LABEL_28 */
+		h16 = dev->touch_h; /* binaRE v15 (re-read) */
+		if (h16 > 0x400) {
+			dev->touch_h = 1024;
+			car_struct.car_status.reserved_20 = h16;
+			car_struct.car_status.is1024screen = 7;
+			goto gtp_dump;
+		}
+		if (w16 == 1024) {
+			if (h16 > 0x258) {
+				dev->touch_h = 600;
+				car_struct.car_status.reserved_20 = h16 - 88;
+				car_struct.car_status.is1024screen = 9;
+				goto gtp_dump;
+			}
+gtp_l34: /* binaRE LABEL_34 */
+			if (h16 == 1024) {
+				dev->touch_w = 600;
+				car_struct.car_status.reserved_20 = w16 - 88;
+				car_struct.car_status.is1024screen = 11;
+			}
+			goto gtp_dump;
+		}
+		if (w16 > 0x258)
+			goto gtp_l34;
+	}
+gtp_dump: /* binaRE LABEL_11 */
+	for (i = 2; i != 188; ++i) {
+		if (((i + 69) & 0xF) == 0)
+			printk("\n");
+		printk("%02x ", (unsigned int)(u8)v18[i]); /* binaRE v16 = (u8)v18[i] */
+	}
+	printk("\n"); /* binaRE LABEL_39 */
+	return 0;
+}
+
+/* binaRE sta_touch_adc @0xc0842888 (T, 28B) — src_all/decompiled_sta_touch_adc.c, 1:1.
+ * shared.h: TENTATIVE снят. Байты = keys_data+0x144/+0x148 (binaRE 0xC168E5B8/0xC168E5BC).
+ * IDA-сигнатура _BYTE* — return-нормализация: int (sprintf-результат). */
+int sta_touch_adc(char *buf)
+{
+	char *kd = (char *)mtc_keys_data_ptr();
+
+	return sprintf(buf, "%d,%d", *(const u32 *)(kd + 0x144), *(const u32 *)(kd + 0x148));
+}

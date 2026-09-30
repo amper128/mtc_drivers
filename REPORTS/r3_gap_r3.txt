@@ -1,0 +1,53 @@
+=== T9.3 GAP MEASUREMENT (r3, FULL rebuild: rtw fix26 + C2 fix27 in t9/base; data: new_kallsyms_r3.txt + judge 3188_kallsyms) ===
+judge 3188_kallsyms : 40816 unique names (T/t lines 30521, T/t unique 28939)
+new   vmlinux nm   : 47534 lines (T/t 28332)
+vmlinux md5 = c4240c9d148c4a11234e28c8d2c697f4 ; build log: t9/build_r3.log (LINK OK, no errors)
+
+COMMON  : 38613 (full-name intersection; 94.6% of judge unique; r2: 36922 = +1691)
+MISSING (judge T/t, not in new code T/t/W/w) : 2092   (r2: 3716 = -1624)
+ADDED   (new names, not in judge)            : 8281   (r2: 8115 = +166)
+ADDR_MATCH (common T with identical addr)    : 20/11397 = 0.18 %   (r2: 20/10251 = 0.20 %)
+
+--- ADDED by nm type (bloat stays data/rodata/bss artifact of nm-vs-kallsyms) ---
+  d=3645  b=2027  D=965  B=340  r=197  t=933  T=156  A=9  a=6  W=2  R=1
+ADDED real T/t = 1089 ; ADDED data/rodata/bss = 7192 (86.9 %)
+
+--- rtw/rtl8192cu — RESOLVED ---
+MISSING rtw bucket = 0 (r2: ~751). Judge rtw-family unique = 730:
+  rtw_* = 587 | cfg80211_rtw_* = 33 | __param_str_rtw_* = 35 | rtl8192* other = 75
+ALL 730 present in vmlinux (587/587, 33/33, 35/35; no absents). New vmlinux carries 807 rtw-family syms (task est. "743 = 667+33+35" not reproducible from judge data: judge has 587 rtw_ names; all present).
+
+--- C2 fix27 — confirmed in vmlinux ---
+ext xattr: init_ext3_xattr T + ext4_init_xattr T (+25 ext3_xattr_* / 25 ext4_xattr_* T/t each)
+test_power: test_power_init t, test_power_get_ac_property t, test_power_get_battery_property t (+initcall __initcall_test_power_init6)
+
+--- MISSING top families (r3) ---
+  other vendor        1064  (top: rk* 37, rknand* 34, sr/sr9800* ~31, mmc* 20, alarmtimer* 18, vpu* 13, pwm* 12, ping* 11, tsc2003* 9)
+  mali*                531  (prefix-mali 440 + _mali_osk_* 91; bf0* = modules/layout, not in-tree code)
+  __func__*            422  (compiler per-function names, not real code)
+  ump*                 41   (ump = module)
+  touch/gtp*           23   (gtp_i2c_read/write/test, gtp_reset_guitar, gtp_touch_down, mtc_touch_work_func, sta_touch_cal, TouchFilter... — car.c still only bss; link did NOT fail on sta_touch_cal)
+  rk29/rk30             9
+  sdmmc*                2   (r2: 7 — remainder covered by other buckets)
+  rtw/rtl8192cu         0   (CLOSED)
+  mtc_/it66121/cat66121 : 0 (A/B fixes stay CLOSED)
+
+--- size ---
+target  kernel.elf raw = 8232996 B
+new     vmlinux.stripped_r3 = 7857316 B (md5 6060571cc5ed3755ca2c895d1706344d)
+delta to target = -375680 B (-367 KB)
+delta vs r2 (7320740) = +536576 B (+524 KB) — rtw driver + ext-xattr + test_power pulled in
+est. remaining code: other vendor ~?KB, mali 84KB(modules), ump 13KB, gtp/touch ~13KB, __func__ noise
+
+--- r2 -> r3 summary ---
+COMMON   36922 -> 38613 (+1691, 90.5% -> 94.6% of judge)
+MISSING  3716  -> 2092  (-1624; rtw ~750 + ext-xattr + test_power + misc)
+ADDED    8115  -> 8281
+ADDR_MATCH 0.20% -> 0.18 % (flat — address layout still divergent, as expected)
+size stripped 7320740 -> 7857316 (+536576 B); to target: -912256 -> -375680 B
+
+--- next priorities ---
+1) gtp_* family 23 syms (~13 KB): car.c exposes only bss; gtp_i2c_*/gtp_reset_guitar/sta_touch_cal missing
+2) 'other vendor' 1064 syms: rk/rknand/sr9800/mmc/alarmtimer/vpu/pwm/tsc2003 — layout-only vs judge check
+3) mali/ump (~572): module-bound (bf0* addrs / ump=m), confirm module build status only
+4) re-measure r4 after 1-2

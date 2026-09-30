@@ -5,7 +5,7 @@
  * bss: page u8[32] @0xC168E330; enabled @0xC168E350; delayed_work @0xC168E354
  *      (func=Lcd_work, timer @0xC168E364); flash-mode @0xC168E380, flash-idx @0xC168E381;
  *      delayed_work @0xC168E384 (func=Lcd_Flash_work, timer @0xC168E394);
- *      mutex @0xC0BCA12C.  rodata: lcd_seg_tab @0xC0A09D28 (396 B).
+ *      mutex @0xC0BCA12C.  rodata: 4 массива @0xC0A09D28..C0A09EB3 (396B): symbol_map/dig_seg/dig_map/flash_tab (MTC-14).
  */
 #include <linux/module.h>
 #include <linux/time.h>
@@ -105,17 +105,15 @@ static int lcd_flash_idx;                  /* bss @0xC168E381 */
 static struct delayed_work lcd_flash_work; /* bss @0xC168E384, func=Lcd_Flash_work, timer @0xC168E394 */
 static struct mutex lcd_mutex;             /* bss @0xC0BCA12C (общий LCD mutex) */
 
-/* rodata 0xC0A09D28..0xC0A09EB3 (396 B; kallsyms: symbol_map@+0, dig_seg@+32,
- *   dig_map@+56, flash_tab@+312/22*u32; конец — lcd_pm_ops@0xC0A09EB4):
- *   [u8 +0..29]    symbol_map: seg-коды (lcd_show_symbol / lcd_flash: page[seg&0x1F] bit(seg>>6))
- *   [u32 +32+4*v2] pattern-words glyph (lcd_show_dig, v2 = glyph idx)
- *   [u32 +56..]    dig_map (lcd_show_dig byte-walk: v6 = dig_map + 14*idx)
- *   [u32 +312..]   flash masks (Lcd_Flash_work: tab[idx+78], idx<=0x14)
- */
-static const u32 lcd_seg_tab[99] =
-{
+/* binaRE 0xC0A09D28..0xC0A09EB3 (396 B) — split на 4 судейских символа (3188_kallsyms:
+ * symbol_map@C0A09D28/32B, dig_seg@C0A09D48/152B, dig_map@C0A09DE0/128B (+184),
+ * flash_tab@C0A09E60/84B (21 words, +312); след. символ lcd_pm_ops @C0A09EB4).
+ * Байты 1-в-1 из raw-дампа (MTC-14). */
+static const u32 symbol_map[8] = { /* @C0A09D28 (+0), 32B: судейские символы (lcd_show_symbol) */
 	0xC0804000, 0x41810242, 0x0804C2C1, 0x9EDE100C,
 	0x0B07035E, 0x1B19150F, 0x5F9FDF1F, 0x00001713,
+};
+static const u32 dig_seg[38] = { /* @C0A09D48 (+32), 152B: pattern-words glyph (lcd_show_dig) */
 	0x0000FC00, 0x00006000, 0x0000DB00, 0x0000F300,
 	0x00006700, 0x0000B700, 0x0000BF00, 0x0000E000,
 	0x0000FF00, 0x0000F700, 0x00000000, 0x00000300,
@@ -125,20 +123,25 @@ static const u32 lcd_seg_tab[99] =
 	0x00006CA0, 0x00006C90, 0x0000FC00, 0x0000CF00,
 	0x0000FC10, 0x0000CF10, 0x0000B700, 0x00008048,
 	0x00007C00, 0x00000C24, 0x00006C54, 0x000000B4,
-	0x00007700, 0x00009024, 0x0647C7C6, 0x8784C444,
-	0x468685C5, 0xCBCA0545, 0xC8480A4B, 0x89C98B88,
-	0x09494A8A, 0x0E4FCFCE, 0x8F8CCC4C, 0x4E8E8DCD,
-	0xD3D20D4D, 0xD0501253, 0x91D19390, 0x11515292,
-	0x1455D5D4, 0x95959454, 0x00000000, 0xD7D60000,
-	0x96561657, 0x00009797, 0x00000000, 0x1859D9D8,
-	0x99999858, 0x00000000, 0xDBDA0000, 0x9A5A1A5B,
-	0x00009B9B, 0x00000000, 0x1C5DDDDC, 0x9D9D9C5C,
-	0x00000000, 0x00000000, 0x00000071, 0x000000B3,
-	0x00000137, 0x0000007F, 0x000000B8, 0x00000134,
-	0x00000072, 0x000000B1, 0x00000133, 0x00000077,
-	0x000000BF, 0x00000138, 0x00000074, 0x000000B2,
-	0x00000131, 0x00000073, 0x000000B7, 0x0000013F,
-	0x00000078, 0x000000B4, 0x00000132
+	0x00007700, 0x00009024,
+};
+static const u32 dig_map[32] = { /* @C0A09DE0 (+184), 128B: seg-walk (lcd_show_dig: v6 = dig_map + 14*idx) */
+	0x0647C7C6, 0x8784C444, 0x468685C5, 0xCBCA0545,
+	0xC8480A4B, 0x89C98B88, 0x09494A8A, 0x0E4FCFCE,
+	0x8F8CCC4C, 0x4E8E8DCD, 0xD3D20D4D, 0xD0501253,
+	0x91D19390, 0x11515292, 0x1455D5D4, 0x95959454,
+	0x00000000, 0xD7D60000, 0x96561657, 0x00009797,
+	0x00000000, 0x1859D9D8, 0x99999858, 0x00000000,
+	0xDBDA0000, 0x9A5A1A5B, 0x00009B9B, 0x00000000,
+	0x1C5DDDDC, 0x9D9D9C5C, 0x00000000, 0x00000000,
+};
+static const u32 flash_tab[21] = { /* @C0A09E60 (+312), 84B: flash masks (Lcd_Flash_work) */
+	0x00000071, 0x000000B3, 0x00000137, 0x0000007F,
+	0x000000B8, 0x00000134, 0x00000072, 0x000000B1,
+	0x00000133, 0x00000077, 0x000000BF, 0x00000138,
+	0x00000074, 0x000000B2, 0x00000131, 0x00000073,
+	0x000000B7, 0x0000013F, 0x00000078, 0x000000B4,
+	0x00000132,
 };
 
 
@@ -195,7 +198,7 @@ void
 lcd_show_symbol(unsigned int mask)
 {
 	unsigned int result = mask >> 1;
-	const unsigned char *p = (const unsigned char *)lcd_seg_tab;
+	const unsigned char *p = (const unsigned char *)symbol_map; /* MTC-14: symbol_map@C0A09D28 (bytes 1..29) */
 	int i;
 
 	for (i = 1; i < 30; i++)
@@ -244,7 +247,7 @@ lcd_show_dig(int c, unsigned int idx)
 			v2 = (unsigned char)(c - 85);
 	}
 
-	v6 = (const unsigned char *)lcd_seg_tab + 14 + 14 * idx;   /* dig_map = tab+56, /4 -> +14 */
+	v6 = (const unsigned char *)dig_map + 14 * idx; /* MTC-14: dig_map@C0A09DE0 (+184B) */
 
 	if (v2 > 0xB && idx > 3)          /* unknown glyph beyond 4th digit: blank */
 	{
@@ -253,7 +256,7 @@ lcd_show_dig(int c, unsigned int idx)
 	}
 	else
 	{
-		v4 = ((const u32 *)((const unsigned char *)lcd_seg_tab + 32))[v2];  /* +32+4*v2 */
+		v4 = dig_seg[v2]; /* MTC-14: dig_seg@C0A09D48 (+32B) */
 		v5 = (idx > 3) ? 8 : 14;
 	}
 
@@ -284,7 +287,7 @@ lcd_flash(int mask)
 	mutex_lock(&lcd_mutex);
 	for (i = 0; i < 9; i++)
 	{
-		unsigned int v4 = ((const unsigned char *)lcd_seg_tab)[i];
+		unsigned int v4 = ((const unsigned char *)symbol_map)[i]; /* MTC-14: bytes 0..8 symbol_map */
 
 		if ((mask & 1) == 0)
 			lcd_page[v4 & 0x1F] &= ~((u8)(1 << (v4 >> 6)));
@@ -305,7 +308,7 @@ Lcd_Flash_work(struct work_struct *work)
 
 	if (lcd_enabled && lcd_flash_mode)
 	{
-		lcd_flash(lcd_seg_tab[lcd_flash_idx + 78]);
+		lcd_flash(flash_tab[lcd_flash_idx]); /* MTC-14: flash_tab@C0A09E60 (+312B, 21 words), idx<=0x14 */
 		lcd_flash_idx++;
 		if ((unsigned int)lcd_flash_idx > 0x14u)
 			lcd_flash_idx = 0;

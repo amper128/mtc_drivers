@@ -89,3 +89,12 @@ R4: двойные init audio_card (ур.6+7, два c0421xxx) — два TU с 
    audio_card_init → переименование недопустимо (kallsyms!), решается static/weak в T3. R5: mali/ump не в
    vmlinux — их отсутствие НЕ портит kallsyms-diff vmlinux (проверяем только vmlinux-символы).
 R6: time-box: полная сборка 30+ мин × итерации → T5/T6 закладывать ≥3 итерации; ccache обязателен.
+
+## E. REFERENCE KERNEL (T9, документация)
+Reference (база, поверх которой накладывается наш драйвер-пак mtc_drivers): https://github.com/omegamoon/rockchip-rk3188-generic —
+HEAD d2440f70 (2013-06-16), Linux 3.0.36+ (Rikomagic RK3188, общий rk3x vendor-бейз с нашей линией).
+Mali-400/UMP source = это репо (drivers/gpu/mali/, ARM reference r3p2-01rel1, API_VERSION=20; OOT-кандидаты:
+mtc_build/modules/ref_mali/{mali.ko,ump.ko}, vermagic 3.0.36+, unresolved=0).
+ОГОРОВКА: действующая сборочная база vmlinux — SDK-ядро 3.0.36+ (mtc_build/ref_kernel, scripts/apply_overlay.sh),
+та же версия/линия; полная переключка сборки на omegamoon-репо — future task (не выполнена, не обещать).
+Детали: REPORTS/reference_repo.md; REPORTS/mali_candidate_check.md.

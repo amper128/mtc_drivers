@@ -78,6 +78,37 @@ const unsigned char mtc_keydefault[76] = {
 	0x2B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0xD0, 0x05, 0x02, 0x00, 0x05, 0x02, 0x46, 0x01, 0x00, 0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+/* binaRE c0a09c1c..c0a09c33 (24B rodata) — 4 судейских символа (3188_kallsyms):
+ * CustomerStr@C0A09C1C "mtc\0" (4B), SnStr@C0A09C20 "12345678\0" + 3B zero-pad
+ * (зазор C29..C2B=0x00 — воспроизведён explicit size 12), ModelStr@C0A09C2C "A07\0",
+ * PasswordStr@C0A09C30 "126\0". Байты 1-в-1 из raw-дампа (gen_strings.c). */
+const char CustomerStr[] = "mtc";
+const char SnStr[12] = "12345678";
+const char ModelStr[] = "A07";
+const char PasswordStr[] = "126";
+
+/* binaRE searchAdcKey @0xc083b2ec (static, 124B) — src_all/decompiled_searchAdcKey.c, 1:1.
+ * tab = mtc_keydefault[76]: i<75 step3 ([i]=ADC-код, [i+1]=low, [i+2]=high);
+ * v8 = low|(high<<8); |adc_val - v8| < tol → return mtc_keycode[i/3]; else 0.
+ * Коньюмер send_event(...) из бинара — вне scope (DCE-кавета, см. REPORTS MTC-14). */
+/* attr в начале (вариант A): toolchain 4.6 (arm-eabi-gcc google) отклоняет
+ * __attribute__((used)) в конце строки ОПРЕДЕЛЕНИЯ; проверено standalone:
+ * оба варианта компилируются, символ 't' держится в .o (objdump -t). */
+static __attribute__((used)) int searchAdcKey(u8 adc_code, int adc_val, const u8 *tab, int tol)
+{
+	unsigned int i;
+
+	for (i = 0; i != 75; i += 3) {
+		if (tab[i] == adc_code) {
+			unsigned int v8 = tab[i + 1] | (tab[i + 2] << 8);
+
+			if (v8 < tol + adc_val && adc_val < v8 + tol)
+				return mtc_keycode[i / 3];
+		}
+	}
+	return 0;
+}
+
 static struct early_suspend mtc_keys_early_suspend;
 
 /* reconstructed from code usage; layout TBD (порядок = первое использование:
@@ -102,9 +133,30 @@ struct mtc_keys_data {
 	char home_disabled;
 	int modemuteval;
 	int ir_val;
+	/* === binaRE MTC-14: бинарные якоря keys_data @0xC168E474 (бинарный sizeof >= 0x14C: max-доступ 0xC168E5BC);
+	 * офсеты — из decompiled (см. шапку round3); до MTC-14 в дереве полей не было === */
+	char _gap_kd1[0x34];	    /* @0x3C..0x6B: без кодовых доступов */
+	void *entries_p;		    /* @0x6C: P = kmalloc(n*264+16) (keys_probe; mtc_key_suspend/resume *(char*)+0x6C) */
+	char _gap_kd2[8];		    /* @0x70..0x77 */
+	char backlight_sw;		    /* @0x78: backlight-переключатель (send_ir_key) */
+	char _gap_kd3[11];		    /* @0x79..0x8B */
+	char touch_res_a;		    /* @0x8C (mtc_getTouchKey/tab) */
+	char touch_res_b;		    /* @0x8D */
+	char _gap_kd4[6];		    /* @0x8E..0x93 */
+	char touch_gate;		    /* @0x94: гейт mtc_touch_work_func */
+	char _gap_kd5[3];		    /* @0x95..0x97 */
+	int touch_cnt;			    /* @0x98: counter (mtc_touch_work_func) */
+	char touch_key;		    /* @0x9C (mtc_touch_work_func) */
+	char touch_code2;		    /* @0x9D */
+	char _gap_kd6[2];		    /* @0x9E..0x9F (выравнивание delayed_work) */
+	struct delayed_work touch_dwork; /* @0xA0 (mtc_touch_work_func: schedule_delayed_work) */
+	char _gap_kd_tail[152];	    /* хвост до бинарного размера; +0x144/+0x148 (sta_touch_adc) — в этой области */
 };
 
-static struct mtc_keys_data *keys_data;
+static struct mtc_keys_data keys_data; /* binaRE 0xC168E474 (.bss-объект, MTC-14) */
+
+/* binaRE MTC-14: accessor для cross-TU (car.c: sta_touch_adc / gtp_init_panel) */
+struct mtc_keys_data *mtc_keys_data_ptr(void) { return &keys_data; }
 
 static struct platform_driver mtc_keys_driver;
 static struct mtc_keys_input_id *mtc_keys_devices;
@@ -297,19 +349,19 @@ kdisable: /* LABEL_19 (asm C083C174) */
 backlight_flow: /* LABEL_20 (asm C083C180) */
 	if (!car_struct.car_status.backlight_status) { /* binaRE 0xC168ACA5 = +0x21 */
 		backlight_on(); /* IDA: backlight_on(result) — артефакт (дерево: void; R0 stale) */
-		((unsigned char *)keys_data)[0x78] = 1; /* binaRE 0xC168E4EC = keys_data+0x78 (поля в текущем дереве нет) */
+		((unsigned char *)&keys_data)[0x78] = 1; /* binaRE 0xC168E4EC = keys_data+0x78 (поля в текущем дереве нет) */
 		return 0; /* return-нормализация: бинар возвращает результат backlight_on() (дерево: void) */
 	}
-	v4 = ((unsigned char *)keys_data)[0x78]; /* binaRE 0xC168E4EC = keys_data+0x78 */
-	if (((unsigned char *)keys_data)[0x78]) {
-		((unsigned char *)keys_data)[0x78] = 0;
+	v4 = ((unsigned char *)&keys_data)[0x78]; /* binaRE 0xC168E4EC = keys_data+0x78 */
+	if (((unsigned char *)&keys_data)[0x78]) {
+		((unsigned char *)&keys_data)[0x78] = 0;
 		return result;
 	}
 	if (v1 == 54) { /* '6' (asm C083C3D0): dev = keys_data+0x08 (binaRE 0xC168E47C = p_input_dev) */
-		input_event(keys_data->p_input_dev, 1, 158, 1); /* KEY_BACK; asm R2=0x9E */
-		input_event(keys_data->p_input_dev, v4, v4, v4); /* IDA честно: (dev,v4,v4,v4); v4==0 гарантированно */
-		input_event(keys_data->p_input_dev, 1, 158, v4);
-		input_event(keys_data->p_input_dev, v4, v4, v4);
+		input_event(keys_data.p_input_dev, 1, 158, 1); /* KEY_BACK; asm R2=0x9E */
+		input_event(keys_data.p_input_dev, v4, v4, v4); /* IDA честно: (dev,v4,v4,v4); v4==0 гарантированно */
+		input_event(keys_data.p_input_dev, 1, 158, v4);
+		input_event(keys_data.p_input_dev, v4, v4, v4);
 		return key_beep(); /* IDA: key_beep(v10) — артефакт; R0 = key_beep() */
 	}
 	if (car_struct.car_status.key_mode == 1) /* binaRE 0xC168ACAE = +0x2A (asm C083C1B0-C083C1B8) */
@@ -331,10 +383,10 @@ backlight_flow: /* LABEL_20 (asm C083C180) */
 			return key_beep(); /* IDA: key_beep(result) — артефакт */
 		return result; /* = результат vs_send(2,0x8F) (asm → C083C224) */
 	}
-	input_event(keys_data->p_input_dev, 1, 139, 1); /* '7': KEY_MENU; asm R2=0x8B (C083C344) */
-	input_event(keys_data->p_input_dev, v4, v4, v4); /* IDA честно: v4==0 гарантированно */
-	input_event(keys_data->p_input_dev, 1, 139, v4);
-	input_event(keys_data->p_input_dev, v4, v4, v4);
+	input_event(keys_data.p_input_dev, 1, 139, 1); /* '7': KEY_MENU; asm R2=0x8B (C083C344) */
+	input_event(keys_data.p_input_dev, v4, v4, v4); /* IDA честно: v4==0 гарантированно */
+	input_event(keys_data.p_input_dev, 1, 139, v4);
+	input_event(keys_data.p_input_dev, v4, v4, v4);
 	return key_beep();
 }
 
@@ -342,10 +394,10 @@ backlight_flow: /* LABEL_20 (asm C083C180) */
 int
 send_event_key(unsigned int a1)
 {
-	input_event(keys_data->p_input_dev, 1u, a1, 1);
-	input_event(keys_data->p_input_dev, 0, 0, 0); /* IDA: (dev,0,0,0) — SYN */
-	input_event(keys_data->p_input_dev, 1u, a1, 0);
-	input_event(keys_data->p_input_dev, 0, 0, 0);
+	input_event(keys_data.p_input_dev, 1u, a1, 1);
+	input_event(keys_data.p_input_dev, 0, 0, 0); /* IDA: (dev,0,0,0) — SYN */
+	input_event(keys_data.p_input_dev, 1u, a1, 0);
+	input_event(keys_data.p_input_dev, 0, 0, 0);
 	return key_beep(); /* tail (decompiled: return key_beep()) */
 }
 
@@ -358,7 +410,7 @@ mtc_key_suspend(void)
 	int i;
 
 	car_struct.car_status.key_mode = 4; /* asm: STRB #4, [car_status+0x2A] */
-	base = (int *)(*(int **)((char *)keys_data + 0x6C)); /* binaRE 0xC168E4E0 = keys_data+0x6C */
+	base = (int *)(*(int **)((char *)&keys_data + 0x6C)); /* binaRE 0xC168E4E0 = keys_data+0x6C */
 	count = base[0];
 	for (i = 0; i < count; i++) {
 		int *e = base + 4 + 66 * i; /* entry_i: P+16+264*i (asm: ADD R5,R6,R5,LSL#3; ADD #0x10) */
@@ -374,7 +426,7 @@ mtc_key_suspend(void)
 			break;
 		}
 	}
-	flush_workqueue(keys_data->keys_ws.wheel_wq);
+	flush_workqueue(keys_data.keys_ws.wheel_wq);
 	return 0; /* binaRE: flush_workqueue возвращает void */ /* asm tail: LDR R0,[keys_data+0x10] = wheel_wq (0xC168E484) */
 }
 
@@ -388,7 +440,7 @@ mtc_key_resume(void)
 	int i;
 
 	car_struct.car_status.key_mode = 0; /* asm: STRB #0, [car_status+0x2A] */
-	base = (int *)(*(int **)((char *)keys_data + 0x6C)); /* binaRE 0xC168E4E0 = keys_data+0x6C */
+	base = (int *)(*(int **)((char *)&keys_data + 0x6C)); /* binaRE 0xC168E4E0 = keys_data+0x6C */
 	count = base[0];
 	for (i = 0; i < count; i++) {
 		int *e = base + 4 + 66 * i; /* entry_i: P+16+264*i */
@@ -427,8 +479,8 @@ mtc_getTouchKey(unsigned int a1)
 		if (!tab[i * 4] && !tab[i * 4 + 1]) /* b0/b1 (asm LDRB [R1,#0x65]/[R1,#0x66]) */
 			return 255; /* asm MOV R0,#0xFF */
 		if ((unsigned int)tab[i * 4 + 2] <= a1 && (unsigned int)tab[i * 4 + 3] > a1) { /* lo/hi (asm [R1,#0x67]/[R1,#0x68], unsigned) */
-			((unsigned char *)keys_data)[0x8C] = tab[i * 4]; /* binaRE 0xC168E500 = keys_data+0x8C (полей в дереве нет) */
-			((unsigned char *)keys_data)[0x8D] = tab[i * 4 + 1]; /* binaRE 0xC168E501 = keys_data+0x8D */
+			((unsigned char *)&keys_data)[0x8C] = tab[i * 4]; /* binaRE 0xC168E500 = keys_data+0x8C (полей в дереве нет) */
+			((unsigned char *)&keys_data)[0x8D] = tab[i * 4 + 1]; /* binaRE 0xC168E501 = keys_data+0x8D */
 			return (unsigned char)(i + 1); /* asm: R0 = UXTB(idx+1) */
 		}
 	}
@@ -445,8 +497,8 @@ mtc_getTouchKey_tab(unsigned int a1, unsigned char *a2)
 		if (!a2[i * 4] && !a2[i * 4 + 1])
 			return 255;
 		if ((unsigned int)a2[i * 4 + 2] <= a1 && (unsigned int)a2[i * 4 + 3] > a1) {
-			((unsigned char *)keys_data)[0x8C] = a2[i * 4]; /* binaRE 0xC168E500 = keys_data+0x8C */
-			((unsigned char *)keys_data)[0x8D] = a2[i * 4 + 1]; /* binaRE 0xC168E501 = keys_data+0x8D */
+			((unsigned char *)&keys_data)[0x8C] = a2[i * 4]; /* binaRE 0xC168E500 = keys_data+0x8C */
+			((unsigned char *)&keys_data)[0x8D] = a2[i * 4 + 1]; /* binaRE 0xC168E501 = keys_data+0x8D */
 			return (unsigned char)(i + 1);
 		}
 	}
@@ -459,7 +511,7 @@ mtc_touch_work_func(void)
 {
 	unsigned char *kd8; /* binaRE offset-вид keys_data */
 
-	kd8 = (unsigned char *)keys_data;
+	kd8 = (unsigned char *)&keys_data;
 	if (kd8[0x94]) { /* binaRE 0xC168E508 = keys_data+0x94: гейт */
 		unsigned char key = kd8[0x9C]; /* binaRE 0xC168E510 = keys_data+0x9C (в handoff было +0xA4 — арифметическая ошибка, пересчитано: 0xC168E510-0xC168E474=0x9C) */
 		unsigned char code2;
@@ -526,23 +578,23 @@ keys_probe(struct platform_device *pdev)
 	printk("--mtc keys_probe\n");
 
 	if (car_struct.car_status.mtc_customer == 12) {
-		LOBYTE(keys_data->intval1) = 1;
+		LOBYTE(keys_data.intval1) = 1;
 	} else if (car_struct.car_status.mtc_customer == 8 &&
 		   car_struct.config_data.arr[1] != 3) {
 		if (car_struct.config_data.arr[1] == 1) {
-			BYTE1(keys_data->intval1) = 1;
+			BYTE1(keys_data.intval1) = 1;
 		}
-		keys_data->no_adc_ch1 = 1;
+		keys_data.no_adc_ch1 = 1;
 	}
 
-	keys_data->keys_ws.wheel_wq = create_workqueue("wheel_wq");
-	keys_data->process_wq = create_workqueue("process_wq");
+	keys_data.keys_ws.wheel_wq = create_workqueue("wheel_wq");
+	keys_data.process_wq = create_workqueue("process_wq");
 
-	INIT_WORK(&keys_data->keys_ws.volkey_work, volkey_work); /* поле by-value: struct work_struct */
-	INIT_WORK(&keys_data->keys_ws.modemute_work, modemute_work);
+	INIT_WORK(&keys_data.keys_ws.volkey_work, volkey_work); /* поле by-value: struct work_struct */
+	INIT_WORK(&keys_data.keys_ws.modemute_work, modemute_work);
 
-	keys_data->keys_dev = kzalloc(sizeof(struct mtc_keys_drv), GFP_KERNEL); // 0x748 bytes
-	if (!keys_data->keys_dev) {
+	keys_data.keys_dev = kzalloc(sizeof(struct mtc_keys_drv), GFP_KERNEL); // 0x748 bytes
+	if (!keys_data.keys_dev) {
 		register_result = -ENOMEM;
 		goto dev_create_failed;
 	}
@@ -595,7 +647,7 @@ keys_probe(struct platform_device *pdev)
 		}
 
 		if (keys_ids[cur_dev].dev_type == 5) {
-			if (keys_data->no_adc_ch1) {
+			if (keys_data.no_adc_ch1) {
 				if (cur_id->adc_ch1) {
 					goto skip_input_setup;
 				}
@@ -767,7 +819,7 @@ keys_probe(struct platform_device *pdev)
 	if (!register_result) {
 		device_init_wakeup(&pdev->dev, wakeup);
 		register_early_suspend(&mtc_keys_early_suspend);
-		keys_data->p_input_dev = gpio_keys_input0;
+		keys_data.p_input_dev = gpio_keys_input0;
 		car_struct.car_status.input_ready = 1;
 
 		return register_result;
@@ -792,7 +844,7 @@ keys_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 
 	dev_get_drvdata(dev);
-	keys_data->p_input_dev = NULL;
+	keys_data.p_input_dev = NULL;
 	device_init_wakeup(dev, 0);
 
 	return 0;

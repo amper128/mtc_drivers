@@ -103,7 +103,7 @@ static void work_signal_low(struct work_struct *work);
 static void work_af(struct work_struct *work);
 static void work_ta(struct work_struct *work);
 static void rdslost_work(struct work_struct *work);
-void ork_sta_valid(struct work_struct *work); /* T5: static снят (план t5) */
+void work_sta_valid(struct work_struct *work); /* T5: static снят (план t5); binaRE: судейское имя work_sta_valid @c0835858 (t) */
 
 
 static struct mtc_radio_struct radio;
@@ -974,7 +974,7 @@ tef6606_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	INIT_DELAYED_WORK(&radio.dwork_af, work_af);
 	INIT_DELAYED_WORK(&radio.dwork_ta, work_ta);
 	INIT_DELAYED_WORK(&radio.rdslost_dwork, rdslost_work);
-	INIT_DELAYED_WORK(&radio.dwork_sta_valid, ork_sta_valid);
+	INIT_DELAYED_WORK(&radio.dwork_sta_valid, work_sta_valid);
 
 	pr_info("mtc_radio: v0.01: registered.\n");
 
@@ -1040,8 +1040,8 @@ int rds_af_process(unsigned char *af_list, char hi, u16 word); /* binaRE @0xc083
 
 
 /* binaRE work_sta_valid @0xc0835858 (IDA 9.3 decompiled) — work-обработчик dwork_sta_valid
- * (ork_sta_valid: static в бинаре, def по decompiled_work_sta_valid.c) */
-void ork_sta_valid(struct work_struct *work)
+ * (судейское имя в 3188_kallsyms: work_sta_valid; переименовано из ork_sta_valid) */
+void work_sta_valid(struct work_struct *work)
 {
 	(void)work;
 	radio.sta_valid[0] = 1; /* binaRE MEMORY[0xC168C7F8] = 1 */

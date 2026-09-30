@@ -1,0 +1,203 @@
+# T9.2 FULL-сборка vmlinux (t9/base) — fixes log
+[fix 0] kernel/timeconst.pl:373 — `if (!defined(@val))` -> `if (!@val)` (1 строка)
+  причина: хост perl v5.44.0: defined(@array) FATAL (известный баг, патч mtc_drivers/patches/timeconst.pl.patch)
+  применял ПРевентивно (до старта сборки), т.к. host perl 5.44 подтверждён; проверка: perl kernel/timeconst.pl 250 HZ -> rc=0
+  файл: t9/base/kernel/timeconst.pl (единственное место правки)
+[fix 1] arch/arm/mach-rk30/devices.c — после #include <plat/rk_fiq_debugger.h> добавлен #ifndef-guarded блок: 20 макросов I2C-mux (GPIO{2D,3A}_I2C*_S{C,D}A=1 + *_NAME строки) дословно из mach-rk30/include/mach/iomux.h
+  причина: make из mach-rk3188/Makefile (obj-y += ../mach-rk30/devices.o) компилирует devices.c с -Iarch/arm/mach-rk3188/include — <mach/iomux.h> резолвится в rk3188-хедер, где этих макросов нет (20x 'undeclared' при rk3188-сборке, build_full.log r1)
+  ref_kernel/devices.c — иной (поздний) вариант без i2c_check_idle/iomux[] — копирование = большой семантический diff, отклонено
+  проверка: значения совпадают с mach-rk30/iomux.h (все =1, _NAME идентичны строки)
+[fix 2] t9/base/.config — CONFIG_ADC_NULL=y -> "# CONFIG_ADC_NULL is not set" + добавлено CONFIG_ADC_RK30=y (дословно как в ref_kernel/.config)
+  причина: r2-сборка упала/не ссыпалась из-за ADC-драйвера (диагноз r2: требуется CONFIG_ADC_RK30); grep сверки: base имел только CONFIG_ADC=y/CONFIG_ADC_NULL=y, ref — CONFIG_ADC=y, ADC_NULL not set, ADC_RK30=y
+  проверка: после make olddefconfig grep 5 целевых CONFIG (MACH_RK3188_MTC/MTC_DRIVERS/MALI400/UMP/SND_RK29_WM8731 + ADC_RK30)
+  файл: t9/base/.config (2 строки)
+[fix 2 — уточнение/дополнение]drivers/adc/plat/Kconfig (t9/base) — 2 строки, дословно как в ref_kernel:
+  - choice default: `default ADC_RK30 if ARCH_RK30` -> `... || ARCH_RK2928 || ARCH_RK3188 || ARCH_RK3026 || ARCH_RK319X`
+  - config ADC_RK30: `depends on ARCH_RK30 || ARCH_RK2928` -> `... || ARCH_RK3188 || ARCH_RK3026 || ARCH_RK319X`
+  причина: в base-Kconfig ADC_RK30 не был доступен для ARCH_RK3188 -> kconfig каждый раз откатывал CONFIG_ADC_RK30=y на ADC_NULL=y (первая попытка правки .config «съелась» oldconfig). r2-ошибка корня: drivers/adc/core.c:142 'SAMPLE_RATE' undeclared — SAMPLE_RATE определён в plat/rk30_adc.h, подключаемом по #ifdef CONFIG_ADC_RK30 (adc_priv.h). ref собирался с ADC_RK30=y.
+  файлы: t9/base/drivers/adc/plat/Kconfig (2 строки), t9/base/.config (2 строки: ADC_NULL not set, ADC_RK30=y)
+  проверка: make oldconfig rc=0; grep подтвердил ВСЕ 6: MACH_RK3188_MTC=y, MTC_DRIVERS=y, ADC=y, ADC_RK30=y, MALI400=m, UMP=m, SND_RK29_WM8731=y
+[fix 3 — ПОСЛЕДНИЙ] drivers/i2c/busses/i2c-rk30.h (t9/base) — 1 строка, дословно как в ref_kernel:
+  `#if defined(CONFIG_ARCH_RK30)` -> `#if defined(CONFIG_ARCH_RK30) || defined(CONFIG_ARCH_RK3188)` (guard макроса GRF_I2C_CON_BASE)
+  причина: r3-ошибка: drivers/i2c/busses/i2c-rk30.c:98 'GRF_I2C_CON_BASE' undeclared — в base-guard не было RK3188, ref добавил. Резолвимость проверена: i2c-rk30.h инклудит <mach/iomux.h> (rk3188), который тащит <mach/grf.h> (GRF_SOC_CON1=0x00a4, mach/grf.h:45) и <mach/io.h> (RK30_GRF_BASE, mach/io.h:133).
+  файл: t9/base/drivers/i2c/busses/i2c-rk30.h (1 строка)
+
+[fix 4] drivers/mmc/host/rk29_sdmmc.c (t9/base) — 1 строка, L76:
+  `#elif defined(CONFIG_ARCH_RK3066B)` -> `#elif defined(CONFIG_ARCH_RK3066B)||defined(CONFIG_ARCH_RK3188)`
+  (блок макросов RK29_SDMMC0DETECTN_GPIO/RK29_SDMMC0PWREN_GPIO, L72-85)
+  причина: r4-ошибка: rk29_sdmmc.c:2463 'RK29_SDMMC0PWREN_GPIO' undeclared; :3569/:4026/:4048 'RK29_SDMMC0DETECTN_GPIO' undeclared — в guard-цепи #if RK29/RK3066B/RK30/RK2928 не было RK3188
+  donor (1-в-1): ref_kernel = SDK-вариант (Ver.6.07) — эти макросы там удалены (detect/pwren перенесены в board-pdata); источник истины — ref_kernel/arch/arm/mach-rk30/board-rk30-sdk-sdmmc.c:
+    guard `#elif defined(CONFIG_ARCH_RK3066B) || defined(CONFIG_ARCH_RK3188)`:
+      RK29SDK_SD_CARD_DETECT_N = RK30_PIN3_PB0 (ioc "mmc0_detn", GPIO3_B0/MMC0_DETN)
+      RK29SDK_SD_CARD_PWR_EN   = RK30_PIN3_PA1 (ioc "mmc0_pwren", GPIO3_A1/MMC0_PWREN)
+    т.е. SDK-пины RK3188 == уже существующим значениям ветки CONFIG_ARCH_RK3066B старшего драйвера (PB0/PA1) — расширен только guard, значения не менялись
+  cross-check: t9/base/drivers/mmc/host/rk29_sdmmc.c был ПОБайТОВЫМ копией repos/rockchip-rk3188-generic (md5 90491ce128540891dfd65359558ac6f5) — комьюнити-зеркало не шло в сборку с SDMMC_RK29=y/RK3188; RK30_PIN3_PB0/RK30_PIN3_PA1 определены в t9/base/arch/arm/mach-rk30/include/mach/gpio.h (L120/L113)
+  минимальный diff: только L76 (mux-ветки suspend/resume L4018/L4052 не тронуты — на сборку не влияют)
+
+[fix 5] drivers/power/ + drivers/video/rockchip/rk_fb.c (t9/base) — 3 файла, 1-в-1 к ref_kernel (SDK)
+  r5-ошибка (build #1): drivers/power/power_supply_core.c:188:15: error: 'struct power_supply' has no member named 'rk_psy_node'
+  судья (3188_kallsyms): original собран с SDK-вариантом charge-display — rk_get_system_battery_status/capacity = T, pwr_on_thrsd_setup = t; rk_psy_head/rk_psy_node/g_charge_status в оригинале ОТСУТСТВУЮТ. ref_kernel = донор.
+  (a) drivers/power/rk29_charger_display.c: ПОДМЕНА на ref_kernel (SDK) — md5 base==ref 46024754537b158e065ff06bdccd6994
+      base-вариант (omegamoon, g_charge_status + LIST_HEAD(rk_psy_head)) не шёл в оригинал; ref-вариант добавляет rk_get_system_battery_status/capacity (нужны extern'у в arch/arm/mach-rk3188/cpufreq.c:469 — unconditional extern, символ обязан линковаться)
+      Makefile base L47: obj-$(CONFIG_POWER_ON_CHARGER_DISPLAY) += rk29_charger_display.o; .config base: =y (оставлено y — обязателен линк для cpufreq; ref-.config "not set" = иной срез конфига)
+  (b) drivers/power/power_supply_core.c: удалены 2 ханка yxj (extern struct list_head rk_psy_head L22-24; list_add(&psy->rk_psy_node, &rk_psy_head) L187-189, оба под #ifdef CONFIG_POWER_ON_CHARGER_DISPLAY) — после diff c ref = ПУСТОЙ, md5 base==ref 35b71872774d6a9439276139a4487b00
+  (c) drivers/video/rockchip/rk_fb.c: точечные правки (файл не-UTF8, битмап — замена бинарными строками, count==1 assert):
+      - удалён блок L1070-1073: #if defined(CONFIG_POWER_ON_CHARGER_DISPLAY) / extern int g_charge_status; / #include <linux/power_supply.h> / #endif
+      - #else-ветка logo-display (L1192-1210): вложенный #if CONFIG_POWER_ON_CHARGER_DISPLAY (guard if(g_charge_status != CHARGING)) приведён к ref L1272-1285 — единый безусловный блок fb_prepare_logo/fb_set_cmap/fb_show_logo/fb_pan_display
+      проверка: grep -rn g_charge_status t9/base = 0 hits (весь tree)
+  не тронуто: wm831x_power.c (references CONFIG_POWER_ON_CHARGER_DISPLAY, но CONFIG_WM831X_POWER не в .config — файл не компилируется; base==ref IDENTICAL), cpufreq.c base-вариант оставлен (u-символы cpufreq из kallsyms сверяются позже в gap)
+[fix 6] drivers/video/backlight/rk29_backlight.c (t9/base) — ПОДМЕНА 1-в-1 на ref_kernel (SDK)
+  r5b-ошибка (build #2 после fix 4-5): rk29_backlight.c:147/153: error: implicit declaration of function 'read_pwm_reg'/'write_pwm_reg' [-Werror] — guard-цепь base #if CONFIG_ARCH_RK30/#elif RK2928/#elif RK29 не покрывает ARCH_RK3188, макросы не определялись
+  судья (3188_kallsyms): convertint T / rk29_bl_val_scalor_line T / rk29_bl_val_scalor_conic T — эти символы ТОЛЬКО в ref-варианте (base-вариант: include "rk2818_backlight.h", guard-цепь без RK3188, extern dwc_otg_check_dpdm) → донор = ref_kernel/drivers/video/backlight/rk29_backlight.c
+  cp 1-в-1: md5 base==ref bf5e09e2e6192aab44e694b48df1bb2f
+  pwm.h НЕ тронут (минимальный diff): ref-файл использует rk_pwm_setup/rk_pwm_get_base + ЛОКАЛЬНЫЕ макросы read/write_pwm_reg(pwm_base+off) — имена rk_pwm_* объявлены в t9/base/arch/arm/plat-rk/include/plat/pwm.h (L57-59) в ТОЙ ЖЕ сигнатуре, что и ref-pwm.h (diff pwm.h: отличия только в CONFIG_ARCH_RK319X-блоках — не компилируются на RK3188); регистры PWM_REG_PERIOD_HPR/PWM_REG_DUTY_LRC используются ТОЛЬКО в #if CONFIG_ARCH_RK319X ветках ref-файла (не компилируются); non-RK319X ветки пользуют PWM_REG_LRC/HRC — есть в base-pwm.h
+  struct rk29_bl_info: t9/base/arch/arm/plat-rk/include/plat/board.h L64 == ref L65 (все 11 полей, используемых ref-файлом: pwm_id/bl_ref/io_init/io_deinit/pwm_suspend/pwm_resume/min_brightness/max_brightness/brightness_mode/delay_ms/pre_div — присутствуют) → board.h не тронут
+  link-check: pwm.c base экспортит rk_pwm_get_clk/rk_pwm_get_base/rk_pwm_setup (EXPORT_SYMBOL L35/55/73); extern adc_battery_notifier_call_chain в ref-guard-нут CONFIG_BATTERY_RK30_ADC_FAC — "is not set" в ОБОИХ .config (base/ref) → не компилируется; rk29_backlight_set T в судье (используют rk_fb.c, hdmi-backlight.c) — ref экспортит; rk29_get_backlight_status T в судье — ref экспортит
+  rk2818_backlight.h: остаётся в каталоге (включает fih_touchkey_led.c — CONFIG_FIH_TOUCHKEY_LED не в .config, не компилируется)
+[fix 7] arch/mach-rk3188 board-линк: board-mtc.o НЕ СБОРИВАЛСЯ (корень r5c-линк-ошибок)
+  (a) arch/arm/mach-rk3188/Makefile L28: `board-$(CONFIG_MACH_RK3188_MTC) += board-mtc.o` -> `obj-$(...)`: kbuild-переменная board-* НИГДЕ не используется (mёртвая) -> board-mtc.c не компилировался
+      судья: rk29sdk_wifi_power/reset(mac_addr)/set_carddetect, default_sdmmc0/1_data, board_vmac_data, board_clock_init — ВСЕ в orig; ref: nm ref board.o = те же T/D-символы (ref-дерево: obj-y += board.o из board.c, которого нет)
+      минимальный diff: 1 строка (без board.c — board-mtc.c base==ref md5 3a881810...)
+  (b) #include-емые board-mtc.c файлы (L792-794, L81, L1098, L1377): base-варианты != ref (omegamoon/старые) + board-rk31-sdk-vmac.c В BASE ОТСУТСТВУЕТ -> cp 1-в-1 donor=ref_kernel:
+      plat-rk/rk-sdmmc-ops.c, plat-rk/rk-sdmmc-wifi.c, mach-rk30/{board-rk3168-tb-sdmmc-conifg.c, board-pmu-act8846.c, board-rk3168-tb-camera.c, board-rk31-sdk-vmac.c}
+      md5-сверка после cp: все 6 OK; rk-sdmmc-wifi.c(ref): guard `#if (RTL8192CU||RTL8188EU)&&ARCH_RK2928` -> при t9 .config (RTL8192CU=y, RK2928 нет) компилируется #else-ветка c rk29sdk_wifi_power(int on)
+[fix 8] drivers/video/rockchip/hdmi — undefined `hdmi` / `codec_set_spk` (r5c)
+  судья: orig = base-набор rk_hdmi_*.c (T hdmi_get_hotplug/hdmi_work/hdmi_sys_init — ТОЛЬКО в base-наборе; ref-набор hdmi-core.* их не содержит) + chips: hdmitx_*/cat66121_* (it66121) в orig; codec_set_spk в orig ОТСУТСТВУЕТ
+  (a) .config: CONFIG_RK_HDMI_CTL_CODEC=y -> not set (donor=ref .config; judge: нет codec_set_spk -> референс из rk_hdmi_task.c под guard отключается)
+  (b) chips/it66121: cp -r donor=ref_kernel/drivers/video/rockchip/hdmi/it66121/ (без .o/.cmd) + chips/Makefile `obj-$(CONFIG_IT66121) += it66121/` + chips/Kconfig source -> .config CONFIG_IT66121=y (ref .config =y, judge cat66121_*/hdmitx_* T)
+  (c) глобальный `struct hdmi *hdmi` (extern rk_hdmi.h:322; определяют *_hdmi.c чипов): .config + CONFIG_HDMI_RK30=y -> chips/rk30 (judge: hdmi_early_suspend/resume t присутствуют в orig; RK3188=rk30-семейство). Зависимость Kconfig: HDMI_RK30 depends on LCDC_RK30 (не в .config) — если olddefconfig откатит, фолбэк: obj-line в Makefile / другой чип (fix 9)
+  не тронуто: rk_hdmi_*.c base (совпадает с orig), drivers/video/hdmi/ (CONFIG_HDMI not set — как в ref)
+
+[fix 9c] include/linux/rk_fb.h (t9/base) — 2 include + функция целиком, donor=ref_kernel/include/linux/rk_fb.h:
+  - после #include <mach/board.h>: +#include <linux/platform_device.h> / +#include <linux/rk_screen.h> (как в ref L20/L25 — нужны сигнатуре/телу функции)
+  - вставлен static int inline __rk_platform_add_display_devices(...) ЦЕЛИКОМ из ref L386-461 (в таске было L386-438 — неточно: функция в ref физически заканчивается на L461 `}`; L438 = середина lcdc1-ветки) перед финальным #endif
+  проверка: diff sed-срезов = ПУСТОЙ (IDENTICAL); board-mtc.c:1164 и ещё 6 board-файлов вызывают __rk_platform_add_display_devices; PRMRY/rk29fb_info — в rk_screen.h (fix 9b); CRLF=0
+
+[fix 9d] .config (t9/base) — 4 строки: CONFIG_MT6229 / CONFIG_GS_MMA8452 / CONFIG_GS_LIS3DH / CONFIG_GYRO_L3G4200D =y -> "is not set"
+  судья: 0 символов этих драйверов в orig; ref .config: все 4 отсутствуют (даже "not set")
+  проверка: make silentoldconfig rc=0 (TC bin arm-eabi-google) — ВСЕ 4 остались "is not set", отката нет
+  side-note: CONFIG_HDMI_RK30 МОЖЕТ НЕ БЫТЬ В .CONFIG (Kconfig: depends on LCDC_RK30, не в .config — silentoldconfig его стриг) -> покрывается fix 8c (obj-y в Makefile, fолбэк из [fix 8](c))
+  подтверждено: MACH_RK3188_MTC/MTC_DRIVERS/FB_ROCKCHIP/IT66121/ADC_RK30/MALI400/UMP/SND_RK29_WM8731/POWER_ON_CHARGER_DISPLAY intact, RK_HDMI_CTL_CODEC not set
+
+[fix 8c] drivers/video/rockchip/hdmi/chips/Makefile + chips/rk30/Makefile (t9/base) — по 1 строке: obj-$(CONFIG_HDMI_RK30) -> obj-y
+  (chips/Makefile L7 `obj-y += rk30/`; chips/rk30/Makefile L7 `obj-y += rk30_hdmi_hw.o rk30_hdmi.o`; hdcp-строку не трогать — не тронута)
+  причина: CONFIG_HDMI_RK30 зависит от LCDC_RK30 (не в .config) -> kconfig не держит y; судья: hdmi_early_suspend/hdmi_early_resume = t БЕЗ rk30_-префикса -> t9-native chips/rk30; .c файлы не тронуты
+  fallback из [fix 8](c) реализован: obj-line безусловная
+
+[fix 9e] drivers/video/rockchip/screen/ (t9/base) — НОВЫЙ каталог: cp -r donor=ref_kernel/.../screen/ МИНУС артефакты (.o/.cmd/built-in.o/modules.builtin); 68 файлов + .gitignore (ref-артефакт генерации, оставлен)
+  - rockchip/Makefile L1: `obj-$(CONFIG_FB_ROCKCHIP) += rk_fb.o rkfb_sysfs.o` -> `... rk_fb.o rkfb_sysfs.o screen/` (как в ref Makefile, но БЕЗ lcdc/ — t9 использует свои guard-строки LCDC_RK30/RK2928/RK3066B)
+  сверка: md5 rk_screen.c base==ref a1060ca4...; панель = CONFIG_BOX_FB_1080P=y (в ОБОИХ .config — включённые LCD идентичны); lcd.h (генерируемый, .gitignore *lcd.h) — правило `cmp -s $< $@ || cp` в screen/Makefile пересоздаст из lcd_1080p.c; ref-lcd.h == lcd_1080p.c (подтверждено)
+  судья: mtc_get_screen_width/height T, rk3188_load_screen t (lcdc/rk3188_lcdc.c), set_lcd_info T, show_screen_info t
+
+[fix 10]: struct rk29fb_info дедупликация — судья: н/д (структура не в kallsyms); донор ref_kernel: board.h struct НЕ содержит, rk_screen.h L202 = базовый body БЕЗ lcd_enable/lcd_disable. t9/base: board.h L115 имел РАСШИРЕННЫЙ body (+lcd_enable/+lcd_disable), rk_fb.c (FB_ROCKCHIP=y) реально вызывает ->lcd_disable()/->lcd_enable() (L366-370). РЕШЕНИЕ: struct удалён из arch/arm/plat-rk/include/plat/board.h (как в ref-board.h), поля lcd_enable/lcd_disable добавлены в include/linux/rk_screen.h L141-142 (до set_screen_info, порядок как в board.h). SMOKE board-mtc.o RC=0.
+[fix 11]: .config — CONFIG_3G_MODULE=y→not set, CONFIG_MU509=y→not set. Судья: 0 символов mu509/mt6229/mw100/sew868/mi700 в orig (проверено tr -d '\r' | grep -ci = 0/0/0/0/0). Донор: Kconfig drivers/misc/3g_module — MU509 в choice depends on 3G_MODULE, откат невозможен. make silentoldconfig OK; grep: MACH_RK3188_MTC=y MTC_DRIVERS=y FB_ROCKCHIP=y IT66121=y ADC_RK30=y MALI400=m UMP=m — не откатились.
+
+[fix 12A/B/C] (T9.2 handoff #6; данные = handoff #5) — ошибки r5e-билда; ВСЕ 3 применены в дереве:
+  12A include/linux/rk_screen.h: +LVDS_8BIT_1/2/3 (0/1/2) + LVDS_6BIT (3) L4-7; +u16 lvds_format в struct rk29fb_screen L65 (использует rk_screen.c:236 `screen->lvds_format = LVDS_FORMAT`)
+  12B chips/it66121/it66121.h: #include "../rk_hdmi.h" -> "../../rk_hdmi.h" (hdmi-ядро на 2 уровня выше chips/it66121)
+  12C arch/arm/mach-rk3188/include/mach/iomux.h: +5 GPIO0A_* (L174-178: GPIO0A_GPIO0A2=0, GPIO0A_HDMI_I2C_SDA=1, ... GPIO0A_HDMI_HOT_PLUG_IN=1) — нужны chips/rk30/rk30_hdmi.c; после REVERT fix 8c rk30/ НЕ собирается (CONFIG_HDMI_RK30 не в .config) — макросы резервные
+[fix 13] DONOR it66121 = GPL 3.0.101 (T9.2; ручная реконструкция handoff #5 ОТМЕНЕНА)
+  источник: t9/donors_it66121/gpl_kernel_3.0.101_cat66121/ (офиц. Rockchip GPL, 19 файлов, сверен по судье); поиск: #1 SDK=no, #2 github=YES
+  (a) cp cat66121_hdmi.c -> chips/it66121/it66121.c (замена SDK-partial). Патчи: include -> "it66121.h" (+убран include hw.h); xscale/yscale 98->100 (t9-копия и rychly 3.0.36 — 1-в-1 с линией; L224-225)
+      grep-сверка судьи: cat66121_hdmi_init t / __initcall_cat66121_hdmi_init6s / i2c_probe/i2c_remove/shutdown t / cat66121_irq_work_func t / cat66121_thread_interrupt t / hdmi_early_suspend+hdmi_early_resume t (внутри cat66121-объекта c06ac1ac/c06ac238) / cat66121_hdmi_id t — все на месте; device_initcall_sync(cat66121_hdmi_init) есть
+  (b) cp cat66121_hdmi_hw.c -> chips/it66121/it66121_hal.c; include -> it66121.h + hdmitx_drv.h. Донор уже содержит 5 HDMITX_* TX (ReadI2C_Byte/WriteI2C_Byte/ReadI2C_ByteN/WriteI2C_ByteN/SetI2C_Byte — T судье c06ac868..c06acae8) + 8 cat66121_hdmi_sys_* (T) + detect_device/hdmi_interrupt/InterruptClr (T) — НИЧЕГО НЕ ДОПИСАНО; dups с hdmitx_drv.c: НЕТ (InstanceData/CommunBuff в нём отсутствуют)
+  (c) hdmitx_drv.c: вырезан L405-570 CheckHDMITX (MTC-правка; HDMITX_PowerOn остаётся на месте); hdmitx_drv.h: вырезано объявление L733. Остальное НЕ тронуто
+  (d) it66121.h: оставлен OUR (8 деклараций cat66121_hdmi_sys_* идентичны донору/судье — совместимы). +блок HDMI_SOURCE_DEFAULT + struct cat66121_hdmi_pdata + extern cat66121_hdmi + extern hdmi_register/unregister_display_sysfs (из donor .h). Удалены: ручной struct cat66121 + extern HPDStatus (в судье 0 ссылок/символов). Сигнатуры IRQ = donor: void cat66121_hdmi_interrupt(void), void cat66121_InterruptClr(void)
+  (e) hdmitx_sys.c (8351B, реконструкция handoff #5) -> stub-TU: 8 функций УДАЛЕНЫ (теперь = donor it66121_hal.c; иначе multiple definition на link); файл сохранён в Makefile
+  (f) Makefile it66121: obj-$(CONFIG_IT66121) += it66121.o hdmitx_sys.o hdmitx_drv.o it66121_hal.o (hdcp/sha1 убраны — судья: 0 hdcp-символов; sha1_* в судье = crypto/sha1_generic)
+  (g) REVERT [fix 8c]: chips/Makefile L7 + chips/rk30/Makefile L7: obj-y -> obj-$(CONFIG_HDMI_RK30) (HDMI_RK30 не в .config -> rk30/ не собирается; глобальный struct hdmi *hdmi определяет ТОЛЬКО donor it66121.c — без dup; hdmi_early_suspend/resume судьи = из cat66121-объекта)
+  backup прежних файлов: t9/.work/backup_t92/
+[fix 14] SMOKE it66121_hal.c (donor) — 3 мелкие, минимальные правки (судья подтверждает каждую):
+  (a) hdmitx_drv.c: +static bool PowerStatus=FALSE (L35, donor L344); HDMITX_PowerOn/PowerDown: +PowerStatus=TRUE/FALSE; +BOOL getHDMI_PowerStatus() (donor L583) — судья T c06ad368; hdmitx_drv.h: +BOOL getHDMI_PowerStatus(void) (L734, donor L653)
+  (b) hdmitx_FireAFE: static->глоб. в hdmitx_drv.c (прототип L663 + определение L1445); hdmitx_drv.h L760: //void hdmitx_FireAFE(void); -> закомментарен был, раскомментирован (donor L679) — судья T c06ada20
+  (c) it66121.h: +enum { OUTPUT_DVI = 0, OUTPUT_HDMI } (donor cat66121_hdmi_hw.h)
+  SMOKE: it66121.o/hdmitx_sys.o/hdmitx_drv.o/it66121_hal.o = 4 RC=0 (hal.c: 2 warning unused var — в донорском коде, не трогаем)
+[fix 15] FULL r6 линк: multiple definition of `set_lcd_info' — it66121_hal.c:(.text) vs display/built-in.o:lcd_1080p.c. Реальный дуп: rk_screen.o (rockchip/screen, base==ref md5 a1060ca4) vs display/screen/lcd_1080p.o — ОБА определяют глоб. void set_lcd_info; it66121 к дупу отношения НЕ имеет (nm it66121_hal.o: 0 lcd-символов; ld-атрибуция смещена).
+  судья: set_lcd_info T c06a5c38 / show_screen_info t c06a2cb0 — ОБА до cat66121-объекта (c06abfe8+), т.е. из screen/panel-области, один экземпляр.
+  донор: ref_kernel/drivers/video/display/ = ТОЛЬКО display-sys.c+Makefile (screen/ НЕТ); ref display/Makefile БЕЗ строк screen/+transmitter/+tve/. t9 SDK-лишние: display/screen/ (lcd_1080p.c L30 set_lcd_info — тень), transmitter/, tve/.
+  правка: base/drivers/video/display/Makefile — убрана строка `obj-$(CONFIG_DISPLAY_SUPPORT) += screen/` (1 строка). transmitter/+tve/ оставлены (не блокеры; кандидаты на cleanup — 0 T-символов в built-in.o? проверить при gap).
+  проверка: display/built-in.o глобалки = rk_display_device_* (18 в судье ✓) + set_lcd_info (уходит); вызывающих set_lcd_info( из rk_fb.c/car.c нет — extern из rk_screen.h L152 bind'ится к rk_screen.o.
+[fix 16] FULL r6 линк: undefined reference to `getHDMI_PowerStatus' (it66121_hal.c cat66121_hdmi_interrupt/sys_insert/sys_remove) — hdmitx_drv.c (CRLF, python3 bytes.replace; текст 1:1 с donor gpl hdmitx_drv.c L572-586):
+  (a) HDMITX_PowerOn(): +\tPowerStatus = TRUE; (L408, перед hdmitx_LoadRegSetting)
+  (b) HDMITX_PowerDown(): +\tPowerStatus = FALSE; (L415, перед hdmitx_LoadRegSetting)
+  (c) после PowerDown: +BOOL getHDMI_PowerStatus() { \treturn PowerStatus; } — судья T c06ad368 ✓ (стат. bool PowerStatus=FALSE уже L35; декларация в hdmitx_drv.h L734 уже была)
+[fix 17] FULL r6 линк: undefined HDMITX_EnableHDCP x2 / getHDMITX_AuthenticationDone / hdmitx_hdcp_ResumeAuthentication — вызовы в it66121_hal.c ВСЕ под #ifdef SUPPORT_HDCP; судья: 0 данных символов (grep точных имён пусто) => в реал. сборке SUPPORT_HDCP не определён.
+  источник: donor gpl config.h L23-25 = `#ifdef CONFIG_SUPPORT_HDCP / #define SUPPORT_HDCP / #define SUPPORT_SHA / #endif`; our MTC config.h L18-20 = безусловные #define.
+  правка: it66121/config.h (CRLF, bytes.replace) — 2 строки под guard `#ifdef CONFIG_SUPPORT_HDCP ... #endif // CONFIG_SUPPORT_HDCP` (CONFIG_SUPPORT_HDCP не в .config => выключено). hdmitx_hdcp.c/sha1.c остаются вне Makefile (0 символов в судье ✓). it66121.c L218: без SUPPORT_HDCP → hdmi->irq = gpio_to_irq(client->irq) (ветка #else, donor-поведение).
+[fix 18] FULL r6 линк: undefined rk30_gpio_init (board-mtc.c rk30_init_irq → drivers/gpio/gpio-rk30.c). Судья: rk30_gpio_init T c041c024 + rk30_gpio_sysinit t + 15 rk30_gpiolib_*/rk30_gpio_irq_* t — gpio-rk30.o СОБРАН в реал. сборке.
+  our drivers/gpio/Makefile: только obj-$(CONFIG_ARCH_RK2928)/RK30 += gpio-rk30.o; .config: CONFIG_ARCH_RK3188=y. ref_kernel/drivers/gpio/Makefile L51: obj-$(CONFIG_ARCH_RK3188) += gpio-rk30.o.
+  our base gpio-rk30.c (md5 cf79e66c, SDK-вариант): для RK3188 MAX_PIN не определён (#if цепочка без RK3188-ветки и без #else) + требует GRF_GPIO0L_PULL/RK30_GRF_BASE/rk30_gpio_bit_op — в our mach-rk3188 grf.h/iomux.h НЕТ (md5 grf.h differ от ref) → patch'ить нельзя.
+  правка (донор 1:1): cp ref_kernel/drivers/gpio/gpio-rk30.c -> drivers/gpio/gpio-rk30.c (md5 6fda5af6 ✓; самодостаточен: static GPIOGetPinLevel/GPIOSetPinDirection внутри; RK3188-ветка MAX_PIN=RK30_PIN3_PD7 (iomux.h ✓), pull через RK30_PMU_BASE+PMU_GPIO0A_PULL (pmu.h ✓ md5==ref) и RK30_GRF_BASE+GRF_GPIO0B_PULL-4 (io.h/grf.h ✓), iomux_set_gpio_mode (plat/iomux.h ✓, T в our System.map-эквиваленте Module.symvers), enum GPIOPullType (plat/gpio.h L285, виден через mach-rk3188/gpio.h→mach-rk30/gpio.h)); + строка `obj-$(CONFIG_ARCH_RK3188)\t+= gpio-rk30.o` в drivers/gpio/Makefile (после L50, как в ref L51; rk3026/rk319x не добавлены — мин. diff, CONFIG не в .config).
+  backup всех 4 исходников: t9/.work/backup_t92_final/
+  SMOKE it66121+gpio: top-level `make <dir>/built-in.o` в 3.0 = "Nothing to be done" (таргет не рекурсит) => верификация nm hdmitx_drv.o/gpio-rk30.o после FULL r6c.
+
+[fix 19] arch/arm/mach-rk30/pm.c — 4 T-символа suspend-пути (rk30_pm_dump_irq, rk30_pm_dump_inten, rk30_pm_set_power_domain, rk30_suspend).
+  Корень: в base rk30_pm_enter имел блок `#ifdef OMEGAMOON_CHANGED { printk("...SKIPPING...disabling pm"); return 0; }` (L961-964; OMEGAMOON_CHANGED=1 def'ен L29) → весь static suspend-путь (dump_irq/dump_inten/set_power_domain/rk30_suspend) unreferenced → вырезался -O2 (DCE); rk30_pm_enter/finish при этом в new_kallsyms присутствовали — это и есть симптом.
+  правка: удалён ТОЛЬКО этот 4-строчный блок (остальные OMEGAMOON-модификации — #define L29 и ddr_debug-блок L107 — НЕ троганы; не влияют на символы). DONOR ref_kernel/arch/arm/mach-rk30/pm.c md5 ffc8d2b9 (base-до f3513b11; base-ПОСЛЕ eb568b885612ce6c2db7f20d070343e2; файл ASCII/LF, CRLF=0).
+  СУДЬЯ: t rk30_suspend c09c172c / t rk30_pm_dump_irq c09c1130 / t rk30_pm_dump_inten c09c13f0 / t rk30_pm_set_power_domain c09c11f8 (4×t, все в base-сборке отсутствуют были).
+  SMOKE: make ARCH=arm arch/arm/mach-rk30/pm.o RC=0; nm pm.o: t rk30_pm_dump_irq(0c0), t rk30_pm_dump_inten(380), t rk30_pm_set_power_domain(188), t rk30_suspend(584) — все 4 ✓.
+[fix 20] act8846 PMU/regulator — 36+ T/t-символов (board-mtc.c его вызывает).
+  перенос (донор 1:1): cp ref_kernel/drivers/regulator/act8846.c -> t9/base/drivers/regulator/act8846.c md5 4f1bebf9a3c7ebc333945d1b3fca1b0f (== donor ✓).
+  Kconfig: drivers/regulator/Kconfig +12 строк (config REGULATOR_ACT8846 + config ACT8846_SUPPORT_RESET, L285-293); Makefile L55: obj-$(CONFIG_REGULATOR_ACT8846) += act8846.o; .config: CONFIG_REGULATOR_ACT8846=y, CONFIG_ACT8846_SUPPORT_RESET=y. include/linux/regulator/act8846.h в base уже есть ✓; include/config/act8846/support — есть.
+  СУДЬЯ: 35 строк `t/T act8846_*` + 3 ksymtab/kstrtab (grep -c act8846 = 38), all built-in (нет bf-модулей).
+  SMOKE: make ARCH=arm drivers/regulator/act8846.o RC=0; nm: 33 символа (t act8846_dcdc_*×11, t act8846_ldo_*×9, T act8846_device_shutdown, t act8846_i2c_probe/remove/reg_read/set_bits/module_init/exit/resume/suspend).
+  TODO-D (нюанс): act8846_device_suspend c08d4 W / act8846_device_resume W / act8846_early_suspend W / act8846_late_resume W у нас = weak-fallback'ы ИЗ донора (act8846.c L722-751), а в судье они T → strong-определения должны быть в board-mtc.c (открытый вопрос; проверить при FULL-линке/в board).
+[fix 21] hdmitx_Set×3 (hdmitx_SetInputMode, hdmitx_SetCSCScale, hdmitx_SetupAFE).
+  ФАЙЛ: t9/base/drivers/video/rockchip/hdmi/chips/it66121/hdmitx_drv.c (md5 ПОСЛЕ bf4cb5ffe0f35bf8adaa6421451d25d5; backup .work/backup_t93_hdmitx/) + прототипы в hdmitx_drv.h. DONOR: ref_kernel/drivers/video/rockchip/hdmi/it66121/hdmitx_drv.c (в base путь с лишним segments "chips/" — тот же gpl it66121-драйвер; остальные 13 hdmitx_* уже были).
+  правка: добавлены 3 функции (реализация по донору/судье), + прототипы в .h.
+  СУДЬЯ: T hdmitx_SetInputMode c06ad858 / T hdmitx_SetCSCScale c06ad8bc / T hdmitx_SetupAFE c06ad978 (T-верхний регистр — не static, EXPORT'ятся для it66121.c).
+  SMOKE: nm hdmitx_drv.o: T hdmitx_SetInputMode(53c), T hdmitx_SetCSCScale(5a0), T hdmitx_SetupAFE(8e0) — 3×T ✓.
+[fix 22] sdmmc queue/discard ×4 (queue_thread + discard/secdiscard ×sdmmc/emmc).
+  queue: DONOR ref_kernel/drivers/mmc/card/queue.c -> перенесён sdmmc_queue_thread (+вспомогательное) в t9/base/drivers/mmc/card/queue.c (md5 26aec7df025ec218214b5273835a6d43).
+    СУДЬЯ: t sdmmc_queue_thread c07fd57c. SMOKE: make queue.o RC=0; nm queue.o: t sdmmc_queue_thread ✓.
+  discard (БЛОКЕРА, закрыта в этом цикле): после переноса nm block.o = 0 discard-символов. Диагноз ПО ПОРЯДКУ: (a) чистый ресомпил (touch+make RC=0) — не stale; (b) #if-gate'ов нет (grep CONFIG_*discard в block.c пуст, .config discard-конфигов нет); (c) РЕАЛЬНАЯ ПРИЧИНА = -O2 РЕКУРСИВНЫЙ INLINE: call-site mmc_blk_issue_rq (L1246) зовёт mmc_blk_issue_discard_rq → sdmmc/emmc_* — цепочка КОРОткая; у донора та же логика идёт через крупные диспетчеры sdmmc_blk_issue_rq/emmc_blk_issue_rq (ref block.c L1600/L1637), которые gcc НЕ инлайнит. GCC 4.6 инлайнил всю цепочку в mmc_blk_issue_rq → 4 символа исчезли.
+    правка: `noinline` на 4 ЛЕВОВЫХ функциях (static noinline int ...): L695 sdmmc_blk_issue_discard_rq, L734 emmc_blk_issue_discard_rq, L781 sdmmc_blk_issue_secdiscard_rq, L832 emmc_blk_issue_secdiscard_rq. md5 block.c ПОСЛЕ 9ebe10e6051e3885130eb635b24e8cdf (до 828dcad8).
+    СУДЬЯ: t sdmmc_blk_issue_discard_rq c07fb854 / t sdmmc_blk_issue_secdiscard_rq c07fb660 / t emmc_blk_issue_discard_rq c07fb7a8 / t emmc_blk_issue_secdiscard_rq c07fb52c.
+    SMOKE: make block.o RC=0; nm block.o: t emmc_blk_issue_discard_rq(918), t emmc_blk_issue_secdiscard_rq(69c), t sdmmc_blk_issue_discard_rq(9c4), t sdmmc_blk_issue_secdiscard_rq(7d0) — 4×t ✓ (требование "все 3" + emmc-твин c07fb52c/c07fb7a8 тоже закрыты).
+  Свод фазы-1 (все SMOKE RC=0): pm.o 4×t; act8846.o 33 символа; hdmitx_drv.o 3×T; queue.o t sdmmc_queue_thread; block.o 4×t discard.
+
+[fix 23] hdmi_i2s ×5 (donor, 1:1): t hdmi_i2s_init c0421d7c / t __initcall_hdmi_i2s_init6 c042ba70 / t hdmi_i2s_platform_probe c0860e20 / t hdmi_i2s_platform_remove c0860e0c / t hdmi_i2s_hifi_hw_params c0862384 (последний — в machine-драйвере).
+  ДОНОР: ref_kernel/sound/soc/codecs/hdmi_i2s.c md5 c60a31dbdb3ab1fe974f9b3c8a9a920f + ref_kernel/sound/soc/rk29/rk_hdmi_i2s.c md5 707a5a99b31b11e2d5ca4f63e7e84ae9 (оба cp 1:1).
+  ПРАВКИ: sound/soc/codecs/Makefile (snd-soc-hdmi-i2s-objs + obj-$(CONFIG_SND_SOC_HDMI_I2S)); sound/soc/codecs/Kconfig (config SND_SOC_HDMI_I2S tristate, ОБЯЗАТЕЛЬНО с prompt — корень: scripts/kconfig/confdata.c conf_read сбрасывает опции без prompt, sym->visible==no; prompt-less опция не персистит в .config); sound/soc/rk29/Makefile (rk_hdmi_i2s objs + obj-$(CONFIG_SND_RK_SOC_HDMI_I2S)); sound/soc/rk29/Kconfig (config SND_RK_SOC_HDMI_I2S, prompt, depends SND_RK29_SOC && RK_HDMI, select SND_RK29_SOC_I2S + SND_SOC_HDMI_I2S).
+  .config: CONFIG_SND_SOC_HDMI_I2S=y + CONFIG_SND_RK_SOC_HDMI_I2S=y; silentoldconfig RC=0, обе персистят.
+  md5 ПОСЛЕ: codecs/hdmi_i2s.c c60a31db...(=donor), codecs/Makefile 9a74bc4f, codecs/Kconfig 8e903707, rk29/rk_hdmi_i2s.c 707a5a99(=donor), rk29/Makefile f197f22a, rk29/Kconfig 63238a22.
+  nm: codecs/hdmi_i2s.o → t×4 + t __initcall; rk29/rk_hdmi_i2s.o → t hdmi_i2s_hifi_hw_params. SMOKE RC=0 (leaf .o). Backup: t9/.work/backup_t93b/.
+[fix 24] adc ref_volt ×2 (donor): T adc_get_def_ref_volt c07d8820 / T adc_get_curr_ref_volt c07d8edc + r __ksymtab×2 c0b1a270/c0b1a278 + r __kstrtab×2 c0b34152/c0b34168.
+  ДОНОР: ref_kernel/drivers/adc/core.c md5 261583ca80d911bc07dd7c0079b37541 (функции L247-272: обе + EXPORT_SYMBOL).
+  ПРАВКИ: drivers/adc/core.c (struct adc_host *g_adc = NULL; после L10; обе функции перед static int __init adc_core_init) + drivers/adc/adc_priv.h (struct adc_client *base_client; + struct adc_platform_data *pdata; в struct adc_host до priv[0]; extern struct adc_host *g_adc; — CRLF, правка python bytes.replace).
+  md5 ПОСЛЕ: core.c a65d24f0, adc_priv.h e8f12869. nm: T×2 + r __ksymtab/__kstrtab. SMOKE make ARCH=arm drivers/adc/core.o RC=0 (CONFIG_ADC=y + ADC_RK30=y уже в base).
+[fix 25] defconfig-твин (C): .config t9/base 1-в-1 с оригиналом по built-in/модулям (8 CONFIG + backlight.c vendor-блок).
+  WIFI-VERDICT: rtw/rtl819x = BUILT-IN (c0*). Судья: 887 символов (grep -iE 'rtw_|rtl819|_wifi_'), ВСЕ c0* (c04a/c071-c076/c09f/c0b1-c0b3; T×653/t×181/r×53), ни одного bf0* → НЕ .ko, портить vmlinux НЕ надо; драйвер в base (drivers/net/wireless/rtlwifi/rtl8192cu + rtl8192c common).
+  CONFIG-таблица (семья → CONFIG → старое→новое → эффект по судье):
+    audio/alsa : CONFIG_SND_USB_AUDIO        y→n ("is not set") — снимает ADDED snd_usb-символы (оригинале off)
+    audio/alsa : CONFIG_SND_HWDEP            y→n (пропал из .config = n, forced) — tristate БЕЗ prompt в sound/core/Kconfig L10 → invisible, oldconfig сбрасывает в n
+    audio/alsa : CONFIG_SND_RAWMIDI          y→n (то же, sound/core/Kconfig L13, invisible)
+    net/usb    : CONFIG_UHID                 y→n ("is not set")
+    net/usb    : CONFIG_USB_NET_CDC_NCM      y→n ("is not set")
+    camera rk1000: CONFIG_SND_RK29_SOC_RK1000 y→n ("is not set") — судья grep rk1000 пусто (24 ADDED уходят)
+    camera rk1000: CONFIG_SND_SOC_RK1000      y→n (пропал из .config = n, forced) — tristate БЕЗ prompt, depends on RK1000_CONTROL закомментирован (sound/soc/codecs/Kconfig L417)
+    vendor A2  : CONFIG_RK29_IPP             m→y — судья built-in (staging/rk29/ipp)
+  ИТОГО 7×disable + 1×enable = 8 правок; снимает ~299 ADDED (audio/uhid/ncm/rk1000).
+  backlight.c vendor-add: +`#include <linux/workqueue.h>` (L17); блок перед backlight_class_init: static delayed_work + unsigned int backlight_on_delay_ms + static void backlight_on_delay_func(work) {ms=0} + `int backlight_on_delayed(int delay_ms)` {cancel_delayed_work_sync; ms=delay_ms; schedule_delayed_work(msecs_to_jiffies)}. Decomp-донор: /home/amper/tmp/ida-tmp/mtc_audio/src_all/decompiled_backlight_on_delayed.c (T c069dc28, 1 арг delay_ms, 88B). Допустимый +1 t backlight_on_delay_func = drift (поменено в комментарии). INIT_DELAYED_WORK(&backlight_on_delay_work, backlight_on_delay_func) добавлен в backlight_class_init (wire func, убирает -Wunused-function).
+  oldconfig: make ARCH=arm oldconfig RC=0 ("configuration written to .config"); ПЕРСИСТЕНЦИЯ grep: 5×"is not set" (NCM L1230, USB_AUDIO L2129, RK29_SOC_RK1000 L2154, UHID L2169 + HWDEP/RAWMIDI/SND_SOC_RK1000 = absent по invisible), CONFIG_RK29_IPP=y (L2618), CONFIG_RTL8192CU=y (L1210) — все ✓.
+  KEEP (не тронуто): CONFIG_RFKILL=y (L915), CONFIG_USB_HID=y (L2174), CONFIG_BACKLIGHT_CLASS_DEVICE=y (L2017), CONFIG_BACKLIGHT_RK29_BL=y (L2019), CONFIG_SND_RK_SOC_HDMI_I2S=y (L2160), CONFIG_SND_SOC_HDMI_I2S=y (L2164), RTL8192CU=y; gt9xx НЕ включал (MTC car.c даёт gtp-символы).
+  SMOKE: make ARCH=arm drivers/video/backlight/backlight.o RC=0, warning-free; nm: T backlight_on_delayed (0x6d0) + t backlight_on_delay_func + b backlight_on_delay_ms/backlight_on_delay_work. judge: T c069dc28.
+  md5 .config ПОСЛЕ: 9c31af058ddd50d40c96a89f537577e9 (до fix25 после A2-правок: b5c4d660e663c0ad187852699124894c).
+  Для коммита devops'ом: t9/base/.config, t9/base/drivers/video/backlight/backlight.c.
+
+[fix 26] rtl8192cu в сборку (judge ~743 unique rtw/cfg80211_rtw/__param_str_rtw символы, ~300KB size gap)
+  ROOT CAUSE (пересмотрено против гипотезы «дубль config RTL8192CU + upstream rtlwifi»):
+  - Судья строил VENDOR-драйвер rkusbwifi/rtl8192cu (Realtek SDK: core/hal/include/os_dep), НЕ upstream drivers/net/wireless/rtlwifi/. Доказательство: nm ref_kernel/rkusbwifi/rtl8192cu/built-in.o = 667 T/t rtw_*; ВСЕ 667 ⊆ judge (comm=667); cfg80211_rtw_* (33) и __param_str_rtw_* (35, тип r) тоже в ref built-in.o и в judge. Upstream rtlwifi в ref НЕ собран (в ref .config нет CONFIG_RTLWIFI; ref wireless/Makefile ссылается только на rkusbwifi/).
+  - В t9/base drivers/net/wireless/rkusbwifi/rtl8192cu/ был ТОЛЬКО Kconfig (без Makefile/core/hal/include/os_dep) + rkusbwifi/Makefile строил только rkcfg.o. Отсюда «1 rtw-символ» в vmlinux.
+  - Коллизии Kconfig НЕТ: t9/base drivers/net/wireless/Kconfig НЕ sourc'ит rtlwifi/Kconfig (файл 135 строк, sources только rkusbwifi/{rtl8192cu,rtl8188eu}, ar6003, rkwifi); vendor Kconfig уже source-ится в choice (L90), CONFIG_RTL8192CU=y уже в .config. Kconfig менять не пришлось (идентичен ref, diff clean).
+  ПРАВКИ (минимальные):
+  - Скопировано из ref_kernel/drivers/net/wireless/rkusbwifi/rtl8192cu/: Makefile + core/ hal/ include/ os_dep/ (170 .c/.h-файлов, 5.5M; exclude *.o/*.cmd; Kconfig уже был идентичный).
+  - drivers/net/wireless/rkusbwifi/Makefile: `obj-$(CONFIG_RTL8192CU) += rkcfg.o` → `obj-$(CONFIG_RTL8192CU) += rkcfg.o rtl8192cu/` (1 строка, как в ref).
+  - .config: НЕ тронут (CONFIG_RTL8192CU=y уже персистентно; vendor scripts/kconfig/Makefile не имеет цели olddefconfig — не нужен, Kconfig-дереву изменений нет).
+  SMOKE (object-level, без full-линка): make ARCH=arm -jN drivers/net/wireless/rkusbwifi/rtl8192cu/ RC=0; 8192cu.o + built-in.o = 641210 B.
+  nm t9 built-in.o: 667 T/t rtw_*/_rtw_* — набор БАЙТ-в-байТ идентичен ref (diff empty); +33 cfg80211_rtw_* (все 33 ⊆ judge); +35 __param_str_rtw_* (тип r; все ⊆ judge). ВСЕГО 1823 unique символов в .o; INTERSECTION С JUDGE rtw-семейством: 743/743 = 100%, missing=0.
+  judge-grep sample (t9 .o / judge): rtw_getbbrfreg_cmdrsp_callback 1/1, _rtw_init_cmd_priv 1/1, rtw_init_cmd_priv 1/1, cfg80211_rtw_get_key 1/1, __param_str_rtw_network_mode 1/1.
+  md5 ПОСЛЕ: rkusbwifi/Makefile d1179e1cb3863105680a046e3609ef64; .config 9c31af058ddd50d40c96a89f537577e9 (неизменён, = после fix25).
+  KEEP (не тронуто): drivers/net/wireless/rtlwifi/ (upstream, мёртвый код — не в Kconfig-sources и не в wireless/Makefile), rkusbwifi/rtl8188eu.
+  Для коммита devops'ом: t9/base/drivers/net/wireless/rkusbwifi/Makefile, t9/base/drivers/net/wireless/rkusbwifi/rtl8192cu/ (170 файлов: Makefile + core/ hal/ include/ os_dep/).
+[fix 27] defconfig-дополнение (C2): EXT3_FS_XATTR not-set→=y, EXT4_FS_XATTR not-set→=y (~62 ext xattr), TEST_POWER not-set→=y (~15); ALARMTIMERS/MB_CACHE — prompt нет в дереве (не персистит, code-gap); CPU_FREQ_GOV_INTERACTIVE уже =y; MTD_NAND_RK29XX keep =y (32 bf0 rknand закроются .ko в D); skip gtp (GT9110_BQ/XPT2046 — отдельный шаг); md5 .config ПОСЛЕ=f529434faefba0a355de92023b80baa4.
