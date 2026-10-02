@@ -1,8 +1,0 @@
---- a/drivers/misc/Kconfig
-+++ b/drivers/misc/Kconfig
-@@ -586,4 +586,5 @@
- source "drivers/misc/3g_module/Kconfig"
- source "drivers/misc/scaler/Kconfig"
- source "drivers/misc/mediatek/Kconfig"
-+source "drivers/misc/mtc/Kconfig"
- endif # MISC_DEVICES

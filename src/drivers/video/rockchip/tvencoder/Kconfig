@@ -1,0 +1,11 @@
+#
+# TV Encoder drivers configuration
+#
+
+menuconfig RK_TVENCODER
+	bool "Rockchip TV Encoder support"
+	depends on FB_ROCKCHIP
+    help
+       Support RockChip TV Encoder if you say y here.
+
+source "drivers/video/rockchip/tvencoder/ch7025/Kconfig"
