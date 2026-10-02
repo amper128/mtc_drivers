@@ -1,4 +1,4 @@
-# MANIFEST.sha256 (S2a; S4-fix-6 re-gen): md5/sha256 всех patch + src-manifest
+# MANIFEST.sha256 (S2a; RB1 re-gen): md5/sha256 всех patch + src-manifest
 # <sha256>  <rel-путь в patches/>
 6ed1c1ee7ad2330cc7e82603f45748367ca30291994cacd30e0b2dd5a8c713a6  local/0001-arch-arm-kernel-vmlinux-lds.patch
 52543e2ad9f34496a39b8946d8c44b4180515bfb9554372aff871c80880c6436  local/0002-arch-arm-mach-rk30-devices-c.patch
@@ -24,19 +24,17 @@ dccffdfd7bff08cb7029800ae5e352cc644128837fd996091922e38a46b9f528  local/0021-dri
 f52dbbb57e2326cdb59d9cc7008c0df864ae2cedc33a69323214c552c118c4d4  local/0022-drivers-video-logo-Kconfig.patch
 d666e51d1cc747bfda03393fae1c0082f2d48c77e7d62ac338b421b1e1aa2f32  local/0023-drivers-video-logo-Makefile.patch
 26ab3c57dd1532acfa875d869684173a076bb92a44c982a8d7c7e786b8bccef3  local/0024-drivers-video-rockchip-hdmi-rk-hdmi-h.patch
-f8bb1d9b7f9b4d75dfbb808445cd13b2bc3d942355552f3b8a7abed5b23e0b6c  local/0025-include-linux-alarmtimer-h.patch
 88347a1813f3ca833ac3c67f80a595eb240257ec443b04c91f8a82b829932a1a  local/0026-include-linux-mmc-host-h.patch
 191f683db5be684000d2129fcf6d59e7403c156c6644c9ac9c24f4e51b3887c0  local/0027-include-linux-rk-screen-h.patch
 764abd540f6487c4cf55ade865a9a110fd6c39b2805a7e56505238504d81f639  local/0028-include-net-ipv6-h.patch
 23dc6ad54603a7ec103d525a72dcb4145acc15d9230474d3b2732b6a3360606d  local/0029-include-sound-pcm-params-h.patch
-742542d237b939f1a01c11801dd1817311a3c2bcaafa3def286788653b1f272a  local/0030-kernel-time-alarmtimer-c.patch
 f4619f6a60679a194f08d709e2a7b357c2c0d58a51fdc7006e1019849aff485a  local/0031-net-ipv4-icmp-c.patch
 e8dbedd89d41e9abd4fe5db0280044e29061f2c00b7fbfd9a5b264ab8024d759  local/0032-net-ipv4-ping-c.patch
-505a942f5d6e5c59dec18eb4a1a0c50d30d966f364ee73e547e0068c098b6dd8  local/0033-net-ipv6-icmp-c.patch
 923044cb18b70419f93a403302bf42b3e8222da61bdb92fb6119cce48f4b5c04  local/0034-net-ipv6-ping-c.patch
 c78f75497be0625ee3e16d5128bfb9165be0e1d710670549d582ae7382d6921a  local/0035-security-selinux-av-permissions-h.patch
 c81a6fc1310fe825cbca7fbfc3f213cac76d545e105dad8ac926a6dd4427663f  local/0036-security-selinux-flask-h.patch
 0b748b71a3f294781761509e03ca8e2f817bb843786adc6f3938832432981fa4  local/0037-include-trace-events-cpufreq_interactive.patch
+2bc795a3662c975f7f0c486b1089429f9443d67595d2cb5c0c80f85edb02830c  local/0038-arch-arm-plat-rk-dma-pl330-c-initcall.patch
 7c097c22abf01b20f43abba58779c1b530e670d20ffc2f1d8ffe43d34836427f  vendor/0001-arch-arm-mach-rk30-board-pmu-act8846-c.patch
 d4ecf01bee9068ba5572e27cf9d7df3ebd23bcd1a70b4d5131278e77e2104110  vendor/0002-arch-arm-mach-rk30-board-rk31-sdk-vmac-c.patch
 5fe635171554428be8c4e9c1532d67c1e722cc42cbcd2026143e1befda1362ff  vendor/0003-arch-arm-mach-rk30-board-rk3168-tb-camera-c.patch
@@ -83,7 +81,14 @@ ea7226324fa91c2812dd096ffcf6eaa1b99415c0051518a237713506ea728be1  vendor/0043-sc
 a49d72421182381b4507ef615b610e167abcc16dc4493e398bc79c828fb26453  vendor/0044-scripts-kconfig-zconf-tab-c.patch
 19ddea0e69dc1b696b192ddbb34f548321b4142d214049650448022d69dc3ce9  vendor/0045-scripts-mod-elfconfig-h.patch
 51ce122bebcc70dfbb7f4ecbe908b0664de99b16f3001955451d3b523cdfd06c  vendor/0046-sound-soc-rk29-rk29-i2s-h.patch
-6bf7c31ac1e1859692172853b3bd46e6c3379a5fde2bbc44e18ed883bd699fe2  SRC_MANIFEST.txt
+ff34ac1b52ced49ffa2574b06f5f2d1dbd84ee2a7f766d900c3c586c5d93a3ba  vendor/0047-kernel-time-alarmtimer-c.patch
+4f05dab3dc0b4c1082e6c004f2fcdf07975ed5ac5a5ce3dca212a6cc586bb999  vendor/0048-fs-timerfd-c.patch
+f1a3fd2b592a94e26f4626f8775526c4acfa52d66def636c3ddd99954b04bb64  vendor/0049-include-linux-posix-timers-h.patch
+c7f40eb5e61739eac168155635062f4f677e8f8a93c89c910c0514c950b9876e  vendor/0050-include-linux-alarmtimer-h.patch
+f57e698cba10eaee4ae4e7f79c1ab38842e7c4eb0b2b775dc88b8ec7e25874e4  vendor/0051-drivers-gpu-ion-ion-c.patch
+671ae5d67837675f91d7a62202d90a265d82bf9df8358ac4b3f359f4eb13195c  vendor/0052-arch-arm-plat-rk-clock-c-clk-panic.patch
+7583243e3566c011e1117fe0b0458bbafa56db3738c3e93e5a8c84284aef6daa  vendor/0053-net-ipv6-icmp-c.patch
+df4f685cafa906050d96c459d7f9e47b9e6f979aba3736f8ac0d374ae39a0a01  SRC_MANIFEST.txt
 # md5:
 33140263ba9caaa242ccb8af73a1def0  local/0001-arch-arm-kernel-vmlinux-lds.patch
 4d496bcf04f8c4ac166ae73e1c243b31  local/0002-arch-arm-mach-rk30-devices-c.patch
@@ -109,19 +114,17 @@ cef296e2929a1cfbcfd3f2c95987cb91  local/0021-drivers-video-display-Makefile.patc
 d8f11fda2c2d604a2c3ff8892de3f9b0  local/0022-drivers-video-logo-Kconfig.patch
 e9ac62d1a574b673ac8c0a6adb9b751d  local/0023-drivers-video-logo-Makefile.patch
 0186180aa6b6bf8ffaaaab6f2ece5fc1  local/0024-drivers-video-rockchip-hdmi-rk-hdmi-h.patch
-267c6c2bfd96da1de35884b742fdad93  local/0025-include-linux-alarmtimer-h.patch
 17cdc6416831e99f88dff6fd2f26a134  local/0026-include-linux-mmc-host-h.patch
 c42c2cb1b9754027d7e34fe454c0a020  local/0027-include-linux-rk-screen-h.patch
 91a3b3ac6d13a4df45dc0708698ffdd2  local/0028-include-net-ipv6-h.patch
 2d2a5b17a9ae883ce72e5c6bef2fc32f  local/0029-include-sound-pcm-params-h.patch
-eddc2bd3d92a54a917aff1dc02f38736  local/0030-kernel-time-alarmtimer-c.patch
 47a1a253c915d9ff6565fef55dce2b2b  local/0031-net-ipv4-icmp-c.patch
 7d42729db660e08613769741cdc7719b  local/0032-net-ipv4-ping-c.patch
-6ea1f06cf9cf9b30efc7088f76aba29f  local/0033-net-ipv6-icmp-c.patch
 ab9872ae5062a01d9ffd3abb68588ce7  local/0034-net-ipv6-ping-c.patch
 86262d2ae39ac6976264ec6baaacfee9  local/0035-security-selinux-av-permissions-h.patch
 114e244d1887b403d5b01fc2e9492519  local/0036-security-selinux-flask-h.patch
 b26009344ce9fada1bd3914b098353c0  local/0037-include-trace-events-cpufreq_interactive.patch
+ace8144a5aa576f38e70236c8f200931  local/0038-arch-arm-plat-rk-dma-pl330-c-initcall.patch
 739193d0bef4576371605268b42ac0a1  vendor/0001-arch-arm-mach-rk30-board-pmu-act8846-c.patch
 b3d70e96850395fff59a96a00b31ca15  vendor/0002-arch-arm-mach-rk30-board-rk31-sdk-vmac-c.patch
 0f79018982697261e3931034ebae979a  vendor/0003-arch-arm-mach-rk30-board-rk3168-tb-camera-c.patch
@@ -168,4 +171,11 @@ e6f6a78898a06a898417408ab59e03bf  vendor/0043-scripts-kconfig-zconf-hash-c.patch
 6182a1a39ae8c45e7d1d45f528183a91  vendor/0044-scripts-kconfig-zconf-tab-c.patch
 2555d4cf1ea082b100c673e8bf42592a  vendor/0045-scripts-mod-elfconfig-h.patch
 a0e576559ba0272b5a8e0f23d67c5fe8  vendor/0046-sound-soc-rk29-rk29-i2s-h.patch
-9461ec3681a06840456c5e7cdc6e356d  SRC_MANIFEST.txt
+d0a28cb6d09d9dfdce5d469a8b2104f4  vendor/0047-kernel-time-alarmtimer-c.patch
+ef5cea3710fba064e50ba38389f76bf7  vendor/0048-fs-timerfd-c.patch
+b97e72cb2e793fb0c72a0963e07e40ed  vendor/0049-include-linux-posix-timers-h.patch
+11b109dc0a6d29f5b35ec33dbd18aaac  vendor/0050-include-linux-alarmtimer-h.patch
+cb7fdbf859c05a15172c3b252d00cd37  vendor/0051-drivers-gpu-ion-ion-c.patch
+9b178fc2e6a6dc166a8ac02bbbf314c5  vendor/0052-arch-arm-plat-rk-clock-c-clk-panic.patch
+d11edba0827a20f45258ca84aed1b9b4  vendor/0053-net-ipv6-icmp-c.patch
+cc5242bb8b3269c0c7a9e5be35ebe5e4  SRC_MANIFEST.txt

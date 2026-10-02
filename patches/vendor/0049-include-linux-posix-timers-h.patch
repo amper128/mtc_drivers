@@ -1,0 +1,14 @@
+--- a/include/linux/posix-timers.h
++++ b/include/linux/posix-timers.h
+@@ -81,7 +81,10 @@
+ 			unsigned long incr;
+ 			unsigned long expires;
+ 		} mmtimer;
+-		struct alarm alarmtimer;
++		struct {
++			struct alarmtimer alarmtimer;
++			ktime_t interval;
++		} alarm;
+ 		struct rcu_head rcu;
+ 	} it;
+ };
