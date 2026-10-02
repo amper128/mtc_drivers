@@ -1,0 +1,45 @@
+# QA_metric_frozen.txt — Замороженная судейская метрика (S3, QA)
+# Дата заморозки: 2026-10-02 15:25 MSK (Europe/Moscow)
+# Цель: ОДНА формула для всех верификаций (cleanroom r6 и далее). Регрессия = отклонение от r5-baseline.
+
+## ФОРМУЛА СУДЕЙСКОГО ЗАМЕРА (canonical)
+Скрипт-судья: scripts/verify_symbols.sh <result_dir>  (LC_ALL=C, set -euo pipefail)
+  REF  = /home/amper/Coding/RK3188/3188_kallsyms  (42433 строки; CRLF → `tr -d '\r'`)
+  RES  = <result_dir>/kallsyms.txt  (формат "name type", генерируется build.sh: nm vmlinux | awk '{print $3,$2}' | sort)
+
+  ref_tt   : unique T/t — tr -d '\r' < REF | awk '$2=="T"||$2=="t"{print $3"\t"$1}' | sort -u      (unique T/t имён: 30521)
+  res_tt   : unique T/t — awk '$2=="T"||$2=="t"{print $1}' RES/kallsyms.txt | sort -u
+  COMMON   = count( ref_tt_names ∩ res_tt )   — comm -12 (unique T/t в result ∩ unique T/t в ref)
+  MISSING  = count( ref_tt_names \ res_tt )   — comm -23 (есть в ref T/t, нет в result)
+  ADDED    = count( res_all \ ref_all )       — comm -13 (все имена result, не в ref; breakdown by type)
+  ADDR_MATCH: min-адрес на имя (nm -n result/vmlinux vs ref T/t, join) — только если есть result/vmlinux
+  MTC-core : car_init backview_init tef6606_init mtc_getTouchKey cat66121_hdmi_init board_clock_init ∈ RES/kallsyms.txt
+  Trk3188  : strings result/vmlinux | grep -c Trk3188  (треб. ≥1)
+  size     : stat -c%s result/vmlinux.stripped ; r5 exact = 8303780
+
+## R5-BASELINE (прогон verify_symbols.sh на t9 r5-данных)
+Вход: RES/kallsyms.txt = `awk '{print $3,$2}' /home/amper/Coding/mtc_build/t9/new_kallsyms_r5.txt`
+      (System.map "addr type name" → "name type"; 47939 строк)
+      RES/vmlinux   = symlink на /home/amper/Coding/mtc_build/t9/vmlinux.stripped_r5
+                      (md5 20954d8aa66f4dd4b8c97ec75d9d1ff2, 8303780 B — для Trk3188; nm: stripped → ADDR_MATCH n/a)
+      Прогон: bash scripts/verify_symbols.sh /tmp/qa0_r5 → RC=0, полный вывод /tmp/qa0_judge_out.txt
+
+| метрика   | r5-baseline | требование для r6 (нет регрессии) |
+|-----------|-------------|-----------------------------------|
+| COMMON    | 27094       | >= 27094                          |
+| MISSING   | 3427        | <= 3427                           |
+| ADDED     | 8371        | <= 8371                           |
+| Trk3188   | 3           | >= 1                              |
+| MTC-core  | PASS (6/6)  | PASS (6/6)                        |
+| size      | 8303780     | 8303780 ±0.5% (41519 B)           |
+| ADDR_MATCH| n/a (нет r5 vmlinux с символами) | не блокирует  |
+
+ADDED-by-type (r5): d=3826 b=2119 D=975 t=966 B=344 r=177 T=158 A=9 a=6 W=2
+Raw-строка судьи: == verify_symbols: COMMON=27094 MISSING=3427 ADDED=8371 ADDR_MATCH=n/a% MTC-core=PASS Trk3188=3 size=n/a
+(в baseline size=n/a т.к. vmlinux.stripped не кладём в RES-каталог судьи; r5 exact size зафиксирован выше: 8303780)
+
+## КРИТЕРИЙ ИТОГА S3
+  cleanroom r6: COMMON>=27094 И MISSING<=3427 И ADDED<=8371 → «РЕОРГАНИЗАЦИЯ УСПЕШНА (reproduces r5)»
+  иначе → «РЕГРЕССИЯ: <что>»
+  V5 (stretch, НЕ блокирующий): md5 result/vmlinux.stripped == 20954d8aa66f4dd4b8c97ec75d9d1ff2
+    (ожидается ≠ из-за __TIME__ в compile.h — пометить, не блокировать)

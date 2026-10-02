@@ -1,4 +1,10 @@
 *.config
+
+# kernel .config (binaRE) — tracked, не QMake-конфиг
+!src/config/
+!src/config/.config
+!src/config/mtc_defconfig
+
 *.creator
 *.files
 *.includes
