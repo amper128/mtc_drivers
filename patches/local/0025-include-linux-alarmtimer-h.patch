@@ -1,0 +1,12 @@
+--- a/include/linux/alarmtimer.h
++++ b/include/linux/alarmtimer.h
+@@ -32,9 +32,5 @@
+ 	void			*data;
+ };
+ 
+-void alarm_init(struct alarm *alarm, enum alarmtimer_type type,
+-		void (*function)(struct alarm *));
+-void alarm_start(struct alarm *alarm, ktime_t start, ktime_t period);
+-void alarm_cancel(struct alarm *alarm);
+ 
+ #endif

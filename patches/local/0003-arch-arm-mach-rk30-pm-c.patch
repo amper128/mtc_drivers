@@ -1,0 +1,13 @@
+--- a/arch/arm/mach-rk30/pm.c
++++ b/arch/arm/mach-rk30/pm.c
+@@ -958,10 +958,6 @@
+ 
+ static int rk30_pm_enter(suspend_state_t state)
+ {
+-#ifdef OMEGAMOON_CHANGED
+-	printk("Omegamoon >> %s called, **SKIPPING** effectively disabling pm\n", __func__);
+-	return 0;
+-#endif
+ 	rk_soc_pm_ctr_bits_prepare();
+ 
+ 	if(rk_soc_pm_ctr_bits_check(RK_SUSPEND_RET_DIRT_BITS))

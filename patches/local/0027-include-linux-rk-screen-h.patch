@@ -1,0 +1,45 @@
+--- a/include/linux/rk_screen.h
++++ b/include/linux/rk_screen.h
+@@ -1,6 +1,11 @@
+ #ifndef _SCREEN_H
+ #define _SCREEN_H
+ 
++#define LVDS_8BIT_1     0
++#define LVDS_8BIT_2     1
++#define LVDS_8BIT_3     2
++#define LVDS_6BIT       3
++
+ typedef enum _SCREEN_TYPE {
+     SCREEN_NULL = 0,
+     SCREEN_RGB,
+@@ -57,7 +62,7 @@
+ typedef struct rk29fb_screen {
+ 	/* screen type & hardware connect format & out face */
+ 	u16 type;
+-	u16 hw_format;
++	u16 lvds_format;  //lvds data format
+ 	u16 face;
+ 	u8 lcdc_id;    //which output interface the screeen connect to
+ 	u8 screen_id; //screen number
+@@ -129,6 +134,21 @@
+ 	int (*sscreen_set)(struct rk29fb_screen *screen, bool type);// 1: use scaler 0:bypass
+ } rk_screen;
+ 
++struct rk29fb_info {
++	u32 fb_id;
++	enum rk_disp_prop prop;		//display device property,like PRMRY,EXTEND
++	u32 mcu_fmk_pin;
++	struct rk29lcd_info *lcd_info;
++	int (*io_init)(struct rk29_fb_setting_info *fb_setting);
++	int (*io_deinit)(void);
++	int (*io_enable)(void);
++	int (*io_disable)(void);
++	int (*lcd_enable)(void);		//open lcd output when hdmi resume
++	int (*lcd_disable)(void);		//hdmi timeout  close lcd output
++	void (*set_screen_info)(struct rk29fb_screen *screen, struct rk29lcd_info *lcd_info );
++};
++
++extern size_t get_fb_size(void);
+ extern void set_lcd_info(struct rk29fb_screen *screen, struct rk29lcd_info *lcd_info);
+ extern void set_tv_info(struct rk29fb_screen *screen);
+ extern void set_hdmi_info(struct rk29fb_screen *screen);

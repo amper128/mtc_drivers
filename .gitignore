@@ -3,3 +3,17 @@
 *.files
 *.includes
 *.user
+
+# MTC build artifacts / junk
+result/
+__pycache__/
+*.o
+*.cmd
+System.map
+vmlinux
+vmlinux.o
+include/generated/
+include/config/
+.config.orig
+*.log
+kernel.idb.zip

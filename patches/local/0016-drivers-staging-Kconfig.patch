@@ -1,0 +1,10 @@
+--- a/drivers/staging/Kconfig
++++ b/drivers/staging/Kconfig
+@@ -107,6 +107,7 @@
+ #source "drivers/staging/rk29/vivante/Kconfig"
+ source "drivers/staging/rk29/ipp/Kconfig"
+ 
++source "drivers/staging/zsmalloc/Kconfig"
+ source "drivers/staging/zram/Kconfig"
+ 
+ source "drivers/staging/zcache/Kconfig"

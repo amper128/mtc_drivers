@@ -1,0 +1,20 @@
+--- a/drivers/mmc/card/queue.c
++++ b/drivers/mmc/card/queue.c
+@@ -42,7 +42,7 @@
+ 	return BLKPREP_OK;
+ }
+ 
+-static int mmc_queue_thread(void *d)
++static int sdmmc_queue_thread(void *d)
+ {
+ 	struct mmc_queue *mq = d;
+ 	struct request_queue *q = mq->queue;
+@@ -206,7 +206,7 @@
+ 
+ 	sema_init(&mq->thread_sem, 1);
+ 
+-	mq->thread = kthread_run(mmc_queue_thread, mq, "mmcqd/%d%s",
++	mq->thread = kthread_run(sdmmc_queue_thread, mq, "mmcqd/%d%s",
+ 		host->index, subname ? subname : "");
+ 
+ 	if (IS_ERR(mq->thread)) {

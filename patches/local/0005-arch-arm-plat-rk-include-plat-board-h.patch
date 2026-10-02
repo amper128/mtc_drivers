@@ -1,0 +1,30 @@
+--- a/arch/arm/plat-rk/include/plat/board.h
++++ b/arch/arm/plat-rk/include/plat/board.h
+@@ -112,19 +112,6 @@
+ 	u8 standby_en;
+ };
+ 
+-struct rk29fb_info {
+-	u32 fb_id;
+-	enum rk_disp_prop prop;		//display device property,like PRMRY,EXTEND
+-	u32 mcu_fmk_pin;
+-	struct rk29lcd_info *lcd_info;
+-	int (*io_init)(struct rk29_fb_setting_info *fb_setting);
+-	int (*io_deinit)(void);
+-	int (*io_enable)(void);
+-	int (*io_disable)(void);
+-	int (*lcd_enable)(void);		//open lcd output when hdmi resume
+-	int (*lcd_disable)(void);		//hdmi timeout  close lcd output
+-	void (*set_screen_info)(struct rk29fb_screen *screen, struct rk29lcd_info *lcd_info );
+-};
+ 
+ struct rksdmmc_iomux {
+     char    *name;  //set the MACRO of gpio
+@@ -265,6 +252,7 @@
+ 	int (*rmii_io_deinit)(void);
+ 	int (*rmii_power_control)(int enable);
+         int(*rmii_speed_switch)(int speed);
++        int(*rmii_extclk_sel)(void);
+ };
+ /* adc battery */
+ struct rk30_adc_battery_platform_data {

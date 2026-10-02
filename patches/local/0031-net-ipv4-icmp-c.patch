@@ -1,0 +1,11 @@
+--- a/net/ipv4/icmp.c
++++ b/net/ipv4/icmp.c
+@@ -790,7 +790,7 @@
+ 	if (iph->protocol == IPPROTO_ICMP &&
+ 	    iph->ihl >= 5 &&
+ 	    pskb_may_pull(skb, (iph->ihl<<2)+8)) {
+-		ping_err(skb, icmp_hdr(skb)->un.gateway);
++		ping_err(skb, 0, ntohl(icmp_hdr(skb)->un.gateway));
+ 	}
+ 
+ out:

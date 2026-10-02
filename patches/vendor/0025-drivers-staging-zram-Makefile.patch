@@ -1,0 +1,8 @@
+--- a/drivers/staging/zram/Makefile
++++ b/drivers/staging/zram/Makefile
+@@ -1,4 +1,3 @@
+ zram-y	:=	zram_drv.o zram_sysfs.o
+ 
+ obj-$(CONFIG_ZRAM)	+=	zram.o
+-obj-$(CONFIG_XVMALLOC)	+=	xvmalloc.o
+\ No newline at end of file

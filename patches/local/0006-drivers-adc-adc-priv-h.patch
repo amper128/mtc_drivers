@@ -1,0 +1,19 @@
+--- a/drivers/adc/adc_priv.h
++++ b/drivers/adc/adc_priv.h
+@@ -72,6 +72,8 @@
+         struct mutex m_lock;
+         unsigned int client_count;
+ 	const struct adc_ops *ops;
++	struct adc_client *base_client;
++	struct adc_platform_data *pdata;
+         unsigned long priv[0];
+ };
+ 
+@@ -80,6 +82,7 @@
+ 	return adc->priv;
+ }
+ 	
++extern struct adc_host *g_adc;
+ struct adc_host *adc_alloc_host(struct device *dev, int extra, enum host_chn_mask mask);
+ void adc_free_host(struct adc_host *adc);
+ void adc_core_irq_handle(struct adc_host *adc);

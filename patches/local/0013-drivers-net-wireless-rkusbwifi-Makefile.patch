@@ -1,0 +1,11 @@
+--- a/drivers/net/wireless/rkusbwifi/Makefile
++++ b/drivers/net/wireless/rkusbwifi/Makefile
+@@ -6,7 +6,7 @@
+ rkcfg-y += $(rk_cfg)
+ 
+ obj-$(CONFIG_RTL8188EU) += rkcfg.o
+-obj-$(CONFIG_RTL8192CU) += rkcfg.o
++obj-$(CONFIG_RTL8192CU) += rkcfg.o rtl8192cu/
+ 
+ .PHONY: clean
+ 

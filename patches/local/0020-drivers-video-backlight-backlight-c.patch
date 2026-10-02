@@ -1,0 +1,42 @@
+--- a/drivers/video/backlight/backlight.c
++++ b/drivers/video/backlight/backlight.c
+@@ -14,6 +14,7 @@
+ #include <linux/err.h>
+ #include <linux/fb.h>
+ #include <linux/slab.h>
++#include <linux/workqueue.h>
+ 
+ #ifdef CONFIG_PMAC_BACKLIGHT
+ #include <asm/backlight.h>
+@@ -374,8 +375,31 @@
+ 	class_destroy(backlight_class);
+ }
+ 
++/* [fix 25] vendor-add (binaRE MTC): backlight_on_delayed @ c069dc28 (T, 1 арг delay_ms).
++ * Decomp: /home/amper/tmp/ida-tmp/mtc_audio/src_all/decompiled_backlight_on_delayed.c.
++ * Допустимый drift: +1 static t backlight_on_delay_func (no-op worker). */
++static struct delayed_work backlight_on_delay_work;
++static unsigned int backlight_on_delay_ms;
++
++static void backlight_on_delay_func(struct work_struct *work)
++{
++	(void)work;
++	backlight_on_delay_ms = 0;
++}
++
++int backlight_on_delayed(int delay_ms)
++{
++	int ret;
++
++	cancel_delayed_work_sync(&backlight_on_delay_work);
++	backlight_on_delay_ms = delay_ms;
++	ret = schedule_delayed_work(&backlight_on_delay_work, msecs_to_jiffies(delay_ms));
++	return ret;
++}
++
+ static int __init backlight_class_init(void)
+ {
++	INIT_DELAYED_WORK(&backlight_on_delay_work, backlight_on_delay_func);
+ 	backlight_class = class_create(THIS_MODULE, "backlight");
+ 	if (IS_ERR(backlight_class)) {
+ 		printk(KERN_WARNING "Unable to create backlight class; errno = %ld\n",

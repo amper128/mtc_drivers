@@ -1,0 +1,11 @@
+--- a/include/sound/pcm_params.h
++++ b/include/sound/pcm_params.h
+@@ -337,5 +337,8 @@
+ 	return 0;
+ }
+ 
++/* Rockchip: non-LPCM (IEC60958) pass-through flag (rk30_i2s) */
++#define HW_PARAMS_FLAG_NLPCM	1
++
+ #endif /* __SOUND_PCM_PARAMS_H */
+ 

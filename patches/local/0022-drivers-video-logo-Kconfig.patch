@@ -1,0 +1,10 @@
+--- a/drivers/video/logo/Kconfig
++++ b/drivers/video/logo/Kconfig
+@@ -98,3 +98,7 @@
+ 	depends on  LOGO_LINUX_BMP
+ 	default n
+ endif # LOGO
++
++config LOGO_LINUX_800x480_CLUT224
++        bool "Standard 224-color 800x480 Linux logo "
++        default n

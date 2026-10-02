@@ -1,0 +1,11 @@
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -145,6 +145,8 @@
+ struct mmc_card;
+ struct device;
+ 
++#define HOST_IS_EMMC(host)	(host->unused)
++
+ struct mmc_host {
+ 	struct device		*parent;
+ 	struct device		class_dev;

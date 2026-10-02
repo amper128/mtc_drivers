@@ -1,0 +1,38 @@
+--- a/arch/arm/mach-rk30/devices.c
++++ b/arch/arm/mach-rk30/devices.c
+@@ -28,6 +28,35 @@
+ #include <mach/debug_uart.h>
+ #include <plat/rk_fiq_debugger.h>
+ 
++/* T9.2 build fix (t9/base only): this file is compiled from mach-rk3188's
++ * Makefile (obj-y += ../mach-rk30/devices.o), so <mach/iomux.h> resolves to
++ * the mach-rk3188 header which lacks these rk30 I2C-mux macros (they live in
++ * mach-rk30/include/mach/iomux.h). Reproduce them verbatim (guarded, no
++ * behavior change when built in the rk30 context).
++ */
++#ifndef GPIO2D_I2C1_SCL
++#define GPIO2D_I2C1_SCL				1
++#define GPIO2D_I2C1_SDA				1
++#define GPIO2D_I2C0_SCL				1
++#define GPIO2D_I2C0_SDA				1
++#define GPIO3A_I2C4_SCL				1
++#define GPIO3A_I2C4_SDA				1
++#define GPIO3A_I2C3_SCL				1
++#define GPIO3A_I2C3_SDA				1
++#define GPIO3A_I2C2_SCL				1
++#define GPIO3A_I2C2_SDA				1
++#define GPIO2D7_I2C1SCL_NAME			"gpio2d7_i2c1scl_name"
++#define GPIO2D6_I2C1SDA_NAME			"gpio2d6_i2c1sda_name"
++#define GPIO2D5_I2C0SCL_NAME			"gpio2d5_i2c0scl_name"
++#define GPIO2D4_I2C0SDA_NAME			"gpio2d4_i2c0sda_name"
++#define GPIO3A5_I2C4SCL_NAME			"gpio3a5_i2c4scl_name"
++#define GPIO3A4_I2C4SDA_NAME			"gpio3a4_i2c4sda_name"
++#define GPIO3A3_I2C3SCL_NAME			"gpio3a3_i2c3scl_name"
++#define GPIO3A2_I2C3SDA_NAME			"gpio3a2_i2c3sda_name"
++#define GPIO3A1_I2C2SCL_NAME			"gpio3a1_i2c2scl_name"
++#define GPIO3A0_I2C2SDA_NAME			"gpio3a0_i2c2sda_name"
++#endif
++
+ #ifdef CONFIG_ADC_RK30
+ static struct adc_platform_data rk30_adc_pdata = {
+         #if defined(CONFIG_ARCH_RK3066B) || defined(CONFIG_ARCH_RK3188)
