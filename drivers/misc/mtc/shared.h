@@ -334,5 +334,5 @@ int rk_fb_show_logo(void); /* binaRE @0xc06a26dc (def: lcd.c) */
 int rk29sdk_wifi_power(int on); /* def: ref_kernel board-rk30-sdk-sdmmc.c */
 int sta_touch_adc(char *buf); /* def: car.c (binaRE 0xc0842888, MTC-14) */
 struct mtc_keys_data *mtc_keys_data_ptr(void); /* def: keys.c (MTC-14: keys_data .bss @0xC168E474) */
-int sta_touch_cal(void *data); /* TENTATIVE */
+int sta_touch_cal(unsigned int *data); /* def: car.c (binaRE 0xc08428a4, t6b; u32* == unsigned int*) */
 #endif // _MTC_SHARED_H

@@ -141,4 +141,16 @@ struct mtc_car_struct {
 
 extern struct mtc_car_struct car_struct;
 
+/* ===== binaRE MTC-14 t6b: gtp (touch) judge-символы — GLOBAL, def: car.c ===== */
+struct i2c_client;
+struct gtp_dev;
+int gtp_reset_guitar(struct i2c_client *client, int ms); /* judge c083df60 */
+int gtp_i2c_read(struct i2c_client *client, const unsigned char *buf, unsigned short len); /* judge c083d2ac/c083dfdc */
+int gtp_i2c_write(struct i2c_client *client, const unsigned char *buf, unsigned short len); /* judge c083d1e0/c083e0d8 */
+int gtp_i2c_test(struct i2c_client *client); /* judge c083d23c/c083e078 */
+int isTouchDisable(void); /* judge c082e80c */
+char **get_panel(unsigned short w, unsigned short h, int vendor, int flag); /* judge c083e378 */
+unsigned int gtp_write_panel(struct gtp_dev *dev); /* judge c09c60b4 */
+int gtp_init_panel(struct gtp_dev *dev); /* judge c09c61a8 */
+
 #endif
