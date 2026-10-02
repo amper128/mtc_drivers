@@ -1,0 +1,3 @@
+[submodule "ref_kernel"]
+	path = ref_kernel
+	url = https://github.com/omegamoon/rockchip-rk3188-generic.git
