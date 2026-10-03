@@ -46,6 +46,8 @@ static struct rk_fb_rgb def_rgb_16 = {
      transp: { offset: 0,  length: 0, },
 };
 
+struct list_head saved_list;
+
 char * get_format_string(enum data_format format,char *fmt)
 {
 	if(!fmt)
@@ -852,6 +854,62 @@ static int rk_fb_set_par(struct fb_info *info)
 	return 0;
 }
 
+void rk_fb_free_dma_buf(struct rk_fb_dma_buf_data *dma_buf_data)
+{
+	if(dma_buf_data->acq_fence){
+		sync_fence_put(dma_buf_data->acq_fence);
+	}
+	memset(dma_buf_data, 0, sizeof(struct rk_fb_dma_buf_data));
+}
+static void rk_fb_update_reg(struct rk_lcdc_device_driver * dev_drv,struct rk_reg_data *regs)
+{
+	int i,ret=0;
+	ktime_t timestamp = dev_drv->vsync_info.timestamp;
+
+	struct rk_fb_dma_buf_data old_dma_bufs[RK30_MAX_LAYER_SUPPORT];
+
+	if(dev_drv->lcdc_reg_update)
+		dev_drv->lcdc_reg_update(dev_drv);
+
+	if(dev_drv->wait_fs == 0){
+		ret = wait_event_interruptible_timeout(dev_drv->vsync_info.wait,
+			!ktime_equal(timestamp, dev_drv->vsync_info.timestamp),msecs_to_jiffies(dev_drv->cur_screen->ft+5));
+	}else{
+		kfree(regs);
+	}
+	sw_sync_timeline_inc(dev_drv->timeline, 1);
+
+	if(dev_drv->win_data.acq_fence_fd[0] >= 0)
+	{
+		for(i=0;i<RK30_MAX_LAYER_SUPPORT;i++){
+			if(dev_drv->win_data.acq_fence_fd[i] > 0){
+				put_unused_fd(dev_drv->win_data.acq_fence_fd[i]);
+				printk("acq_fd=%d\n",dev_drv->win_data.acq_fence_fd[i]);
+			}	
+			rk_fb_free_dma_buf(&regs->dma_buf_data[i]);
+		}
+	}
+}
+
+static void rk_fb_update_regs_handler(struct kthread_work *work)
+{
+	struct rk_lcdc_device_driver * dev_drv =
+			container_of(work, struct rk_lcdc_device_driver, update_regs_work);
+	struct rk_reg_data *data, *next;
+	//struct list_head saved_list;
+
+	mutex_lock(&dev_drv->update_regs_list_lock);
+	saved_list = dev_drv->update_regs_list;
+	list_replace_init(&dev_drv->update_regs_list, &saved_list);
+	mutex_unlock(&dev_drv->update_regs_list_lock);
+
+	list_for_each_entry_safe(data, next, &saved_list, list) {
+		rk_fb_update_reg(dev_drv,data);
+		list_del(&data->list);
+		kfree(data);
+	}
+}
+
 static int rk_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	struct rk_lcdc_device_driver * dev_drv = (struct rk_lcdc_device_driver * )info->par;
@@ -1351,6 +1409,23 @@ int rk_fb_register(struct rk_lcdc_device_driver *dev_drv,
 				dev_drv->vsync_info.thread = NULL;
 			}
 			dev_drv->vsync_info.active = 1;
+			INIT_LIST_HEAD(&dev_drv->update_regs_list);
+			mutex_init(&dev_drv->update_regs_list_lock);
+			init_kthread_worker(&dev_drv->update_regs_worker);
+
+			dev_drv->update_regs_thread = kthread_run(kthread_worker_fn,
+					&dev_drv->update_regs_worker, "rk-fb");
+			if (IS_ERR(dev_drv->update_regs_thread)) {
+				int err = PTR_ERR(dev_drv->update_regs_thread);
+				dev_drv->update_regs_thread = NULL;
+
+				printk("failed to run update_regs thread\n");
+				return err;
+			}
+			init_kthread_work(&dev_drv->update_regs_work, rk_fb_update_regs_handler);
+
+			dev_drv->timeline = sw_sync_timeline_create("rk-fb");
+			dev_drv->timeline_max = 1;
 			fbi->fbops->fb_open(fbi, 1);
 		}
 			
