@@ -1,0 +1,20 @@
+--- a/drivers/video/rockchip/lcdc/rk3188_lcdc.c
++++ b/drivers/video/rockchip/lcdc/rk3188_lcdc.c
+@@ -1773,7 +1773,7 @@
+ 	.load_screen		= rk3188_load_screen,
+ 	.set_par       		= rk3188_lcdc_set_par,
+ 	.pan_display            = rk3188_lcdc_pan_display,
+-//	.lcdc_reg_update	= rk3188_lcdc_reg_update,
++	.lcdc_reg_update	= rk3188_lcdc_reg_update,
+ 	.blank         		= rk3188_lcdc_blank,
+ 	.ioctl			= rk3188_lcdc_ioctl,
+ 	.suspend		= rk3188_lcdc_early_suspend,
+@@ -1789,7 +1789,7 @@
+ 	.set_irq_to_cpu		= rk3188_lcdc_set_irq_to_cpu,
+ 	.dpi_open               = rk3188_lcdc_dpi_open,
+ 	.dpi_layer_sel          = rk3188_lcdc_dpi_layer_sel,
+-//	.dpi_status          	= rk3188_lcdc_dpi_status,
++	.dpi_status          	= rk3188_lcdc_dpi_status,
+ };
+ 
+ static irqreturn_t rk3188_lcdc_isr(int irq, void *dev_id)

@@ -1,0 +1,20 @@
+--- a/arch/arm/mach-rk3188/clock_data.c	2026-10-03 19:32:47.951786940 +0300
++++ b/arch/arm/mach-rk3188/clock_data.c	2026-10-03 19:32:52.558196696 +0300
+@@ -1797,7 +1797,7 @@
+ static struct clk dclk_lcdc0 = {
+ 	.name		= "dclk_lcdc0",
+ 	.mode		= gate_mode,
+-	.set_rate	= clkset_rate_evendiv_autosel_parents,
++	.set_rate	= dclk_lcdc_set_rate,
+ 	.recalc		= clksel_recalc_div,
+ 	.gate_idx	= CLK_GATE_DCLK_LCDC0_SRC,
+ 	.clksel_con	= CRU_CLKSELS_CON(27),
+@@ -1810,7 +1810,7 @@
+ static struct clk dclk_lcdc1 = {
+ 	.name		= "dclk_lcdc1",
+ 	.mode		= gate_mode,
+-	.set_rate	= clkset_rate_evendiv_autosel_parents,
++	.set_rate	= dclk_lcdc_set_rate,
+ 	.recalc		= clksel_recalc_div,
+ 	.gate_idx	= CLK_GATE_DCLK_LCDC1_SRC,
+ 	.clksel_con	= CRU_CLKSELS_CON(28),

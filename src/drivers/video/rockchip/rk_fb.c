@@ -123,6 +123,24 @@ int rk_fb_dpi_layer_sel(int layer_id)
 	return 0;
 }
 
+int rk_fb_dpi_status(void)
+{
+	struct rk_lcdc_device_driver * dev_drv = NULL;
+	struct rk_fb_inf *inf =  platform_get_drvdata(g_fb_pdev);
+	int i;
+	int ret = 0;
+	for( i = 0; i < inf->num_lcdc; i++)
+	{
+		if(inf->lcdc_dev_drv[i]->enable)
+			break;
+	}
+	dev_drv = inf->lcdc_dev_drv[i];
+	if(dev_drv->dpi_status)
+		ret = dev_drv->dpi_status(dev_drv);
+
+	return ret;
+}
+
 /**********************************************************************
 this is for hdmi
 name: lcdc device name ,lcdc0 , lcdc1
@@ -1210,6 +1228,26 @@ static void fb_show_bmp_logo(struct fb_info *info, int rotate)
 }
 #endif
 
+static int __attribute__((__noinline__)) get_extend_fb_id(char *id )
+{
+	int fb_id = 0;
+	if(!strcmp(id,"fb0"))
+	{
+		fb_id = 0;
+	}
+	else if(!strcmp(id,"fb1"))
+	{
+		fb_id = 1;
+	}
+#if defined(CONFIG_LCDC_RK30)	//only rk30 lcdc has three windows layer now
+	else if(!strcmp(id,"fb2"))
+        {
+               fb_id = 2;
+        }
+#endif
+	return fb_id;
+}
+
 int rk_fb_register(struct rk_lcdc_device_driver *dev_drv,
 	struct rk_lcdc_device_driver *def_drv,int id)
 {
@@ -1259,6 +1297,7 @@ int rk_fb_register(struct rk_lcdc_device_driver *dev_drv,
 		fbi->var = def_var;
 		fbi->fix = def_fix;
 		sprintf(fbi->fix.id,"fb%d",fb_inf->num_fb);
+		(void)get_extend_fb_id(fbi->fix.id);
 		fbi->var.xres = fb_inf->lcdc_dev_drv[lcdc_id]->cur_screen->x_res;
 		fbi->var.yres = fb_inf->lcdc_dev_drv[lcdc_id]->cur_screen->y_res;
 		fbi->var.grayscale |= (fbi->var.xres<<8) + (fbi->var.yres<<20);
