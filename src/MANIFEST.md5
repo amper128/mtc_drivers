@@ -304,3 +304,6 @@ f197f22a5a1957f27e11388fe075b6c8  sound/soc/rk29/Makefile
 029880cffe6071118d83b4319c001bbf  sound/soc/rk29/rk29_wm8731.c
 8d7907d8fbf193ff26e905a129cf43c4  sound/soc/rk29/rk30_i2s.c
 707a5a99b31b11e2d5ca4f63e7e84ae9  sound/soc/rk29/rk_hdmi_i2s.c
+86ddcf40d009b065fb333505a518da2e  drivers/input/touchscreen/tsc2003.c
+ffcf2c10e9cd836e9eb67d12c85cee81  drivers/input/touchscreen/Kconfig
+929f3c3bcb59cc45753bce4f35f0a75a  drivers/input/touchscreen/Makefile
