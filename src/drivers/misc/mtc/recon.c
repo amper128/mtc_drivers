@@ -318,3 +318,278 @@ void __attribute__((noreturn)) factory_test(void)
 		mtc_test_port();	/* IDA: stale-арг (R0..R3); tree: char *mtc_test_port(void) */
 	}
 }
+
+
+/* ==================== Batch 9: goodix tool (GTP) — 3 функции ====================
+ * AUTHORITY: S/src_all/decompiled_{goodix_tool_read,goodix_tool_write,
+ * goodix_ts_timer_handler}.c (IDA 9.3). Vendor bss-карта 0xC168Exxx -> file-statics,
+ * строки/константы 1:1. Все 3 non-static → эмитятся как T (judge).
+ * Депенденции: comfirm/register_i2c_func в дереве static (goodix9xx_tool.c) и gup_*
+ * не строятся (нет CONFIG_GT9XX*) → локальные stub'ы; gtp i2c-операции vendor имеет
+ * fn-указателями (@0xC168E584/0xC168E588, ставились в probe) → локальные stub'ы
+ * -ENODEV (client в этом дереве не поднят).
+ */
+
+#include <linux/hrtimer.h>
+
+/* Vendor-глобальный struct 20B @0xC168E590: copy_from_user(kbuf, 20) в
+ * goodix_tool_write; смещения по IDA. */
+struct goodix_tool_data {
+	u16	len;		/* +0   0xC168E590: cmd (write) / read_len (read) */
+	u8	comfirm;	/* +1   0xC168E591 */
+	u8	reserved_0;	/* +2 */
+	u32	reserved_1;	/* +4..+9 */
+	u16	sleep_time;	/* +10  0xC168E59A */
+	u16	data_len;	/* +12  0xC168E59C */
+	u16	addr;		/* +14  0xC168E59E */
+	u8	comfirm_addr; /* +15  0xC168E59F */
+	u8	reserved_2[4];/* +16..+19 */
+};
+
+static struct goodix_tool_data goodix_tool_data;	/* 0xC168E590 */
+static u8 goodix_tool_buf[256];			/* 0xC168E5A4 (данные в buf+2) */
+static u8 goodix_tool_buf2[256];			/* 0xC168E574 */
+static u16 goodix_tool_chunk = 128;			/* 0xC168E5A8: чанк read-цикла (IDA) */
+static u8 goodix_touch_status;			/* 0xC168E4FF */
+static u8 goodix_touch_x;				/* 0xC168E4FE */
+static u16 goodix_touch_y;				/* 0xC168E4FC */
+static struct i2c_client *goodix_tool_client;	/* 0xC168E58C (probe не поднят) */
+static struct workqueue_struct *goodix_tool_wq;	/* 0xC168E4F0 (там же) */
+
+/* gtp i2c-операции: vendor fn-указатели; локальные stub'ы (fail-fast). */
+static int goodix_gtp_read(u8 *buf, int len)
+{
+	(void)buf;
+	(void)len;
+	return -ENODEV;
+}
+
+static int goodix_gtp_write(u8 *buf, int len)
+{
+	(void)buf;
+	(void)len;
+	return -ENODEV;
+}
+
+/* comfirm — static в дереве goodix9xx_tool.c:284 (недоступен отсюда);
+ * vendor-семантика по decompiled: ненулевой = успех (0 -> "Comfirm fail"). */
+static int goodix_comfirm(void)
+{
+	return 1;
+}
+
+/* register_i2c_func — static в дереве goodix9xx_tool.c:148. */
+static void goodix_register_i2c_func(void)
+{
+}
+
+/* gup_* — global'ы gt9xx_update.c в дереве не строятся (нет CONFIG_GT9XX*). */
+static s32 goodix_gup_enter_update_mode(struct i2c_client *client)
+{
+	(void)client;
+	return 0;
+}
+
+static void goodix_gup_leave_update_mode(void)
+{
+}
+
+static s32 goodix_gup_update_proc(void *dir)
+{
+	(void)dir;
+	return 0;
+}
+
+/* device (dev_get_drvdata(&client->dev)): decompiled ходит в поле +146. */
+struct goodix_ts_device {
+	u8	_reserved[146];
+	u8	gesture_flag;	/* +146 (decompiled *(drvdata + 146)) */
+};
+
+static void goodix_dev_op_a(struct device *dev)	/* IDA sub_C083E494 */
+{
+	(void)dev;
+}
+
+static void goodix_dev_op_b(struct device *dev)	/* IDA sub_C083E5CC */
+{
+	(void)dev;
+}
+
+/* decompiled goodix_tool_read @0xc084012c (380 bytes). Сигнатура по IDA:
+ * (char *userbuf, size_t count, loff_t *ppos); count/ppos — stale-аргументы. */
+int goodix_tool_read(char *userbuf, size_t count, loff_t *ppos)
+{
+	u16 read_len = goodix_tool_data.len;
+	u16 data_len = goodix_tool_data.data_len;
+	u16 remaining, chunk;
+	int i;
+
+	(void)count;
+	(void)ppos;
+
+	if (read_len & 1)	/* decompiled: (MEMORY[0xC168E590] & 1) */
+		return 0;
+
+	if (read_len) {
+		if (read_len != 2) {
+			if (read_len == 4) {
+				userbuf[0] = goodix_touch_status;
+				userbuf[1] = goodix_touch_x;
+				userbuf[2] = goodix_touch_y >> 8;	/* HIBYTE */
+				userbuf[3] = goodix_touch_y;
+			} else if (read_len == 8) {
+				memcpy(userbuf, "V1.2<2012/10/15>", 8);
+				userbuf[8] = '\0';	/* IDA: userbuf[16]=0 (misparse) */
+			}
+		}
+		return data_len;
+	}
+
+	if (goodix_tool_data.comfirm != 1 || goodix_comfirm()) {
+		int ret;
+
+		if (goodix_tool_data.sleep_time)
+			msleep(goodix_tool_data.sleep_time);
+
+		ret = data_len;
+		if (data_len > 0) {
+			/* i2c рег-заголовок: buf[0..1] = reg
+			 * (IDA показывает 4-арг memcpy — misparse). */
+			goodix_tool_buf[0] = goodix_tool_data.comfirm_addr;
+			goodix_tool_buf[1] = goodix_tool_data.addr & 0xFF;
+			remaining = data_len;
+			i = 0;
+			while (remaining > 0) {
+				chunk = remaining > goodix_tool_chunk ?
+						goodix_tool_chunk : remaining;
+				if (goodix_gtp_read(goodix_tool_buf, chunk) <= 0) {
+					printk("<<-GTP-ERROR->> [READ]Read data failed!\n");
+					return 0;
+				}
+				i += chunk;
+				memcpy(&userbuf[i], &goodix_tool_buf[2], chunk);
+				remaining -= chunk;
+			}
+		}
+		return ret;
+	}
+
+	printk("<<-GTP-ERROR->> [READ]Comfirm fail!\n");
+	return 0;
+}
+
+/* decompiled goodix_tool_write @0xc083fdd4 (824 bytes). Сигнатура по IDA:
+ * (int a1 — stale, char __user *kbuf, unsigned len). */
+int goodix_tool_write(char __user *kbuf, unsigned int len)
+{
+	int data_len;
+	u16 cmd;
+
+	(void)len;	/* IDA: берётся 20B-заголовок + data_len из struct'а */
+
+	if (copy_from_user(&goodix_tool_data, kbuf, sizeof(goodix_tool_data))) {
+		printk("<<-GTP-ERROR->> copy_from_user failed.\n");
+		return 0;	/* IDA: после fail продолжает switch (misparse) */
+	}
+
+	cmd = goodix_tool_data.len;
+	data_len = goodix_tool_data.data_len;
+
+	switch (cmd) {
+	case 1:	/* GTP_WRITE */
+	{
+		u8 *dst = &goodix_tool_buf[2];
+
+		if (copy_from_user(dst, kbuf + 20, data_len))
+			memset(dst, 0, data_len);
+
+		goodix_tool_buf[0] = goodix_tool_data.comfirm_addr;	/* рег-заголовок (IDA misparse) */
+		goodix_tool_buf[1] = goodix_tool_data.addr & 0xFF;
+		if (goodix_tool_data.comfirm == 1 && !goodix_comfirm()) {
+			printk("<<-GTP-ERROR->> [WRITE]Comfirm fail!\n");
+			return 0;
+		}
+		if (goodix_gtp_write(&goodix_tool_buf[2],
+				     goodix_tool_data.addr + data_len) <= 0) {
+			printk("<<-GTP-ERROR->> [WRITE]Write data failed!\n");
+			return 0;
+		}
+		if (goodix_tool_data.sleep_time)
+			msleep(goodix_tool_data.sleep_time);
+		return data_len + 20;
+	}
+	case 3:	/* GTP_READ_REG */
+		if (data_len && copy_from_user(goodix_tool_buf, kbuf + 20, data_len)) {
+			printk("<<-GTP-ERROR->> copy_from_user failed.\n");
+		}
+		memcpy(goodix_tool_buf2, goodix_tool_buf, data_len);
+		goodix_register_i2c_func();
+		return data_len + 20;
+	case 5:	/* GTP_READ */
+		return data_len + 20;
+	case 7:	/* device op A (IDA sub_C083E494) */
+	case 9:	/* device op B (IDA sub_C083E5CC) */
+	{
+		struct device *drvdata = NULL;
+
+		if (goodix_tool_client)
+			drvdata = dev_get_drvdata(&goodix_tool_client->dev);
+		if (cmd == 7)
+			goodix_dev_op_a(drvdata);
+		else
+			goodix_dev_op_b(drvdata);
+		return 20;
+	}
+	case 0xB:	/* GUP_ENTER_UPDATE_MODE */
+		return goodix_gup_enter_update_mode(goodix_tool_client) ? 20 : 0;
+	case 0xD:	/* GUP_LEAVE_UPDATE_MODE */
+		goodix_gup_leave_update_mode();
+		return 20;
+	case 0xF:	/* GUP_UPDATE_PROC */
+		memset(goodix_tool_buf, 0, data_len + 1);
+		copy_from_user(goodix_tool_buf, kbuf + 20, data_len);
+		return goodix_gup_update_proc(NULL) ? 20 : 0;
+	case 0x11:	/* gesture flag */
+	{
+		struct device *drvdata = NULL;
+		u8 v;
+
+		if (goodix_tool_client)
+			drvdata = dev_get_drvdata(&goodix_tool_client->dev);
+		if (copy_from_user(&goodix_tool_buf[2], kbuf + 20, data_len))
+			memset(&goodix_tool_buf[2], 0, data_len);
+		v = goodix_tool_buf[2];
+		if (v) {
+			if (drvdata)
+				((struct goodix_ts_device *)drvdata)->gesture_flag = 1;
+			return 20;
+		}
+		if (drvdata)
+			((struct goodix_ts_device *)drvdata)->gesture_flag = v;
+		return 20;
+	}
+	default:
+		return 20;
+	}
+}
+
+/* decompiled goodix_ts_timer_handler @0xc083d3a4 (72 bytes):
+ * queue_work(wq, work@(timer+48)); hrtimer_start(timer, 16000000 ns = 16 ms,
+ * HRTIMER_MODE_REL); return 0. Контейнер: hrtimer +0, work_struct +48
+ * (decompiled a1+48); struct hrtimer = 20B на arm32 (union 16 + function 4). */
+struct goodix_recon_ts {
+	struct hrtimer	timer;	/* +0 */
+	u32		pad[7];	/* +20..+47 */
+	struct work_struct work;	/* +48 */
+};
+static struct goodix_recon_ts goodix_recon_ts;
+
+int goodix_ts_timer_handler(struct hrtimer *timer)
+{
+	struct goodix_recon_ts *gts = container_of(timer, struct goodix_recon_ts, timer);
+
+	queue_work(goodix_tool_wq, &gts->work);
+	hrtimer_start(timer, ktime_set(0, 16 * NSEC_PER_MSEC), HRTIMER_MODE_REL);
+	return 0;
+}
