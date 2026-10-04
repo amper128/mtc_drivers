@@ -593,3 +593,30 @@ int goodix_ts_timer_handler(struct hrtimer *timer)
 	hrtimer_start(timer, ktime_set(0, 16 * NSEC_PER_MSEC), HRTIMER_MODE_REL);
 	return 0;
 }
+
+
+/* ==================== Batch 10: goodix_ts_init (decompiled) ====================
+ * AUTHORITY: S/src_all/decompiled_goodix_ts_init.c (IDA 9.3, @0xc09bd3b4, 108B).
+ * vendor late_initcall (__initcall_goodix_ts_init7, ур.7). Логика 1:1:
+ *   printk(GTP driver install, line 1245);
+ *   bss[0xC168E4F0] = alloc_workqueue("goodix_wq", 10, 1);  // _alloc_workqueue_key
+ *   если wq — i2c_register_driver(); иначе printk(Creat workqueue failed, 1249); -ENOMEM.
+ * 0xC168E4F0 — тот же bss-слот, что goodix_tool_wq выше (Batch 9, tamjye).
+ * i2c_driver struct в дереве static (goodix_touch_82x.c:829 / goodix_touch.c:850) —
+ * MTC-зависимость: локальный stub struct с .driver.name (probe/remove не поднимаются).
+ */
+static struct i2c_driver goodix_recon_ts_driver = {
+	.driver.name = "goodix_ts",
+	.id_table = NULL,
+};
+
+int goodix_ts_init(void)
+{
+	printk("<<-GTP-INFO->>[%d]GTP driver install.\n", 1245);
+	goodix_tool_wq = alloc_workqueue("goodix_wq", 10, 1);
+	if (goodix_tool_wq)
+		return i2c_register_driver(THIS_MODULE, &goodix_recon_ts_driver);
+	printk("<<-GTP-ERROR->>[%d]Creat workqueue failed.\n", 1249);
+	return -ENOMEM;	/* -12 */
+}
+late_initcall(goodix_ts_init);
