@@ -8,3 +8,5 @@
 # early in drivers/ (drivers/Makefile line 45, before hid/ line 114), while in
 # the binary tm_init6 sits among the HID tablet drivers — expected rank drift.
 obj-$(CONFIG_MTC_DRIVERS) += car.o backview.o tv.o dvd.o vs.o mtcGetSetVolume.o audio_card_glue.o radio_tef6606.o lcd.o keys.o codec.o
+# Batch 8 (binaRE): MTC-диагностические функции (key2ir/factory_test/camera_test/camera_start/camera_stop/homeEnable) — новый файл, без initcall.
+obj-$(CONFIG_MTC_DRIVERS) += recon.o
