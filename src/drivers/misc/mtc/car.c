@@ -6252,114 +6252,11 @@ static int ErrorAnalysis(int n, const u32 *x, const u32 *y, const u32 *cx, const
 }
 
 /* binaRE TouchPanelSetCalibration @0xc0841120 (T, 1348B) — GLOBAL judge-символ.
- * n точек (a1), uncali_x/y (a4/a5): накопители Σx²,Σxy,Σx,Σy²,Σy,Σx·cx,Σy·cx,Σcx,
- * Σx·cy,Σy·cy,Σcy; 7×ComputeMatrix33 (детерминанты → BSS mtc_cali_det);
- * sign/bits-масштабирование; MEMORY[0xC168E5C4]=valid; return ErrorAnalysis(...).
- * Структура 1:1 по IDA; LargeNum-каскад — TENTATIVE-заглушки (см. выше). */
-int TouchPanelSetCalibration(int n, u32 *pcx, u32 *pcy, u32 *pux, u32 *puy) /* binaRE: a2/a3 = cali-src (cx/cy), a4/a5 = uncali-src (x/y) */
-{
-	struct mtc_ln sxx, sxy, sx, syy, sy;
-	struct mtc_ln scx1, scx2, scx, scy1, scy2, scy;
-	struct mtc_ln ln_n;
-	struct mtc_ln ux, uy, cxi, cyi, tmp;
-	struct mtc_ln33_res r1, r2, r3, r4, r5, r6, r7;
-	int scale;
-	int t;
-	int v18;
-	int i;
-
-	if (!n) {
-		*(u32 *)((char *)mtc_keys_data_ptr() + MTC_KD_CALI_FLG) = 0; /* binaRE 0xC168E5C4 */
-		return 1; /* binaRE: return 1 */
-	}
-
-	LargeNumSet(&sxx, 0);
-	LargeNumSet(&sxy, 0);
-	LargeNumSet(&sx, 0);
-	LargeNumSet(&syy, 0);
-	LargeNumSet(&sy, 0);
-	LargeNumSet(&ln_n, n); /* binaRE v28 = a1 */
-	LargeNumSet(&scx1, 0);
-	LargeNumSet(&scx2, 0);
-	LargeNumSet(&scx, 0);
-	LargeNumSet(&scy1, 0);
-	LargeNumSet(&scy2, 0);
-	LargeNumSet(&scy, 0);
-
-	for (i = 0; i < n; ++i) { /* binaRE: do/while v7 != a1 (1:1-набор LargeNum-операций) */
-		LargeNumSet(&ux, (int)pux[i]);
-		LargeNumSet(&uy, (int)puy[i]);
-		LargeNumSet(&cxi, (int)pcx[i]);
-		LargeNumSet(&cyi, (int)pcy[i]);
-		LargeNumMult(&tmp, &ux, &ux); LargeNumAdd(&sxx, &tmp, &sxx);
-		LargeNumMult(&tmp, &ux, &uy); LargeNumAdd(&sxy, &tmp, &sxy);
-		LargeNumAdd(&sx, &ux, &sx);
-		LargeNumMult(&tmp, &uy, &uy); LargeNumAdd(&syy, &tmp, &syy);
-		LargeNumAdd(&sy, &uy, &sy);
-		LargeNumMult(&tmp, &ux, &cxi); LargeNumAdd(&scx1, &tmp, &scx1);
-		LargeNumMult(&tmp, &uy, &cxi); LargeNumAdd(&scx2, &tmp, &scx2);
-		LargeNumAdd(&scx, &cxi, &scx);
-		LargeNumMult(&tmp, &ux, &cyi); LargeNumAdd(&scy1, &tmp, &scy1);
-		LargeNumMult(&tmp, &uy, &cyi); LargeNumAdd(&scy2, &tmp, &scy2);
-		LargeNumAdd(&scy, &cyi, &scy);
-	}
-
-	ComputeMatrix33(&r1, &sxx, &sxy, &sx, &sxy, &syy, &sy, &sx, &sy, &ln_n); /* binaRE v40 (m1) */
-	ComputeMatrix33(&r2, &scx1, &sxy, &sx, &scx2, &syy, &sy, &scx, &sy, &ln_n); /* binaRE v42 (m2) */
-	ComputeMatrix33(&r3, &sxx, &scx1, &sx, &sxy, &scx2, &sy, &sx, &scx, &ln_n); /* binaRE v44 (m3) */
-	ComputeMatrix33(&r4, &sxx, &sxy, &scx1, &sxy, &syy, &scx2, &sx, &sy, &scx); /* binaRE v46 (m4) */
-	ComputeMatrix33(&r5, &scy1, &sxy, &sx, &scy2, &syy, &sy, &scy, &sy, &ln_n); /* binaRE v48 (m5) */
-	ComputeMatrix33(&r6, &sxx, &scy1, &sx, &sxy, &scy2, &sy, &sx, &scy, &ln_n); /* binaRE v50 (m6) */
-	ComputeMatrix33(&r7, &sxx, &sxy, &scy1, &sxy, &syy, &scy2, &sx, &sy, &scy); /* binaRE v52 (m7) */
-
-	scale = IsLargeNumNegative(&r1.m) ? -2 : 2; /* binaRE: sign(v40) */
-	LargeNumDivInt32(&r1.m, scale, &tmp); /* binaRE v54 = r1/scale */
-	LargeNumAdd(&r4.m, &tmp, &r4.m);	/* binaRE v46 += */
-	LargeNumAdd(&r7.m, &tmp, &r7.m);	/* binaRE v52 += */
-	scale = LargeNumBits(&r2.m) - 15;	/* binaRE v42: -15 */
-	t = LargeNumBits(&r3.m) - 15;		/* binaRE v44 */
-	if (t > scale)
-		scale = t;
-	scale &= ~(scale >> 31); /* binaRE: v10 & ~(v10 >> 31) (отрицательный масштаб → 0) */
-	t = LargeNumBits(&r5.m) - 15; /* binaRE v48 */
-	if (t > scale)
-		scale = t;
-	t = LargeNumBits(&r6.m) - 15; /* binaRE v50 */
-	if (t > scale)
-		scale = t;
-	t = LargeNumBits(&r4.m) - 27; /* binaRE v46: -27 */
-	if (t > scale)
-		scale = t;
-	t = LargeNumBits(&r7.m) - 27; /* binaRE v52: -27 */
-	if (t > scale)
-		scale = t;
-	t = LargeNumBits(&r1.m) - 31; /* binaRE v40: -31 */
-	if (t > scale)
-		scale = t;
-	if (scale) { /* binaRE: порядок RAShift 1:1 */
-		LargeNumRAShift(&r2.m, scale);
-		LargeNumRAShift(&r5.m, scale);
-		LargeNumRAShift(&r3.m, scale);
-		LargeNumRAShift(&r6.m, scale);
-		LargeNumRAShift(&r4.m, scale);
-		LargeNumRAShift(&r7.m, scale);
-		LargeNumRAShift(&r1.m, scale);
-	}
-	v18 = r1.det; /* binaRE: v18 = v41 */
-	mtc_cali_det[0] = r2.det; /* binaRE dword_C0BD2DAC */
-	mtc_cali_det[1] = r1.det; /* binaRE dword_C0BD2DC4 */
-	if (v18)
-		v18 = 1;
-	mtc_cali_det[2] = r3.det; /* binaRE dword_C0BD2DB0 */
-	mtc_cali_det[3] = r4.det; /* binaRE dword_C0BD2DB4 */
-	mtc_cali_det[4] = r5.det; /* binaRE dword_C0BD2DB8 */
-	mtc_cali_det[5] = r6.det; /* binaRE dword_C0BD2DBC */
-	mtc_cali_det[6] = r7.det; /* binaRE dword_C0BD2DC0 */
-	if (!r1.det)
-		mtc_cali_det[1] = 1; /* binaRE: if(!v41) DC4 = 1 */
-	*(u32 *)((char *)mtc_keys_data_ptr() + MTC_KD_CALI_FLG) = v18; /* binaRE 0xC168E5C4 */
-	return ErrorAnalysis(n, pcx, pcy, pux, puy);
-}
+ * ДУБЛЬ-определение УДАЛЕНО (link multiple-definition): CBN_SPI включает канон
+ * drivers/input/touchscreen/calibration_ts.c, который и является владельцем
+ * символа (target c0841120). Локальный прототип: внутр. вызовы этого файла
+ * резолвятся в канон (calibration_ts.h не на -I пути drivers/misc/mtc). */
+extern unsigned char TouchPanelSetCalibration(int n, u32 *pcx, u32 *pcy, u32 *pux, u32 *puy);
 
 /* binaRE touch_cali_status @0xc08424e4 (t, 376B) — GLOBAL judge-символ. Тело 1:1. */
 int touch_cali_status(void *kobj, char *buf)

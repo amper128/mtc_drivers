@@ -15,17 +15,18 @@
 int ch7025_i2c_write(struct i2c_client *client, u8 reg, u8 val)
 {
 	u8 wbuf[2];
-	struct i2c_msg msg;
+	struct i2c_msg msgs[2];	/* target: +20B — msgs[1] нулевой (stack-фрейм) */
 	unsigned long timeout = 100000;	/* decompiled sp-локаль, неиспользуется */
 
 	wbuf[0] = reg;
 	wbuf[1] = val;
-	msg.addr = client->addr;
-	msg.flags = 0;
-	msg.len = 2;
-	msg.buf = wbuf;
+	memset(&msgs[1], 0, sizeof(msgs[1]));	/* C89: compound-literal assign недопустим */
+	msgs[0].addr = client->addr;
+	msgs[0].flags = 0;
+	msgs[0].len = 2;
+	msgs[0].buf = wbuf;
 
-	if (i2c_transfer(client->adapter, &msg, 1) >= 0)
+	if (i2c_transfer(client->adapter, &msgs, 1) >= 0)
 		return 0;
 	(void)timeout;
 	return 255;

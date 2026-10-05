@@ -76,21 +76,21 @@ extern int vs_send(int port_num, unsigned char cmd, char *cmd_data, int count);
 /* ==================== 3 global stub (MTC-деп, binaRE stub) ==================== */
 /* Определений в дереве нет; T в judge-бинаре -> non-static stub (закрывают judge). */
 
-int test_adc(int ch)
+noinline int test_adc(int ch)
 {
 	(void)ch;
-	return 0;	/* MTC-деп, binaRE stub */
+	return 0;	/* MTC-деп, binaRE stub (noinline: вернуть bl-вызовы factory_test) */
 }
 
-int rtc_readtime(struct rtc_time *tm)
+noinline int rtc_readtime(struct rtc_time *tm)
 {
 	(void)tm;
-	return 0;	/* MTC-деп, binaRE stub */
+	return 0;	/* MTC-деп, binaRE stub (noinline) */
 }
 
-int rk_direct_fb_set(void)
+noinline int rk_direct_fb_set(void)
 {
-	return 0;	/* MTC-деп, binaRE stub */
+	return 0;	/* MTC-деп, binaRE stub (noinline) */
 }
 
 /* ==================== file-statics: bss-карта (decompiled MEMORY[...]) ==================== */
@@ -356,20 +356,26 @@ static u16 goodix_touch_y;				/* 0xC168E4FC */
 static struct i2c_client *goodix_tool_client;	/* 0xC168E58C (probe не поднят) */
 static struct workqueue_struct *goodix_tool_wq;	/* 0xC168E4F0 (там же) */
 
-/* gtp i2c-операции: vendor fn-указатели; локальные stub'ы (fail-fast). */
-static int goodix_gtp_read(u8 *buf, int len)
+/* gtp i2c-операции: vendor fn-указатели (адреса @0xC168E584/0xC168E588);
+ * локальные stub'ы (fail-fast) — noinline + вызов ЧЕРЕЗ fn-ptr, чтобы
+ * компилятор не вырезал multi-touch цикл/case (return константа не
+ * складывается при вызове через указатель). */
+static noinline int stub_gtp_read(u8 *buf, int len)
 {
 	(void)buf;
 	(void)len;
 	return -ENODEV;
 }
 
-static int goodix_gtp_write(u8 *buf, int len)
+static noinline int stub_gtp_write(u8 *buf, int len)
 {
 	(void)buf;
 	(void)len;
 	return -ENODEV;
 }
+
+static int (*gtp_read)(u8 *buf, int len) = stub_gtp_read;	/* 0xC168E584 */
+static int (*gtp_write)(u8 *buf, int len) = stub_gtp_write;	/* 0xC168E588 */
 
 /* comfirm — static в дереве goodix9xx_tool.c:284 (недоступен отсюда);
  * vendor-семантика по decompiled: ненулевой = успех (0 -> "Comfirm fail"). */
@@ -463,7 +469,7 @@ int goodix_tool_read(char *userbuf, size_t count, loff_t *ppos)
 			while (remaining > 0) {
 				chunk = remaining > goodix_tool_chunk ?
 						goodix_tool_chunk : remaining;
-				if (goodix_gtp_read(goodix_tool_buf, chunk) <= 0) {
+				if (gtp_read(goodix_tool_buf, chunk) <= 0) {
 					printk("<<-GTP-ERROR->> [READ]Read data failed!\n");
 					return 0;
 				}
@@ -510,7 +516,7 @@ int goodix_tool_write(char __user *kbuf, unsigned int len)
 			printk("<<-GTP-ERROR->> [WRITE]Comfirm fail!\n");
 			return 0;
 		}
-		if (goodix_gtp_write(&goodix_tool_buf[2],
+		if (gtp_write(&goodix_tool_buf[2],
 				     goodix_tool_data.addr + data_len) <= 0) {
 			printk("<<-GTP-ERROR->> [WRITE]Write data failed!\n");
 			return 0;

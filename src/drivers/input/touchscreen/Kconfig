@@ -49,7 +49,7 @@ config TOUCHSCREEN_XPT2046_SPI
 
 	config TOUCHSCREEN_XPT2046_CBN_SPI
 	tristate "calibration mode"
-	depends on TOUCHSCREEN_XPT2046_SPI
+	depends on INPUT
 
 		config TOUCHSCREEN_480X800
 		tristate "480X800 resolution"

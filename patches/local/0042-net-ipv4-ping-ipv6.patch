@@ -1,0 +1,98 @@
+--- a/net/ipv4/ping.c
++++ b/net/ipv4/ping.c
+@@ -982,6 +982,9 @@
+ 			 struct sockaddr *uaddr, int addr_len)
+ {
+ 	struct net *net = sock_net(sk);
++#ifdef CONFIG_IPV6
++	struct net_device *dev = NULL;
++#endif
+ 
+ 	if (sk->sk_family == AF_INET) {
+ 		struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;
+@@ -1003,8 +1006,39 @@
+ 
+ #ifdef CONFIG_IPV6
+ 	} else if (sk->sk_family == AF_INET6) {
+-		/* упрощение 3.0: IPv6-ветка — no-op (соответствующие поля/макросы
+-		 * нет в урезанных ipv6-заголовках tree 3.0); IPv4-ветка верна. */
++		struct sockaddr_in6 *addr = (struct sockaddr_in6 *)uaddr;
++		int type, chk_addr_ret;
++
++		if (addr_len < sizeof(*addr))
++			return -EINVAL;
++
++		type = ipv6_addr_type(&addr->sin6_addr);
++		if (!(type & IPV6_ADDR_LINKLOCAL)) {
++			rcu_read_lock();
++
++			if (addr->sin6_scope_id) {
++				dev = dev_get_by_index_rcu(net, addr->sin6_scope_id);
++				if (!dev) {
++					rcu_read_unlock();
++					return -ENODEV;
++				}
++			} else {
++				dev = NULL;
++			}
++
++			chk_addr_ret = pingv6_ops.ipv6_chk_addr(net,
++						 &addr->sin6_addr, dev, 0);
++			rcu_read_unlock();
++
++			if (chk_addr_ret == 0 &&
++			    isk->freebind == 0 && isk->transparent == 0 &&
++			    type != IPV6_ADDR_ANY)
++				return -EADDRNOTAVAIL;
++		}
++		if (type & IPV6_ADDR_LINKLOCAL) {
++			sk->sk_bound_dev_if = addr->sin6_scope_id;
++		}
++
+ 		return 0;
+ #endif
+ 	} else {
+@@ -1014,7 +1048,9 @@
+ }
+ 
+ /* decompiled ping_set_saddr @0xc0904200 (76 bytes): AF_INET — isk->inet_saddr /
+- * inet_rcv_saddr = addr; AF_INET6 — no-op (поля нет в tree 3.0). */
++ * inet_rcv_saddr = addr; AF_INET6 — 2x memcpy(16B) v6_addr →
++ * inet6_sk(sk)->{saddr, rcv_saddr} (decompiled: p = inet_sk(sk)->pinet6,
++ * запись *p и *p+16 — ipv6_pinfo.{saddr, rcv_saddr} @ off 0/16). */
+ void ping_set_saddr(struct sock *sk, struct sockaddr *saddr)
+ {
+ 	if (saddr->sa_family == AF_INET) {
+@@ -1023,13 +1059,18 @@
+ 		isk->inet_rcv_saddr = isk->inet_saddr = addr->sin_addr.s_addr;
+ #ifdef CONFIG_IPV6
+ 	} else if (saddr->sa_family == AF_INET6) {
+-		return;  /* упрощение 3.0: IPv6-ветка — no-op (поля нет в tree) */
++		struct ipv6_pinfo *np = inet6_sk(sk);
++		struct sockaddr_in6 *addr = (struct sockaddr_in6 *)saddr;
++
++		memcpy(&np->saddr, &addr->sin6_addr, sizeof(addr->sin6_addr));
++		memcpy(&np->rcv_saddr, &addr->sin6_addr, sizeof(addr->sin6_addr));
+ #endif
+ 	}
+ }
+ 
+ /* decompiled ping_clear_saddr @0xc090424c (72 bytes): sk_bound_dev_if = dif,
+- * обнуление saddr по family (AF_INET6 — no-op, поля нет в tree 3.0). */
++ * обнуление saddr по family (AF_INET6 — 2x memset(16B)
++ * inet6_sk(sk)->{rcv_saddr, saddr}, decompiled: memset(p+16), memset(p)). */
+ void ping_clear_saddr(struct sock *sk, int dif)
+ {
+ 	sk->sk_bound_dev_if = dif;
+@@ -1038,7 +1079,10 @@
+ 		isk->inet_rcv_saddr = isk->inet_saddr = 0;
+ #ifdef CONFIG_IPV6
+ 	} else if (sk->sk_family == AF_INET6) {
+-		return;  /* упрощение 3.0: IPv6-ветка — no-op (поля нет в tree) */
++		struct ipv6_pinfo *np = inet6_sk(sk);
++
++		memset(&np->rcv_saddr, 0, sizeof(np->rcv_saddr));
++		memset(&np->saddr, 0, sizeof(np->saddr));
+ #endif
+ 	}
+ }

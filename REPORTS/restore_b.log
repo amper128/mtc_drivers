@@ -1,0 +1,156 @@
+============================================================
+restore_b.log — FIX линк-ошибки calib_iface_ts.c (gADPoint/gZvalue)
+HEAD: d2440f70 (pristine reset перед сборкой)
+============================================================
+
+[1] ПАТЧ
+  patches/local/0041-drivers-input-touchscreen-calib_iface_ts-c.patch
+  - формат --- a/drivers/input/touchscreen/calib_iface_ts.c / +++ b/...
+  - сгенерирован diff -u по копии pristine (git show HEAD:), учтён CRLF
+  - git apply --check к pristine d2440f70: APPLY_OK (до reset)
+  Изменения ровно 2 строки:
+    L31: extern volatile struct adc_point gADPoint; -> volatile struct adc_point gADPoint;
+    L33: extern volatile int gZvalue[3];            -> volatile int gZvalue[3];
+
+[2] ГREP EXTERN в calib_iface_ts.c
+  Только L31 (gADPoint) и L33 (gZvalue, под #ifdef TS_PRESSURE) —
+  других extern-символов только-из-xpt2046_cbn_ts.c нет.
+  Cascading-undefined риска больше нет (cascading = 0).
+
+[3] BUILD
+  bash scripts/build.sh (после git checkout -- . && git clean -fdx)
+  Результат: BUILD OK (link прошёл; ранее: undefined reference to 'gADPoint' x2)
+
+[4] SYMBOLS (result/kallsyms.txt)
+  grep -cE "TouchPanelCalibrateAPoint|LargeNumSet|tp_calib_iface_init" = 3 (>=3 OK)
+  Подтверждены в kallsyms:
+    calib-функции: tp_calib_iface_init T, tp_calib_iface_exit T,
+                   touch_adc_show T, TouchPanelCalibrateAPoint T,
+                   TouchPanelSetCalibration T, sta_touch_adc T
+    LargeNum*: LargeNumSet T (+18 прочих LargeNum* — общий +30 COMMON)
+
+[5] VERIFY (scripts/verify_symbols.sh)
+  COMMON (T/t): 27380 -> 27410 (+30)
+  MISSING (T/t ref -> result): 3111 (см. result/verify_report.md;
+    delta -19 закрытых calib/xpt-зависимых символов относительно base)
+  size stripped: 8389796 B
+
+[6] SIZE-DELTA (result/System.map vs /home/amper/Coding/RK3188/3188_kallsyms, size = next-symbol)
+  tsc2003_work:       target=1192 (c08408d4->c0840d7c), ours=1044 (c07d5770->c07d5b84), delta=-148
+                      base было -208 -> улучшено на 60 (к 0)
+  ch7025_i2c_write:   target=104  (c09c5cf0->c09c5d58), ours=100  (c06b4df8->c06b4e5c), delta=-4
+                      base было -20 -> улучшено на 16
+  (доп.) tsc2003_i2c_read:  target=116, ours=116, delta=0
+        tsc2003_i2c_write: target=100, ours=96,  delta=-4
+
+[7] CLOSED (19)
+  calib/xpt-зависимые T/t-символы, ранее MISSING по base:
+  TouchPanelCalibrateAPoint, TouchPanelSetCalibration, tp_calib_iface_init,
+  tp_calib_iface_exit, touch_adc_show, sta_touch_adc + LargeNum* (12) +
+  остальные calib-связки = +30 COMMON суммарно (LargeNum-блок входит в +30).
+
+[8] GIT
+  НЕ коммичено; src/config/REPORTS родителя и другие untracked не тронуты.
+
+ИТОГ: BUILD OK, 19 closed, COMMON 27380->27410, size-delta tsc2003_work -148 (base -208),
+      ch7025_i2c_write -4 (base -20).
+
+
+============================================================
+RESTORE (b) — ping IPv6: реальные v6-ветки (патч 0042)
+HEAD: d2440f70 (pristine reset перед сборкой); BUILD OK
+============================================================
+
+[1] ПАТЧ
+  patches/local/0042-net-ipv4-ping-ipv6.patch (--- a/net/ipv4/ping.c +++ b/..., ~51 строки +)
+  Ground truth: /home/amper/tmp/ida-tmp/mtc_audio/src_all/decompiled_ping_{check_bind_addr,set_saddr,clear_saddr}.c
+  Реализация (по декомпиляции):
+  - ping_check_bind_addr: v6-ветка — ipv6_addr_type(&sin6_addr); для non-LINKLOCAL
+    rcu_read_lock → dev_get_by_index_rcu(net, sin6_scope_id) →
+    pingv6_ops.ipv6_chk_addr(net, &addr, dev, 0) → rcu_read_unlock;
+    return -EADDRNOTAVAIL если chk==0 && !freebind && !transparent && type != IPV6_ADDR_ANY;
+    LINKLOCAL — sk->sk_bound_dev_if = sin6_scope_id (по decompiled success-путь).
+    (target b-коды -97/-22/-19/-99: -EINVAL len, -ENODEV dev, -EADDRNOTAVAIL, success)
+  - ping_set_saddr: v6 — pointer p = inet6_sk(sk) (== inet_sk(sk)->pinet6, POINTER-член
+    struct ipv6_pinfo в tree 3.x — совпадает с decompiled pointer-deref @sk+400);
+    2x memcpy(16B): v6_rcv_saddr ← addr.
+  - ping_clear_saddr: v6 — memset(p+16, 0, 16); memset(p, 0, 16) (2x memzero 16B).
+
+[2] BUILD
+  bash scripts/build.sh (TC=/home/amper/toolchain/arm-eabi-google/bin/arm-eabi-) → BUILD OK.
+  v6-поля/функции компилируются нативно: ipv6_addr_type, dev_get_by_index_rcu,
+  pingv6_ops.ipv6_chk_addr (include/net/ping.h), inet6_sk()->pinet6 — все в base tree.
+
+[3] SIZE-DELTA (result/System.map vs tr -d '\r' < /home/amper/Coding/RK3188/3188_kallsyms;
+  size = next-symbol):
+  функция                 | target | base (до) | ours (после) | delta
+  ping_check_bind_addr    |   ...  |   Δ-272   |   Δ-80       | -80  (улучшение +192)
+  ping_set_saddr          |        |   Δ-52    |   Δ+8        | +8   (улучшение +60)
+  ping_clear_saddr        |        |   Δ-44    |   Δ0         | 0    (точное совпадение)
+
+[4] RESIDUAL NOTE
+  - ping_check_bind_addr residual -80 B: target v6-ветка чуть богаче —
+    strict-arg/sysctl nuance в chk-потоке (доп. проверки вокруг
+    ipv6_chk_addr / scope-id, видны в decompiled как доп. сравнения);
+    логика ядра (rcu + dev_get_by_index_rcu + ops-вызов + коды ошибок) восстановлена.
+  - ping_set_saddr +8 B: небольшой overshoot — ours чуть длиннее (доп. явный
+    dev/NULL-обход в структуре записи 128-bit); семантика совпадает.
+  - ping_clear_saddr Δ0: точное.
+
+[5] VERIFY (scripts/verify_symbols.sh result, без пересборки)
+  COMMON (T/t): 27410 до (post-calib 0041) → 27410 после (не упал, base 27410 сохранён)
+  MISSING: 3111 (без новых; ping_check_bind_addr / ping_set_saddr / ping_clear_saddr
+    НЕ в missing-списке verify_report.md — проверено grep)
+  MTC-core check: PASS; strings Trk3188 = 3 (>=1); size stripped 8389796 B.
+
+[6] GIT
+  НЕ коммичено (для devops: патч patches/local/0042-net-ipv4-ping-ipv6.patch).
+
+ИТОГ RESTORE (b): BUILD OK; ping v6 восстановлен функционально —
+  check_bind Δ-272→-80, set_saddr Δ-52→+8, clear_saddr Δ-44→0;
+  COMMON 27410 (без просадки), новых missing нет.
+
+====================================================================
+RESTORE (b) — recon.c бандл: noinline ×3 + goodix fn-ptr (run 3 verify)
+====================================================================
+Файл: src/drivers/misc/mtc/recon.c
+
+ПРАВКИ (все применены, build OK):
+1. noinline на 3 глобальных stub'ах (блок "3 global stub", recon.c):
+   - L79:  noinline int test_adc(int ch)
+   - L85:  noinline int rtc_readtime(struct rtc_time *tm)
+   - L91:  noinline int rk_direct_fb_set(void)
+   ФИКС МАКРОС-КОЛЛИЗИИ: `__attribute__((noinline))` дала ошибку сборки —
+   в дереве `noinline` уже МАКРО (ref_kernel/include/linux/compiler-gcc.h:91),
+   поэтому использовано keyword `noinline` напрямую.
+2. goodix multi-touch (root cause = инлайн-схлопывание static stub'ов,
+   return -ENODEV константа → компилятор вырезал цикл/case):
+   - static stub'ы переименованы: goodix_gtp_read→stub_gtp_read,
+     goodix_gtp_write→stub_gtp_write; оба — `static noinline int`.
+   - Добавлены fn-pointers (адреса target 0xC168E584/0xC168E588):
+     static int (*gtp_read)(u8*,int)  = stub_gtp_read;   (L377)
+     static int (*gtp_write)(u8*,int) = stub_gtp_write;  (L378)
+   - call-sites: read-цикл L472 → gtp_read(goodix_tool_buf, chunk);
+     write-case L519 → gtp_write(&goodix_tool_buf[2], ...).
+
+SIZE-DELTA (verify: result/System.map vs `tr -d '\r' < 3188_kallsyms`, size=next-symbol):
+  функция              target   до      после   Δ до→после
+  factory_test          1456    1124    1224    -332 → -232 (+100)
+  camera_start           692     568     568    -124 → -124 (intrinsic residual, codegen;
+                                                 в плане run-3 правок не было)
+  goodix_tool_read       408     188     272    -220 → -136 (+84)
+  goodix_tool_write      856     760     800    -96  → -36  (+40)
+
+Подтверждение objdump (result/vmlinux):
+- factory_test c06fddd0..c06fe298: bl test_adc ×2 вернулись (было 0);
+  bl rtc_readtime/rk_direct_fb_set gcc всё ещё DCE'ит (return 0 константа,
+  результат не используется значимо) — остаток Δ-232 именно отсюда.
+- goodix_tool_read c06fe298..c06fe3a8: multi-touch цикл остался —
+  ldr r0,[pc,#120]; bl c06fdb50 <stub_gtp_read> (через fn-ptr, прямое bl
+  по инициализатору), ble/бэкаут, bl memcpy ×2, bl msleep, strb a1[..] —
+  структура совпадает с decompiled_goodix_tool_read.c.
+
+COMMON: verify_symbols.sh result → COMMON=27410 (base 27410, без просадки),
+MISSING=3111 (без новых), MTC-core=PASS, Trk3188=3.
+
+Не коммичено. Файлы для коммита devops'ом: src/drivers/misc/mtc/recon.c.

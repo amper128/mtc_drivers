@@ -25,6 +25,7 @@
 #include <linux/device.h>
 #include <linux/pm.h>
 #include <linux/kobject.h>
+#include "calibration_ts.h"	/* MTC core (calibration_ts.c): TouchPanelCalibrateAPoint */
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -33,21 +34,6 @@
 /* MTC core-зависимости (global, T в vmlinux — определены в дереве): */
 extern int isTouchDisable(void);	/* MTC core: car.c (judge-символ) */
 extern void backlight_on(void);	/* MTC core: car.c (дерево: void; арг. в binaRE — stale R0) */
-
-/* MTC-деп, stub для линка: TouchPanelCalibrateAPoint нет в дереве (MTC core).
- * Decompiled: сырая средняя точка (x, y) -> откалиброванная точка через
- * out-параметры; дефолт (нет MTC core) — identity. */
-static int TouchPanelCalibrateAPoint(int raw_x, int raw_y, int *cal_x, int *cal_y)
-{
-	*cal_x = raw_x;
-	*cal_y = raw_y;
-	return 0;
-}
-
-/* MTC-деп, stub для линка: tp_calib_iface_exit нет в дереве (MTC core) — no-op. */
-static void tp_calib_iface_exit(void)
-{
-}
 
 #define TSC2003_GPIO_INT	217	/* decompiled: gpio = 217 */
 
@@ -77,7 +63,7 @@ static int			tsc2003_probe_done;	/* 0xC168AC8B: probe однократен */
 static u8			tsc2003_suspend_flag; /* 0xC168E5B0: suspend-флаг */
 static int			tsc2003_calib_x;	/* 0xC168E5B8: калиб X (init = 0) */
 static int			tsc2003_calib_y;	/* 0xC168E5BC: калиб Y (init = 0) */
-static int			tsc2003_err_count;	/* 0xC168E5C0: счётчик i2c-ошибок */
+static unsigned char	tsc2003_err_count;	/* 0xC168E5C0: счётчик i2c-ошибок (u8: ldrb/strb) */
 static u8			tsc2003_pen_down;	/* 0xC168E5C1: pen-down флаг */
 
 /* MTC core-флаги (MEMORY[0xC168ACxx]) — передекларированы как file-static. */
@@ -425,7 +411,7 @@ int tsc2003_remove(struct i2c_client *client)
 	gpio_free(ts->gpio);
 	destroy_workqueue(ts->wq);
 	input_unregister_device(ts->input);
-	tp_calib_iface_exit(); /* MTC-деп, stub */
+	tp_calib_iface_exit(); /* MTC core: calib_iface_ts.c (CBN_SPI) */
 	kobject_put(&tsc2003_kobj);
 	kfree(ts);
 	if (tsc2003_data == ts)

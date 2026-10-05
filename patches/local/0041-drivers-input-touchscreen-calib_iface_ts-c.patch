@@ -1,0 +1,14 @@
+--- a/drivers/input/touchscreen/calib_iface_ts.c
++++ b/drivers/input/touchscreen/calib_iface_ts.c
+@@ -28,9 +28,9 @@
+ /*
+  * TPC driver depended.
+  */
+-extern volatile struct adc_point gADPoint;
++volatile struct adc_point gADPoint;
+ #ifdef TS_PRESSURE
+-extern volatile int gZvalue[3];
++volatile int gZvalue[3];
+ #endif
+ 
+ #if 0
