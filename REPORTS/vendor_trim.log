@@ -1,0 +1,23 @@
+# Vendor trim (c): убрать vendor-patched-out «лишний» код → размеры = target.
+# Метод: IDA-decompiled ours (ours_cur.i64) vs target (src_all) → найти лишнее → патч.
+
+## rk_fb_update_regs_handler  Δ+368 → 0 (EXACT)
+- src/drivers/video/rockchip/rk_fb.c L864: rk_fb_update_reg → __attribute__((__noinline__))
+- Эффект: handler 552 → 180 (= target 180 ТОЧНО); новый символ rk_fb_update_reg = 372 (target 356, +16).
+- Логика НЕ удалена (вынесена в отдельный символ rk_fb_update_reg, как в target).
+- Нюанс: __noinline__ (GCC-ключевое) — обычный noinline = пустой макрос в этом ядре (compiler.h:234).
+
+## hdmi_work  Δ+264 → −28
+- NEW patches/local/0043-drivers-video-rockchip-hdmi-rk-hdmi-task-c.patch:
+  удалить hdmi_sys_show_state (L14-50, switch по 9 состояниям) + вызов в hdmi_work (L216).
+- Эффект: 1440 → 1148 (target 1176, −28B — чуть перетримано).
+
+## ddr_get_parameter  Δ+1904 → +8
+- NEW patches/local/0044-arch-arm-mach-rk30-ddr-c.patch (GBK RAW, python byte-mode):
+  удалить ветки DDR2(=2) + mDDR/LPDDR; оставить DDR3(=3)+LPDDR2(=4) (target держит только 3,4).
+- Эффект: 4780 → 2896 (target 2888, +8B).
+
+## Result
+- BUILD OK, COMMON=27410 (не упал), MTC-core PASS, stripped size=8389796.
+- Все 3 ↓ к target: handler EXACT, ddr +8B, hdmi −28B.
+- REMAINING: rk3188_lcdc_ioctl Δ+908 — отдельная задача (patch-of-patch 0034+0083, src устарел).

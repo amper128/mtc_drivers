@@ -1,0 +1,54 @@
+--- a/drivers/video/rockchip/hdmi/rk_hdmi_task.c
++++ b/drivers/video/rockchip/hdmi/rk_hdmi_task.c
+@@ -10,43 +10,6 @@
+ #define HDMI_MAX_ID 1
+ 
+ static char *envp[] = {"INTERFACE=HDMI", NULL};
+-
+-static void hdmi_sys_show_state(int state)
+-{
+-	switch(state)
+-	{
+-		case HDMI_SLEEP:
+-			dev_printk(KERN_INFO, hdmi->dev, "HDMI_SLEEP\n");
+-			break;
+-		case HDMI_INITIAL:
+-			dev_printk(KERN_INFO, hdmi->dev, "HDMI_INITIAL\n");
+-			break;
+-		case WAIT_HOTPLUG:
+-			dev_printk(KERN_INFO, hdmi->dev, "WAIT_HOTPLUG\n");
+-			break;
+-		case READ_PARSE_EDID:
+-			dev_printk(KERN_INFO, hdmi->dev, "READ_PARSE_EDID\n");
+-			break;
+-		case WAIT_HDMI_ENABLE:
+-			dev_printk(KERN_INFO, hdmi->dev, "WAIT_HDMI_ENABLE\n");
+-			break;
+-		case SYSTEM_CONFIG:
+-			dev_printk(KERN_INFO, hdmi->dev, "SYSTEM_CONFIG\n");
+-			break;
+-		case CONFIG_VIDEO:
+-			dev_printk(KERN_INFO, hdmi->dev, "CONFIG_VIDEO\n");
+-			break;
+-		case CONFIG_AUDIO:
+-			dev_printk(KERN_INFO, hdmi->dev, "CONFIG_AUDIO\n");
+-			break;
+-		case PLAY_BACK:
+-			dev_printk(KERN_INFO, hdmi->dev, "PLAY_BACK\n");
+-			break;
+-		default:
+-			dev_printk(KERN_INFO, hdmi->dev, "Unkown State %d\n", state);
+-			break;
+-	}
+-}
+ 
+ int hdmi_sys_init(void)
+ {
+@@ -213,7 +176,6 @@
+ 		hdmi_sys_sleep();
+ 	
+ 	do {
+-		hdmi_sys_show_state(hdmi->state);
+ 		state_last = hdmi->state;
+ 		switch(hdmi->state)
+ 		{

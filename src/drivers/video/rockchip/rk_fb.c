@@ -861,7 +861,7 @@ void rk_fb_free_dma_buf(struct rk_fb_dma_buf_data *dma_buf_data)
 	}
 	memset(dma_buf_data, 0, sizeof(struct rk_fb_dma_buf_data));
 }
-static void rk_fb_update_reg(struct rk_lcdc_device_driver * dev_drv,struct rk_reg_data *regs)
+static void __attribute__((__noinline__)) rk_fb_update_reg(struct rk_lcdc_device_driver * dev_drv,struct rk_reg_data *regs)
 {
 	int i,ret=0;
 	ktime_t timestamp = dev_drv->vsync_info.timestamp;
