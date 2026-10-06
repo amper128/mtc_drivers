@@ -21,3 +21,4 @@
 - BUILD OK, COMMON=27410 (не упал), MTC-core PASS, stripped size=8389796.
 - Все 3 ↓ к target: handler EXACT, ddr +8B, hdmi −28B.
 - REMAINING: rk3188_lcdc_ioctl Δ+908 — отдельная задача (patch-of-patch 0034+0083, src устарел).
+[fix c-lcdc] rk3188_lcdc_ioctl: remove 4 vendor-extra cursor-case (FBIOPUT_SET_CURSOR_EN/POS/IMG/CMAP 0x4609/460b/460a/460c), keep PANEL_SIZE(0x5001)+COLOR_KEY_CFG(0x4626) per target decompiled (256B). src/rk3188_lcdc.c direct edit. size: 1168→256 (target 256). COMMON=27410 held. BUILD OK.

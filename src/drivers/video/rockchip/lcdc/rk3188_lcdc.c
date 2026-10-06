@@ -1257,38 +1257,6 @@ static int rk3188_lcdc_ioctl(struct rk_lcdc_device_driver *dev_drv, unsigned int
 			lcdc_writel(lcdc_dev,WIN0_COLOR_KEY,clr_key_cfg.win0_color_key_cfg);
 			lcdc_writel(lcdc_dev,WIN1_COLOR_KEY,clr_key_cfg.win1_color_key_cfg);
 			break;
-		case FBIOPUT_SET_CURSOR_EN:
-			{
-				int en;
-				if(copy_from_user(&en, (void*)arg, sizeof(int)))
-				    return -EFAULT;
-				cursor_open(lcdc_dev, en);
-			}
-			break;
-		case FBIOPUT_SET_CURSOR_POS:
-			{
-				struct fbcurpos pos;
-				if(copy_from_user(&pos, (void*)arg, sizeof(struct fbcurpos)))
-			   		return -EFAULT;
-				rk30_cursor_set_pos(dev_drv, pos.x , pos.y);
-			}
-			break;
-		case FBIOPUT_SET_CURSOR_IMG:
-			{
-				char cursor_buf[CURSOR_BUF_SIZE];
-				if(copy_from_user(cursor_buf, (void*)arg, CURSOR_BUF_SIZE))
-					return -EFAULT;
-				rk30_cursor_set_image(dev_drv, cursor_buf);
-			}
-			break;
-		case FBIOPUT_SET_CURSOR_CMAP:
-			{
-				struct fb_image img;
-				if(copy_from_user(&img, (void*)arg, sizeof(struct fb_image)))
-				    return -EFAULT;
-				rk30_cursor_set_cmap(dev_drv, img.bg_color, img.fg_color);
-			}
-			break;
 		default:
 			break;
 	}
