@@ -1,0 +1,13 @@
+diff --git a/drivers/video/console/Kconfig b/drivers/video/console/Kconfig
+index 2209e354..d9446aaa 100644
+--- a/drivers/video/console/Kconfig
++++ b/drivers/video/console/Kconfig
+@@ -160,7 +160,7 @@ config FONT_8x8
+ 
+ config FONT_8x16
+ 	bool "VGA 8x16 font" if FONTS
+-	depends on FRAMEBUFFER_CONSOLE || SGI_NEWPORT_CONSOLE || STI_CONSOLE || USB_SISUSBVGA_CON
++	depends on FB || FRAMEBUFFER_CONSOLE || SGI_NEWPORT_CONSOLE || STI_CONSOLE || USB_SISUSBVGA_CON
+ 	default y if !SPARC && !FONTS
+ 	help
+ 	  This is the "high resolution" font for the VGA frame buffer (the one
