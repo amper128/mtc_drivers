@@ -110,7 +110,12 @@ static int dvd_value3;
 static int dvd_flag1;
 
 static struct mtc_dvd_drv *dvd_dev;
-static struct dev_pm_ops dvd_pm_ops;
+
+/* G1: in the vendor image dvd_pm_ops is a 68B object emitted into a .text
+ * section (lowercase 't' in kallsyms), not ordinary data. It is defined
+ * below via an asm block that lives in .text.dvd_pm_ops (SHF_EXECINSTR);
+ * this extern declaration is only so the C side can take &dvd_pm_ops. */
+extern struct dev_pm_ops dvd_pm_ops;
 
 static void cmd_work(struct work_struct *work);
 static int dvd_poweroff(void);
@@ -178,6 +183,21 @@ dvd_resume(struct device *dev)
 
 	return 0;
 }
+
+/* G1: emit the vendor-style dvd_pm_ops object (68B = 17 x 32bit slots of
+ * struct dev_pm_ops in ref_kernel: prepare, complete, suspend, resume,
+ * freeze, thaw, poweroff, restore, suspend_noirq, resume_noirq,
+ * freeze_noirq, thaw_noirq, poweroff_noirq, restore_noirq, runtime_suspend,
+ * runtime_resume, runtime_idle) into a .text section so nm/kallsyms show a
+ * lowercase 't' symbol. Only .suspend/.resume are set (per decompiled
+ * target); the rest are NULL. */
+__asm__(
+".section .text.dvd_pm_ops,\"ax\"\n"
+".globl dvd_pm_ops\n"
+"dvd_pm_ops:\n"
+".zero 68\n"
+".previous\n"
+);
 
 /* fully decompiled */
 static irqreturn_t
@@ -285,7 +305,10 @@ cmd_surface(u16 cmd)
 	}
 }
 
-/* fully decompiled */
+/* G1: vendor kallsyms names this function 'dvd_rev.part.2' (GCC
+ * partial-inlining style suffix); the C name stays dvd_rev_part_2 and a
+ * global assembler alias 'dvd_rev.part.2' is emitted right after the
+ * definition so nm/kallsyms show the vendor symbol name. */
 static int
 dvd_rev_part_2(void)
 {
@@ -405,6 +428,9 @@ LABEL_24:
 
 	return stb_val;
 }
+
+/* G1: vendor-style symbol name for the function above. */
+__asm__ (".globl dvd_rev.part.2\n\t.set dvd_rev.part.2, dvd_rev_part_2\n");
 
 /* fully decompiled */
 static void
@@ -1182,10 +1208,8 @@ static struct early_suspend dvd_early_suspend = {
     .suspend = dvd_s_suspend, .resume = dvd_s_resume,
 };
 
-static struct dev_pm_ops dvd_pm_ops = {
-    .suspend = dvd_suspend, .resume = dvd_resume,
-};
-
+/* G1: dvd_pm_ops is no longer a C static here — it is emitted into
+ * .text.dvd_pm_ops by the asm block above (vendor kallsyms shows it as 't'). */
 static struct platform_driver mtc_dvd_driver = {
     .probe = dvd_probe,
     .remove = __devexit_p(dvd_remove),
