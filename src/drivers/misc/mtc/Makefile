@@ -12,3 +12,5 @@ obj-$(CONFIG_MTC_DRIVERS) += car.o backview.o tv.o dvd.o vs.o mtcGetSetVolume.o 
 obj-$(CONFIG_MTC_DRIVERS) += recon.o
 # G5 (binaRE): gup_enter_update_mode/gup_leave_update_mode/gup_update_proc — stubs 1:1 от target vmlinux (без initcall).
 obj-$(CONFIG_MTC_DRIVERS) += gup_stubs.o
+# G8 (binaRE): wifi_driver_write/wifi_pcba_read/wifi_pcba_write/wifi_power_write — static 't' 1:1 от target vmlinux (без initcall).
+obj-$(CONFIG_MTC_DRIVERS) += wifi.o
