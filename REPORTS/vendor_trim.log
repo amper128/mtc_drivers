@@ -22,3 +22,5 @@
 - Все 3 ↓ к target: handler EXACT, ddr +8B, hdmi −28B.
 - REMAINING: rk3188_lcdc_ioctl Δ+908 — отдельная задача (patch-of-patch 0034+0083, src устарел).
 [fix c-lcdc] rk3188_lcdc_ioctl: remove 4 vendor-extra cursor-case (FBIOPUT_SET_CURSOR_EN/POS/IMG/CMAP 0x4609/460b/460a/460c), keep PANEL_SIZE(0x5001)+COLOR_KEY_CFG(0x4626) per target decompiled (256B). src/rk3188_lcdc.c direct edit. size: 1168→256 (target 256). COMMON=27410 held. BUILD OK.
+
+[fix logo] (1) small logo (logo_linux_clut224) removed via CONFIG_LOGO_LINUX_CLUT224=n (~−8KB, target absent; nm: gone). (2) big logo (logo_linux_800x480_clut224) byte-exact from target kernel.elf: data 384024B md5=3d9f5f1815dca37006c725287e858a26 (foft=0x300e0) clut 1130B md5=112b4d46e1f3584b7b145b0fb601ce89 (foft=0x2fc74). Regenerated C: 32097 array lines, every token strict 0x%02x, round-trip md5 data+clut == target. NOTE: prior "7 invalid 0x480 tokens" were grep false positives — '0x480' is a substring of the identifier 'logo_linux_800x480_clut224' (7 occurrences in decls/comments), not array data. size stripped 8385700→8377508 (−8192). COMMON=27410 held, MTC-core PASS, Trk3188=3. BUILD OK.
