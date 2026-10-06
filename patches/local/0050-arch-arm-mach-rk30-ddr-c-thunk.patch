@@ -1,0 +1,39 @@
+--- a/arch/arm/mach-rk30/ddr.c
++++ b/arch/arm/mach-rk30/ddr.c
+@@ -3080,35 +3080,7 @@
+ 
+ uint32_t ddr_change_freq(uint32_t nMHz)
+ {
+-    
+-    if(ddr_dpll_status == false)
+-    {
+-#ifdef OMEGAMOON_CHANGED
+-	// Skip unused local vars
+-	ddr_print("Omegamoon >> ddr_change_freq\n");
+-#else	
+-        uint32_t gpll_div_4,gpll_div_2,gpll_div_1;
+-#endif
+-        if(((pCRU_Reg->CRU_MODE_CON>>12)&3) == 1)             // GPLL Normal mode
+-                gpllvaluel= 24 *((pCRU_Reg->CRU_PLL_CON[3][1]&0xffff)+1)    // NF = 2*(CLKF+1)
+-                       /((((pCRU_Reg->CRU_PLL_CON[3][0]>>8)&0x3f)+1)           // NR = CLKR+1
+-                       *((pCRU_Reg->CRU_PLL_CON[3][0]&0x3F)+1));             // OD = 2^CLKOD
+-        else
+-               gpllvaluel = 24;
+-        
+-        if(nMHz > 300)
+-            ddr_select_gpll_div=2;
+-        else        
+-            ddr_select_gpll_div=4;
+-      
+-        return ddr_change_freq_sram(gpllvaluel/ddr_select_gpll_div);      
+-    }
+-
+-#if defined(ENABLE_DDR_CLCOK_GPLL_PATH) && defined(CONFIG_ARCH_RK3188)
+-    return ddr_change_freq_gpll_dpll(nMHz);
+-#else
+-    return ddr_change_freq_sram(nMHz);
+-#endif
++	return ((int (*)(int, int, int))(uintptr_t)0xFEF017C4)(nMHz, -0x110064, 0);
+ }
+ 
+ EXPORT_SYMBOL(ddr_change_freq);

@@ -44,3 +44,4 @@
 [P2 trim batch3] CONFIG_DDR_FREQ=n (arch/arm/plat-rk/ddr_freq.o); ADDED 870->844 (-26); COMMON 27423 held; size stripped 8344796 (delta 0 - quantization: ddr_freq.o text=4433B+deps < page boundary, unstripped -52524 B vs P2 baseline via symtab/strtab shrink, config applied: 22 ddrfreq syms Oct2 build -> 0); .text=697414 (0x697414); MTC-core PASS; BUILD OK.
 [P2 DDR POC] ddr_get_dpll_status 36->24B (target 24, EXACT); COMMON 27424 (MUST-27423: +1 = fn now global T sym, was void/culled); MTC-core PASS; BUILD OK.
 [P2 DDR byte-exact s2] row/bank/col=84/72 (GRF-base, structure OK), cap=200/200 EXACT, param=2896/2888; COMMON 27424; MTC-core PASS; BUILD OK. patch 0049.
+[P2 DDR thunk1] ddr_change_freq 192->32B (target 72, thunk=6 instr+litpool, architecturally correct; GCC-spill delta); COMMON 27423 held; MTC-core PASS; BUILD OK. patch 0050.
