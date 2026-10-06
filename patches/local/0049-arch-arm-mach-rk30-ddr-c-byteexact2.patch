@@ -1,0 +1,54 @@
+--- a/arch/arm/mach-rk30/ddr.c
++++ b/arch/arm/mach-rk30/ddr.c
+@@ -1081,6 +1081,10 @@
+ {
+     uint32 i;
+     uint32 row;
++    uint32 reg = pCRU_Reg->CRU_PLL_CON[3][2];
++
++    if (reg)
++        return (reg>>6)+13;
+ 
+     i = *(volatile uint32*)SysSrv_DdrConf;
+     row = 13+((ddr_cfg_2_rbc[i]>>4)&0x3);
+@@ -1102,6 +1106,10 @@
+ {
+     uint32 i;
+     uint32 bank;
++    uint32 reg = pCRU_Reg->CRU_PLL_CON[3][2];
++
++    if (reg)
++        return 3 - ((reg>>8)&1);
+ 
+     i = *(volatile uint32*)SysSrv_DdrConf;
+     bank = ((ddr_cfg_2_rbc[i]>>6)&0x3) + ((ddr_cfg_2_rbc[i]>>2)&0x3);
+@@ -1123,6 +1131,10 @@
+ {
+     uint32 i;
+     uint32 col;
++    uint32 reg = pCRU_Reg->CRU_PLL_CON[3][2];
++
++    if (reg)
++        return ((reg>>9)&3) + 9;
+ 
+     i = *(volatile uint32*)SysSrv_DdrConf;
+     col = 9+(ddr_cfg_2_rbc[i]&0x3);
+@@ -3252,7 +3264,17 @@
+ //获取容量，返回字节数
+ uint32 ddr_get_cap(void)
+ {
+-    return (1 << (ddr_get_row()+ddr_get_col()+ddr_get_bank()+ddr_get_bw()))*ddr_get_cs();
++    uint32 reg = pCRU_Reg->CRU_PLL_CON[3][2];
++    uint32 cap;
++
++    if (reg) {
++        cap = 1<<(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>6)+(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>9)&3)+25-(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>8)&1)+(2>>(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>2)&3)));
++        if (((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>11)&1)
++            cap += 1<<((((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>4)&3)+(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>9)&3)+25-(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>8)&1)+(2>>(((uint32)pCRU_Reg->CRU_PLL_CON[3][2]>>2)&3)));
++        return cap;
++    } else {
++        return (1 << (ddr_get_row()+ddr_get_col()+ddr_get_bank()+ddr_get_bw()))*ddr_get_cs();
++    }
+ }
+ EXPORT_SYMBOL(ddr_get_cap);
+ 
