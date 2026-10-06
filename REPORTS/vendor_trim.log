@@ -35,3 +35,4 @@
 [fix gup G5] gup_enter_update_mode + gup_leave_update_mode + gup_update_proc restored; COMMON 27412->27415; BUILD OK.
 
 [fix loop G6] loop1 + loop2 + loop3: уже в base source (ref_kernel/arch/arm/mm/cache-v7.S, asm labels внутри v7_flush_dcache_all, 1:1 target disasm) — патч НЕ потребовался; ВСЕ 3 present в текущем vmlinux (t: c04a0c84 loop1, c04a0ccc loop2, c04a0cd0 loop3); COMMON 27415 (без изменений — уже учитывались); BUILD unchanged.
+[fix tool G7] tool_i2c_{read,write}_{no,with}_extra restored (4) in recon.c from goodix9xx_tool.c; COMMON 27415->27419; BUILD OK.

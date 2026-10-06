@@ -343,7 +343,8 @@ struct goodix_tool_data {
 	u16	data_len;	/* +12  0xC168E59C */
 	u16	addr;		/* +14  0xC168E59E */
 	u8	comfirm_addr; /* +15  0xC168E59F */
-	u8	reserved_2[4];/* +16..+19 */
+	u8	retry;	/* +16  0xC168E5A6: I2C retry (vendor cmd_head.retry) */
+	u8	reserved_3[3];/* +17..+19 (sizeof остаётся 20 = vendor copy_from_user 20B) */
 };
 
 static struct goodix_tool_data goodix_tool_data;	/* 0xC168E590 */
@@ -384,9 +385,100 @@ static int goodix_comfirm(void)
 	return 1;
 }
 
-/* register_i2c_func — static в дереве goodix9xx_tool.c:148. */
+/* G7: tool_i2c_* — тела 1:1 из ref_kernel/drivers/input/touchscreen/
+ * goodix9xx_tool.c:73-146 (gt_client → goodix_tool_client,
+ * cmd_head.addr_len → GTP_ADDR_LENGTH, cmd_head.retry → goodix_tool_data.retry).
+ * 't' (local) в target: c083fab8/116B, c083fb30/108B, c083fb9c/148B, c083fc34/108B. */
+#define GTP_ADDR_LENGTH	2
+
+static s32 tool_i2c_read_no_extra(u8 *buf, u16 len)
+{
+	s32 ret = -1;
+	s32 i = 0;
+	struct i2c_msg msgs[2];
+
+	msgs[0].flags = !I2C_M_RD;
+	msgs[0].addr  = goodix_tool_client->addr;
+	msgs[0].len   = GTP_ADDR_LENGTH;
+	msgs[0].buf   = &buf[0];
+
+	msgs[1].flags = I2C_M_RD;
+	msgs[1].addr  = goodix_tool_client->addr;
+	msgs[1].len   = len;
+	msgs[1].buf   = &buf[GTP_ADDR_LENGTH];
+
+	for (i = 0; i < goodix_tool_data.retry; i++) {
+		ret = i2c_transfer(goodix_tool_client->adapter, msgs, 2);
+		if (ret > 0)
+			break;
+	}
+	return ret;
+}
+
+static s32 tool_i2c_write_no_extra(u8 *buf, u16 len)
+{
+	s32 ret = -1;
+	s32 i = 0;
+	struct i2c_msg msg;
+
+	msg.flags = !I2C_M_RD;
+	msg.addr  = goodix_tool_client->addr;
+	msg.len   = len;
+	msg.buf   = buf;
+
+	for (i = 0; i < goodix_tool_data.retry; i++) {
+		ret = i2c_transfer(goodix_tool_client->adapter, &msg, 1);
+		if (ret > 0)
+			break;
+	}
+	return ret;
+}
+
+static s32 tool_i2c_read_with_extra(u8 *buf, u16 len)
+{
+	s32 ret = -1;
+	u8 pre[2] = {0x0f, 0xff};
+	u8 end[2] = {0x80, 0x00};
+
+	tool_i2c_write_no_extra(pre, 2);
+	ret = tool_i2c_read_no_extra(buf, len);
+	tool_i2c_write_no_extra(end, 2);
+
+	return ret;
+}
+
+static s32 tool_i2c_write_with_extra(u8 *buf, u16 len)
+{
+	s32 ret = -1;
+	u8 pre[2] = {0x0f, 0xff};
+	u8 end[2] = {0x80, 0x00};
+
+	tool_i2c_write_no_extra(pre, 2);
+	ret = tool_i2c_write_no_extra(buf, len);
+	tool_i2c_write_no_extra(end, 2);
+
+	return ret;
+}
+
+/* register_i2c_func — static в дереве goodix9xx_tool.c:148. Тело 1:1:
+ * IC_TYPE (vendor global, goodix9xx_tool.c:71) не поднят → локальный пустой
+ * s8[16] → все strncmp != 0 → with_extra-ветка; GTP_DEBUG (if) dead при
+ * GTP_DEBUG=0; GTP_INFO (else) = KERN_INFO printk. */
 static void goodix_register_i2c_func(void)
 {
+	s8 ic_type[16] = {0};
+
+	if (strncmp(ic_type, "GT8110", 6) && strncmp(ic_type, "GT8105", 6)
+	    && strncmp(ic_type, "GT801", 5) && strncmp(ic_type, "GT800", 5)
+	    && strncmp(ic_type, "GT801PLUS", 9) && strncmp(ic_type, "GT811", 5)
+	    && strncmp(ic_type, "GTxxx", 5)) {
+		gtp_read = (int (*)(u8 *, int))tool_i2c_read_with_extra;
+		gtp_write = (int (*)(u8 *, int))tool_i2c_write_with_extra;
+	} else {
+		gtp_read = (int (*)(u8 *, int))tool_i2c_read_no_extra;
+		gtp_write = (int (*)(u8 *, int))tool_i2c_write_no_extra;
+		printk(KERN_INFO "<<-GTP-INFO->> I2C function: without pre and end cmd!\n");
+	}
 }
 
 /* gup_* — global'ы gt9xx_update.c в дереве не строятся (нет CONFIG_GT9XX*). */
