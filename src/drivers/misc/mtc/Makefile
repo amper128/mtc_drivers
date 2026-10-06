@@ -10,3 +10,5 @@
 obj-$(CONFIG_MTC_DRIVERS) += car.o backview.o tv.o dvd.o vs.o mtcGetSetVolume.o audio_card_glue.o radio_tef6606.o lcd.o keys.o codec.o
 # Batch 8 (binaRE): MTC-диагностические функции (key2ir/factory_test/camera_test/camera_start/camera_stop/homeEnable) — новый файл, без initcall.
 obj-$(CONFIG_MTC_DRIVERS) += recon.o
+# G5 (binaRE): gup_enter_update_mode/gup_leave_update_mode/gup_update_proc — stubs 1:1 от target vmlinux (без initcall).
+obj-$(CONFIG_MTC_DRIVERS) += gup_stubs.o
