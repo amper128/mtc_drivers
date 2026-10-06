@@ -1,0 +1,31 @@
+--- a/arch/arm/mach-rk30/ddr.c
++++ b/arch/arm/mach-rk30/ddr.c
+@@ -2844,15 +2844,10 @@
+ }
+ 
+ static bool ddr_dpll_status = true;
+-#if defined(CONFIG_ARCH_RK3188)
+-void ddr_get_dpll_status(void) //DPLL fial rerurn 0;DPLL good return 1;
+-{  
+-    if (rk_pll_flag() & 0x2)
+-        ddr_dpll_status = false;    
+-    else    
+-        ddr_dpll_status = true;
+-}
+-#endif
++bool ddr_get_dpll_status(void)
++{
++	return (rk_pll_flag() & 3) == 0;
++}
+ 
+ uint32_t __sramfunc ddr_change_freq_sram(uint32_t nMHz)
+ {
+@@ -3360,7 +3355,7 @@
+ 	}
+ #endif	
+ #if defined(CONFIG_ARCH_RK3188)
+-    ddr_get_dpll_status();
++    ddr_dpll_status = ddr_get_dpll_status();
+ #endif
+ 
+     mem_type = pPHY_Reg->DCR.b.DDRMD;
