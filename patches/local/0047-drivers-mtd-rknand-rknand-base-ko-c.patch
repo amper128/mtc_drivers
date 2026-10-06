@@ -1,0 +1,31 @@
+diff --git a/drivers/mtd/rknand/rknand_base_ko.c b/drivers/mtd/rknand/rknand_base_ko.c
+index 3774a869..d1a8927f 100755
+--- a/drivers/mtd/rknand/rknand_base_ko.c
++++ b/drivers/mtd/rknand/rknand_base_ko.c
+@@ -246,6 +246,26 @@ static void rknand_sync(struct mtd_info *mtd)
+         gpNandInfo->ftl_sync();
+ }
+ 
++int rknand_dev_cache_flush(void)
++{
++	int (*fn)(void);
++	fn = gpNandInfo->dev_cache_flush;
++	if (fn)
++		return fn();
++	return 0;
++}
++
++static int __attribute__((used)) rknand_diacard(int a1, int idx, int nsect)
++{
++	int (*fn)(int);
++	if (!(nsect >> 9))
++		return 0;
++	fn = gpNandInfo->diacard;
++	if (fn)
++		return fn(idx >> 9);
++	return 0;
++}
++
+ extern void FtlWriteCacheEn(int);
+ static int rknand_panic_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen, const u_char *buf)
+ {

@@ -28,3 +28,5 @@
 [fix font] CONFIG_FONT_8x16=y enabled (Kconfig patch 0045: dep FONT_8x16 += FB; .config L2115 held, silentoldconfig no longer drops it). BUILD OK (drift-clean), COMMON=27410 held, MTC-core PASS, size 8377508 (= prior build, ADDED delta 0). CAVEAT: std fontdata_8x16 NOT in vmlinux — drivers/video/console/Makefile never links font_8x16.o (dead `font-objs` composite, no `obj-… += fonts.o` line); Kconfig-only patch cannot fix that. Fix needs 1-line Makefile patch 0046 (`obj-$(CONFIG_FONT_8x16) += font_8x16.o`) or Вариант B (byte-swap car.c 1280B table) — pending approval. 1-glyph diff vs vendor (glyph #42 '*', 9B filled-asterisk) — AGREED (осознанное отклонение).
 
 [fix font] Variant B: car.c font_8x16[1280] u32 -> std VGA 8x16 [4096] (md5 e4059ca6). putc char-bitmap ok (not changed). Diff vs vendor = 1 glyph (#42 '*', 9B) — AGREED. COMMON=27410 held, ADDED=8335, size=8377508. BUILD OK.
+
+[fix rknand G2] rknand_diacard (used-attr) + rknand_dev_cache_flush restored via patch 0046/0047 (callbacks @gpNandInfo+0x84/0x88); COMMON 27410->27412; BUILD OK.
