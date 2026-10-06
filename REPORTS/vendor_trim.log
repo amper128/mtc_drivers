@@ -33,3 +33,5 @@
 
 [fix cpu G3] cpu_resume_l1_flags + cpu_v7_name: уже в base-source (ref_kernel/arch/arm/mm/proc-v7.S: cpu_v7_name=.ascii "ARMv7 Processor" L176; cpu_resume_l1_flags=.long PMD_TYPE_SECT|PMD_SECT_AP_WRITE|PMD_FLAGS_SMP L254-257, CONFIG_PM_SLEEP=y) — патч НЕ потребовался; ОБА present в vmlinux (t: c04a12dc cpu_v7_name, c04a1380 cpu_resume_l1_flags); COMMON 27412 (оба уже учитывались, +2 не применимо); BUILD OK (RC=0); MTC-core PASS; регрессий нет (MISSING=3109, ADDED=8335).
 [fix gup G5] gup_enter_update_mode + gup_leave_update_mode + gup_update_proc restored; COMMON 27412->27415; BUILD OK.
+
+[fix loop G6] loop1 + loop2 + loop3: уже в base source (ref_kernel/arch/arm/mm/cache-v7.S, asm labels внутри v7_flush_dcache_all, 1:1 target disasm) — патч НЕ потребовался; ВСЕ 3 present в текущем vmlinux (t: c04a0c84 loop1, c04a0ccc loop2, c04a0cd0 loop3); COMMON 27415 (без изменений — уже учитывались); BUILD unchanged.
