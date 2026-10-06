@@ -30,3 +30,5 @@
 [fix font] Variant B: car.c font_8x16[1280] u32 -> std VGA 8x16 [4096] (md5 e4059ca6). putc char-bitmap ok (not changed). Diff vs vendor = 1 glyph (#42 '*', 9B) — AGREED. COMMON=27410 held, ADDED=8335, size=8377508. BUILD OK.
 
 [fix rknand G2] rknand_diacard (used-attr) + rknand_dev_cache_flush restored via patch 0046/0047 (callbacks @gpNandInfo+0x84/0x88); COMMON 27410->27412; BUILD OK.
+
+[fix cpu G3] cpu_resume_l1_flags + cpu_v7_name: уже в base-source (ref_kernel/arch/arm/mm/proc-v7.S: cpu_v7_name=.ascii "ARMv7 Processor" L176; cpu_resume_l1_flags=.long PMD_TYPE_SECT|PMD_SECT_AP_WRITE|PMD_FLAGS_SMP L254-257, CONFIG_PM_SLEEP=y) — патч НЕ потребовался; ОБА present в vmlinux (t: c04a12dc cpu_v7_name, c04a1380 cpu_resume_l1_flags); COMMON 27412 (оба уже учитывались, +2 не применимо); BUILD OK (RC=0); MTC-core PASS; регрессий нет (MISSING=3109, ADDED=8335).
