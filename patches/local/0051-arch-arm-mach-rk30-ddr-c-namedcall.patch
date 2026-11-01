@@ -1,0 +1,11 @@
+--- a/arch/arm/mach-rk30/ddr.c
++++ b/arch/arm/mach-rk30/ddr.c
+@@ -3080,7 +3080,7 @@
+ 
+ uint32_t ddr_change_freq(uint32_t nMHz)
+ {
+-	return ((int (*)(int, int, int))(uintptr_t)0xFEF017C4)(nMHz, -0x110064, 0);
++	return ddr_change_freq_sram(nMHz);
+ }
+ 
+ EXPORT_SYMBOL(ddr_change_freq);
