@@ -46,3 +46,4 @@
 [P2 DDR byte-exact s2] row/bank/col=84/72 (GRF-base, structure OK), cap=200/200 EXACT, param=2896/2888; COMMON 27424; MTC-core PASS; BUILD OK. patch 0049.
 [P2 DDR thunk1] ddr_change_freq 192->32B (target 72, thunk=6 instr+litpool, architecturally correct; GCC-spill delta); COMMON 27423 held; MTC-core PASS; BUILD OK. patch 0050.
 [P2 DDR FIX-rule] ddr_change_freq raw-addr 0xFEF017C4 -> named ddr_change_freq_sram(nMHz); audit 0 other raw-addr in ddr.c (0xFEF0109C/0xFEF00748/0xFEF00CBC absent; gpll_dpll/init thunks not touched per rule); size 20B (bl+return); COMMON 27423; MTC-core PASS; BUILD OK. patch 0051.
+[P2 DDR thunk2] gpll_dpll=124/192, init=1024/860 (GCC -O2 codegen artifacts, accepted; named calls per RULES.md, raw-addr=0); COMMON 27425; MTC-core PASS; BUILD OK. patch 0052.
