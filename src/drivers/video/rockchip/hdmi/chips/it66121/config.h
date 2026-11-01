@@ -31,7 +31,7 @@
 // 2010/01/26 added a option to disable HDCP.
 #define SUPPORT_OUTPUTYUV
 #define SUPPORT_OUTPUTRGB
-// #define DISABLE_HDMITX_CSC
+#define DISABLE_HDMITX_CSC /* BLOCK2 trim 2025: target built with CSC disabled (no bCSCMtx_* rodata, SetCSCScale=188B bypass path) */
 
 #define SUPPORT_INPUTRGB
 #define SUPPORT_INPUTYUV444
