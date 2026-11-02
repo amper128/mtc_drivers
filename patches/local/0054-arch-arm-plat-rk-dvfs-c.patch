@@ -1,0 +1,13 @@
+diff --git a/arch/arm/plat-rk/dvfs.c b/arch/arm/plat-rk/dvfs.c
+index 0f4b5a5e..b404e0b2 100755
+--- a/arch/arm/plat-rk/dvfs.c
++++ b/arch/arm/plat-rk/dvfs.c
+@@ -13,7 +13,7 @@
+  *
+  */
+ 
+-#define OMEGAMOON_CHANGED	1
++#define OMEGAMOON_CHANGED	0
+ 
+ #include <linux/kernel.h>
+ #include <linux/err.h>
