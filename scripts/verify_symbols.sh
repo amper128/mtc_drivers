@@ -18,14 +18,38 @@ awk '{print $1}' "$RES/kallsyms.txt" | sort -u > "$WORK/res_all.txt"
 
 cut -f1 "$WORK/ref_tt.tsv" > "$WORK/ref_tt_names.txt"
 
+# --- SRAM-region names: 0xFEFxxxxx-адреса из nm (kallsyms.txt адресов не несёт)
+SRAM_N=0
+NM_BIN=$(command -v arm-eabi-nm 2>/dev/null || command -v nm 2>/dev/null || true)
+: > "$WORK/sram_names.txt"
+if [ -n "$NM_BIN" ] && [ -f "$RES/vmlinux" ]; then
+  "$NM_BIN" -S "$RES/vmlinux" 2>/dev/null \
+    | awk '$1 ~ /^[Ff][Ee][Ff][0-9A-Fa-f]+$/ && NF>=4 {print $NF}' \
+    | grep -v '\[' | sort -u > "$WORK/sram_names.txt" || true
+  SRAM_N=$(wc -l < "$WORK/sram_names.txt")
+fi
+
 COMMON=$(comm -12 "$WORK/ref_tt_names.txt" "$WORK/res_tt.txt" | wc -l)
 MISSING=$(comm -23 "$WORK/ref_tt_names.txt" "$WORK/res_tt.txt" | wc -l)
 comm -23 "$WORK/ref_tt_names.txt" "$WORK/res_tt.txt" > "$WORK/missing.txt"
-ADDED=$(comm -13 "$WORK/ref_all.txt" "$WORK/res_all.txt" | wc -l)
+# SRAM-region (0xFEFxxxxx) symbols excluded from ADDED — required code, absent from target kallsyms.
+if [ "$SRAM_N" -gt 0 ]; then
+  ADDED=$(comm -13 "$WORK/ref_all.txt" "$WORK/res_all.txt" \
+    | awk 'NR==FNR{s[$0];next} !($1 in s)' "$WORK/sram_names.txt" - | wc -l)
+else
+  ADDED=$(comm -13 "$WORK/ref_all.txt" "$WORK/res_all.txt" | wc -l)
+fi
 
 # ADDED-by-type: добавленные имена (не в референсе) сгруппированы по типу из kallsyms.txt
-awk 'NR==FNR{a[$0]; next} !($1 in a){print $2}' "$WORK/ref_all.txt" "$RES/kallsyms.txt" \
-  | sort | uniq -c | sort -rn > "$WORK/added_by_type.txt"
+if [ "$SRAM_N" -gt 0 ]; then
+  # тот же фильтр SRAM-region (0xFEFxxxxx) для консистентности с ADDED
+  awk 'FNR==1{f++} f==1{a[$0];next} f==2{s[$0];next} !($1 in a) && !($1 in s){print $2}' \
+    "$WORK/ref_all.txt" "$WORK/sram_names.txt" "$RES/kallsyms.txt" \
+    | sort | uniq -c | sort -rn > "$WORK/added_by_type.txt"
+else
+  awk 'NR==FNR{a[$0]; next} !($1 in a){print $2}' "$WORK/ref_all.txt" "$RES/kallsyms.txt" \
+    | sort | uniq -c | sort -rn > "$WORK/added_by_type.txt"
+fi
 
 # --- ADDR_MATCH % (T/t): адреса из nm -n result/vmlinux vs референс (по имени)
 ADDR_MATCH="n/a"; ADDR_N=0; ADDR_EQ=0
@@ -98,6 +122,6 @@ echo "| vs r5 (8303780) | delta = $DIFF_R5 |"
 echo "| vs target (8232996) | delta = $DIFF_TARGET |"
 } > "$RES/verify_report.md"
 
-echo "== verify_symbols: COMMON=$COMMON MISSING=$MISSING ADDED=$ADDED ADDR_MATCH=${ADDR_MATCH}% MTC-core=$([ $MTC_OK -eq 1 ] && echo PASS || echo FAIL) Trk3188=$TRK size=$SIZE"
+echo "== verify_symbols: COMMON=$COMMON MISSING=$MISSING ADDED=$ADDED SRAM_EXCL=$SRAM_N ADDR_MATCH=${ADDR_MATCH}% MTC-core=$([ $MTC_OK -eq 1 ] && echo PASS || echo FAIL) Trk3188=$TRK size=$SIZE"
 cat "$RES/verify_report.md"
 [ $MTC_OK -eq 1 ] && [ "${TRK:-0}" -ge 1 ]
