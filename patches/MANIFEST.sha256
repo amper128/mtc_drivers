@@ -111,3 +111,4 @@ bc4d177b74973139162eb7cba6c6896cb073e5f2e6338ca2a2209380d3d4dc3f  vendor/0075-in
 b38d86c16f0c0b234a41da264ce669830026114e90ae1c5548720efc4d9b1b38  vendor/0077-drivers-mmc-host-rkemmc.h.patch
 9aa1cae824fb44c2e032b522fbb2bbd8a96262aa6a80e72269b11fa00c5de71d  vendor/0078-drivers-mmc-host-rkemmc_ops.c.patch
 df4f685cafa906050d96c459d7f9e47b9e6f979aba3736f8ac0d374ae39a0a01  SRC_MANIFEST.txt
+1ea0da526d4bae21221b955a5feef2c0408729a19706a42fd1e9a5bcc66fb790  local/0053-drivers-video-display-display-sys-c.patch
