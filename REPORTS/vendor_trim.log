@@ -53,3 +53,4 @@
 [BLOCK5 rk30_rmii] removed 4 fns (board-rk31-sdk-vmac.c, patch 0002); ADDED 7654->7647; COMMON 27458; MTC-core PASS; BUILD OK.
 [BLOCK6 display-sys] removed 3 display_show_ (display-sys.c, patch 0053); ADDED 7647->7643; COMMON 27458; MTC-core PASS; BUILD OK.
 [fef-filter] SRAM(0xFEFxxxxx) filter added to verify_symbols.sh ADDED (by ADDRESS: nm -S result/vmlinux names at ^fef[0-9a-f]+$ — name-based fef* N/A, SRAM symbols are ddr_*/board_pmu_act8846_*/sram_*/veneer; 89 unique names in kallsyms, 0 in target kallsyms); ADDED 7643->7554 (-89); COMMON 27458 unchanged; MTC-core PASS.
+[BLOCK7 vmac] CONFIG_RK29_VMAC=y->n (src/config/.config, config-gated); 8 vmac_* removed (nm -S result/vmlinux = 0); ADDED 7554->7506; COMMON 27458 held; MTC-core PASS; BUILD OK.
