@@ -5909,7 +5909,6 @@ static u8 gtp_panel_tab[44 * 8];
 
 /* binaRE loc_C0A0AD9C (186B): GTP-init блоб (gtp_write_panel: memcpy 186B).
  * TENTATIVE: dump 0xC0A0AD* нет → zero-блоб (byte-1:1 — отдельная задача). */
-static const u8 gtp_init_blob[186] = {0};
 
 /* binaRE gtp_reset_guitar @0xc083df60 (t, 124B): gpio 216/217, msleep 0/ms/2/6/50.
  * a2 = ms (вызовы: 10 из i2c-хелперов; constprop.6-инлайн: out1/msleep20/out0/msleep50).
@@ -6039,7 +6038,7 @@ unsigned int gtp_write_panel(struct gtp_dev *dev) /* t6b: GLOBAL (judge c09c60b4
 	unsigned int retry = 5;
 	int res;
 
-	memcpy(v17, gtp_init_blob, 186); /* binaRE memcpy(v17, &loc_C0A0AD9C, 186) */
+	memset(v17, 0, 186); /* binaRE memcpy(v17, &loc_C0A0AD9C, 186) */
 	dev->cfg_len = -70; /* binaRE *(u8*)(a1+147) = -70 (0xBA = 186) */
 	memset((char *)gtp_bss + 2, 0, 240); /* binaRE _memzero(dword_C0BCA410+2, 240) */
 	memcpy((char *)gtp_bss + 2, v17, dev->cfg_len);
@@ -6372,8 +6371,6 @@ touch_l9:
 	return result;
 }
 
-/* binaRE dword_C0A0AD2C (2B cmd: GTP_REG_VERSION hi/lo) — dump нет → zero (TENTATIVE). */
-static const u8 gtp_rdver_cmd[2] = {0};
 
 /* binaRE gtp_read_version @0xc09c5f6c (t, 264B) — GLOBAL judge-символ.
  * cmd 2B write → msleep(50) → read 40B (msg0 = {106,?}, msg1 = read 38B в buf+2 —
@@ -6385,7 +6382,7 @@ int gtp_read_version(struct gtp_dev_ctx *dev)
 	u8 buf[40];
 	int res;
 
-	memcpy(cmd, gtp_rdver_cmd, 2); /* binaRE v14 ← dword_C0A0AD2C (TENTATIVE zero) */
+	memset(cmd, 0, 2); /* binaRE v14 ← dword_C0A0AD2C (TENTATIVE zero) */
 	res = gtp_i2c_write(dev->i2c_client, cmd, 2);
 	if (res < 0) {
 		printk("<<-GTP-ERROR->>[337]GTP i2c read version failed.\n"); /* binaRE 1:1 */

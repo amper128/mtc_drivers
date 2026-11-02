@@ -1,0 +1,22 @@
+diff --git a/drivers/input/touchscreen/goodix_touch_82x.c b/drivers/input/touchscreen/goodix_touch_82x.c
+index 8a8d0e1a..aad983c5 100755
+--- a/drivers/input/touchscreen/goodix_touch_82x.c
++++ b/drivers/input/touchscreen/goodix_touch_82x.c
+@@ -428,7 +428,7 @@ XFER_ERROR:
+ 	}
+ }
+ 
+-static enum hrtimer_restart goodix_ts_timer_func(struct hrtimer *timer)
++static enum hrtimer_restart goodix_ts_timer_handler(struct hrtimer *timer)
+ {
+     struct goodix_ts_data *ts = container_of(timer, struct goodix_ts_data, timer);
+ 
+@@ -580,7 +580,7 @@ static s32 set_pins(struct goodix_ts_data *ts)
+ err_gpio_request_failed:
+     if (!ts->use_irq) {
+         hrtimer_init(&ts->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+-        ts->timer.function = goodix_ts_timer_func;
++        ts->timer.function = goodix_ts_timer_handler;
+         hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
+         GTDEBUG_MSG("Use timer!\n");
+     }
