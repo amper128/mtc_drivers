@@ -6314,8 +6314,8 @@ struct gtp_dev_ctx {
 
 /* TENTATIVE (t6b): early-suspend/late-resume хендлеры binaRE (goodix_ts_early_suspend /
  * goodix_ts_late_resume) — тела не транскрибируются → no-op (символы НЕ judge-имена). */
-static void gtp_ts_early_suspend(struct early_suspend *h) { (void)h; }
-static void gtp_ts_late_resume(struct early_suspend *h) { (void)h; }
+static void goodix_ts_early_suspend(struct early_suspend *h) { (void)h; }
+static void goodix_ts_late_resume(struct early_suspend *h) { (void)h; }
 
 /* binaRE gtp_touch_down @0xc083e228 (t, 328B) — GLOBAL judge-символ.
  * ts = gtp_dev_ctx (input_dev* @+12); car_status-офсеты как в isTouchDisable;
@@ -6450,8 +6450,8 @@ int gtp_request_input_dev(struct gtp_dev_ctx *dev)
 		printk("<<-GTP-ERROR->>[954]Register %s input device failed\n", input->name); /* binaRE 1:1 */
 	} else {
 		*(u32 *)((char *)dev + 88) = 48; /* binaRE raw (early-suspend-зона) */
-		*(u32 *)((char *)dev + 92) = (u32)(unsigned long)gtp_ts_early_suspend; /* binaRE goodix_ts_early_suspend */
-		*(u32 *)((char *)dev + 96) = (u32)(unsigned long)gtp_ts_late_resume; /* binaRE goodix_ts_late_resume */
+		*(u32 *)((char *)dev + 92) = (u32)(unsigned long)goodix_ts_early_suspend; /* binaRE goodix_ts_early_suspend */
+		*(u32 *)((char *)dev + 96) = (u32)(unsigned long)goodix_ts_late_resume; /* binaRE goodix_ts_late_resume */
 		register_early_suspend((struct early_suspend *)(dev->_gap_es)); /* binaRE register_early_suspend(a1+80) */
 	}
 	return res;

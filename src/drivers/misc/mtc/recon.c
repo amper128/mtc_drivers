@@ -357,26 +357,12 @@ static u16 goodix_touch_y;				/* 0xC168E4FC */
 static struct i2c_client *goodix_tool_client;	/* 0xC168E58C (probe не поднят) */
 static struct workqueue_struct *goodix_tool_wq;	/* 0xC168E4F0 (там же) */
 
-/* gtp i2c-операции: vendor fn-указатели (адреса @0xC168E584/0xC168E588);
- * локальные stub'ы (fail-fast) — noinline + вызов ЧЕРЕЗ fn-ptr, чтобы
- * компилятор не вырезал multi-touch цикл/case (return константа не
- * складывается при вызове через указатель). */
-static noinline int stub_gtp_read(u8 *buf, int len)
-{
-	(void)buf;
-	(void)len;
-	return -ENODEV;
-}
-
-static noinline int stub_gtp_write(u8 *buf, int len)
-{
-	(void)buf;
-	(void)len;
-	return -ENODEV;
-}
-
-static int (*gtp_read)(u8 *buf, int len) = stub_gtp_read;	/* 0xC168E584 */
-static int (*gtp_write)(u8 *buf, int len) = stub_gtp_write;	/* 0xC168E588 */
+/* gtp i2c-операции: vendor fn-указатели (адреса @0xC168E584/0xC168E588).
+ * stub'ы удалены (B12b): инициализация NULL; goodix_register_i2c_func()
+ * обеими ветками пере-указывает fn-ptr до первого использования; fail-fast —
+ * NULL-guards в call-sites (return -ENODEV). */
+static int (*gtp_read)(u8 *buf, int len) = NULL;	/* 0xC168E584 */
+static int (*gtp_write)(u8 *buf, int len) = NULL;	/* 0xC168E588 */
 
 /* comfirm — static в дереве goodix9xx_tool.c:284 (недоступен отсюда);
  * vendor-семантика по decompiled: ненулевой = успех (0 -> "Comfirm fail"). */
@@ -558,6 +544,8 @@ int goodix_tool_read(char *userbuf, size_t count, loff_t *ppos)
 			goodix_tool_buf[1] = goodix_tool_data.addr & 0xFF;
 			remaining = data_len;
 			i = 0;
+			if (!gtp_read)	/* B12b: NULL-guard */
+				return -ENODEV;
 			while (remaining > 0) {
 				chunk = remaining > goodix_tool_chunk ?
 						goodix_tool_chunk : remaining;
@@ -608,6 +596,8 @@ int goodix_tool_write(char __user *kbuf, unsigned int len)
 			printk("<<-GTP-ERROR->> [WRITE]Comfirm fail!\n");
 			return 0;
 		}
+		if (!gtp_write)	/* B12b: NULL-guard */
+			return -ENODEV;
 		if (gtp_write(&goodix_tool_buf[2],
 				     goodix_tool_data.addr + data_len) <= 0) {
 			printk("<<-GTP-ERROR->> [WRITE]Write data failed!\n");

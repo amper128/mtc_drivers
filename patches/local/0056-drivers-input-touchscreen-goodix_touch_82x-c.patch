@@ -1,0 +1,118 @@
+diff --git a/drivers/input/touchscreen/goodix_touch_82x.c b/drivers/input/touchscreen/goodix_touch_82x.c
+index 8a8d0e1a..c5c13eac 100755
+--- a/drivers/input/touchscreen/goodix_touch_82x.c
++++ b/drivers/input/touchscreen/goodix_touch_82x.c
+@@ -43,7 +43,6 @@ struct goodix_ts_data {
+ 	char phys[32];
+ 	int bad_data;
+ 	int retry;
+-	s32 (*power)(struct goodix_ts_data * ts, s32 on);
+ 	struct early_suspend early_suspend;
+ 	int xmax;
+ 	int ymax;
+@@ -453,35 +452,6 @@ static irqreturn_t goodix_ts_irq_handler(s32 irq, void *dev_id)
+ }
+ 
+ //#if defined(INT_PORT)    // 0 : sleep  1 wake up
+-static s32 goodix_ts_power(struct goodix_ts_data * ts, s32 on)
+-{
+-    s32 ret = -1;
+-    u8 i2c_control_buf[3] = {0x0f,0xf2,0xc0};        //suspend cmd
+-
+-    if(ts == NULL || !ts->use_irq)
+-        return -2;
+-
+-    switch(on)
+-    {
+-    case 0:
+-        ret = i2c_write_bytes(ts->client, i2c_control_buf, 3);
+-        return ret;
+-
+-    case 1:
+-        GPIO_DIRECTION_OUTPUT(ts->interrupt_port, 0);
+-        mdelay(10);
+-        GPIO_SET_VALUE(ts->interrupt_port, 1);
+-        GPIO_DIRECTION_INPUT(ts->interrupt_port);
+-        GPIO_PULL_UPDOWN(ts->interrupt_port, 0);
+-        return success;
+-
+-    default:
+-        GTDEBUG_MSG(KERN_DEBUG "%s: Cant't support this command.", goodix_ts_name);
+-        return -EINVAL;
+-    }
+-
+-}
+-
+ static s32 init_input_dev(struct goodix_ts_data *ts)
+ {
+     s32 i;
+@@ -629,7 +599,6 @@ static s32 goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
+ 
+     INIT_WORK(&ts->work, goodix_ts_work_func);        //init work_struct
+     ts->client = client;
+-    ts->power = goodix_ts_power;
+     ts->bad_data = 0;
+     ts->use_irq = 1;
+     ts->use_reset =1;
+@@ -735,7 +704,6 @@ static s32 goodix_ts_remove(struct i2c_client *client)
+ 
+ static s32 goodix_ts_suspend(struct i2c_client *client, pm_message_t mesg)
+ {
+-    s32 ret;
+     struct goodix_ts_data *ts = i2c_get_clientdata(client);
+ 
+     if (ts->irq_is_disable == 2) {
+@@ -751,27 +719,45 @@ static s32 goodix_ts_suspend(struct i2c_client *client, pm_message_t mesg)
+         hrtimer_cancel(&ts->timer);
+     }
+     
+-    if (ts->power) {
+-        ret = ts->power(ts, 0);
+-        if (ret <= 0)
++    /* inlined goodix_ts_power(ts, 0) [B12b] */
++    {
++        u8 i2c_control_buf[3] = {0x0f, 0xf2, 0xc0};        //suspend cmd
++        s32 pwr_ret;
++
++        if (ts == NULL || !ts->use_irq)
++            pwr_ret = -2;
++        else
++            pwr_ret = i2c_write_bytes(ts->client, i2c_control_buf, 3);
++        if (pwr_ret <= 0)
+             GTDEBUG_MSG(KERN_ERR "goodix_ts_resume power off failed\n");
+-	}
++    }
+ 	printk("-----gt813------suspend.\n");
+     return 0;
+ }
+ 
+ static s32 goodix_ts_resume(struct i2c_client *client)
+ {
+-    s32 ret;
+     struct goodix_ts_data *ts = i2c_get_clientdata(client);
+ 
+     if (ts->irq_is_disable == 2) {
+         return 0;
+     }
+ 
+-    if (ts->power) {
+-        ret = ts->power(ts, 1);
+-        if (ret <= 0)
++    /* inlined goodix_ts_power(ts, 1): INT-pin pulse [B12b] */
++    {
++        s32 pwr_ret;
++
++        if (ts == NULL || !ts->use_irq) {
++            pwr_ret = -2;
++        } else {
++            GPIO_DIRECTION_OUTPUT(ts->interrupt_port, 0);
++            mdelay(10);
++            GPIO_SET_VALUE(ts->interrupt_port, 1);
++            GPIO_DIRECTION_INPUT(ts->interrupt_port);
++            GPIO_PULL_UPDOWN(ts->interrupt_port, 0);
++            pwr_ret = success;
++        }
++        if (pwr_ret <= 0)
+             GTDEBUG_MSG(KERN_ERR "goodix_ts_resume power on failed\n");
+     }
+ 
