@@ -56,3 +56,4 @@
 [BLOCK7 vmac] CONFIG_RK29_VMAC=y->n (src/config/.config, config-gated); 8 vmac_* removed (nm -S result/vmlinux = 0); ADDED 7554->7506; COMMON 27458 held; MTC-core PASS; BUILD OK.
 [BLOCK8 ch7025/ypbpr] CONFIG_CH7025_7026_TVOUT_{YPBPR,CVBS}=n (26 syms) + code-trim 6 fns (ch7025_{write_reg,read_reg,switch_fb,standby,early_suspend,early_resume}); 32 syms removed; ADDED 7506->7474; COMMON 27458; MTC-core PASS; size 8254684 (delta 0 vs 8254684); BUILD OK.
 [BLOCK9 remotectl/dvfs-debug] CONFIG_ROCKCHIP_REMOTECTL=n (13 syms) + OMEGAMOON_CHANGED=0 (patch 0054, dump_dvfs_map_on_console); 17 syms removed; ADDED 7474->7457; COMMON 27458; MTC-core PASS; size 8242396 (delta -12288, decreased); BUILD OK.
+[BLOCK10 sio-iosched] CONFIG_IOSCHED_SIO=n (+removed stale DEFAULT_SIO line), 17 syms removed; ADDED 7457->7440; COMMON 27458; MTC-core PASS; size 8242396 (held, sio absorbed); BUILD OK, no CONFIG DRIFT.
