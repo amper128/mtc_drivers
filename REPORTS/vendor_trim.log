@@ -54,3 +54,4 @@
 [BLOCK6 display-sys] removed 3 display_show_ (display-sys.c, patch 0053); ADDED 7647->7643; COMMON 27458; MTC-core PASS; BUILD OK.
 [fef-filter] SRAM(0xFEFxxxxx) filter added to verify_symbols.sh ADDED (by ADDRESS: nm -S result/vmlinux names at ^fef[0-9a-f]+$ — name-based fef* N/A, SRAM symbols are ddr_*/board_pmu_act8846_*/sram_*/veneer; 89 unique names in kallsyms, 0 in target kallsyms); ADDED 7643->7554 (-89); COMMON 27458 unchanged; MTC-core PASS.
 [BLOCK7 vmac] CONFIG_RK29_VMAC=y->n (src/config/.config, config-gated); 8 vmac_* removed (nm -S result/vmlinux = 0); ADDED 7554->7506; COMMON 27458 held; MTC-core PASS; BUILD OK.
+[BLOCK8 ch7025/ypbpr] CONFIG_CH7025_7026_TVOUT_{YPBPR,CVBS}=n (26 syms) + code-trim 6 fns (ch7025_{write_reg,read_reg,switch_fb,standby,early_suspend,early_resume}); 32 syms removed; ADDED 7506->7474; COMMON 27458; MTC-core PASS; size 8254684 (delta 0 vs 8254684); BUILD OK.

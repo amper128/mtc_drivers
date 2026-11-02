@@ -61,10 +61,6 @@ extern struct ch7025 ch7025;
 #define DBG(format, ...)
 #endif
 
-extern int ch7025_write_reg(char reg, char value);
-extern int ch7025_read_reg(char reg);
-extern int ch7025_switch_fb(const struct fb_videomode *modedb, int mode);
-extern void ch7025_standby(void);
 #ifdef CONFIG_CH7025_7026_TVOUT_CVBS
 extern int ch7025_register_display_cvbs(struct device *parent);
 #endif
